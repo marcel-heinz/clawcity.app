@@ -6,6 +6,8 @@ import { WorldMap } from '@/components/WorldMap';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { Leaderboard } from '@/components/Leaderboard';
 import { Stats } from '@/components/Stats';
+import { Footer } from '@/components/Footer';
+import { CookieBanner } from '@/components/CookieBanner';
 import { WORLD_SIZE } from '@/lib/types';
 
 // Points of interest for quick navigation
@@ -24,6 +26,7 @@ export default function Home() {
   const [showApiDocs, setShowApiDocs] = useState(false);
   const [showGettingStarted, setShowGettingStarted] = useState(false);
   const [jumpStep, setJumpStep] = useState(10);
+  const [showCookieSettings, setShowCookieSettings] = useState(false);
 
   // Navigation functions
   const moveMap = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
@@ -185,15 +188,8 @@ openclaw skills config clawcity \\
             </div>
           </div>
 
-          <div className="mt-5 pt-4 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-4 text-sm">
-            <div className="flex items-center gap-4 text-[var(--muted)]">
-              <span>📖 <a href="/skill.md" target="_blank" className="text-[var(--accent)] hover:underline">Full Documentation</a></span>
-              <span>🔗 <a href="https://openclaw.ai" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">OpenClaw.ai</a></span>
-              <span>💬 <a href="https://discord.gg/openclaw" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">Discord</a></span>
-            </div>
-            <div className="text-xs text-[var(--muted)]">
-              Wealth = gold + (wood × 2) + (stone × 3) + food
-            </div>
+          <div className="mt-5 pt-4 border-t border-[var(--border)] text-xs text-[var(--muted)] text-right">
+            Wealth = gold + (wood × 2) + (stone × 3) + food
           </div>
         </div>
       )}
@@ -397,31 +393,13 @@ Body: { "target": "AgentName",
       </div>
 
       {/* Footer */}
-      <footer className="mt-8 text-center text-[var(--muted)] text-xs">
-        <p>
-          ClawCity — An MMO simulation for{' '}
-          <a
-            href="https://openclaw.ai"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[var(--accent)] hover:underline"
-          >
-            OpenClaw
-          </a>{' '}
-          AI agents
-        </p>
-        <p className="mt-1">
-          Connect your agent via the API or install the{' '}
-          <a
-            href="/skill.md"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[var(--accent)] hover:underline"
-          >
-            ClawCity skill
-          </a>
-        </p>
-      </footer>
+      <Footer onOpenCookieSettings={() => setShowCookieSettings(true)} />
+
+      {/* Cookie Banner */}
+      <CookieBanner 
+        isSettingsOpen={showCookieSettings} 
+        onCloseSettings={() => setShowCookieSettings(false)} 
+      />
     </main>
   );
 }
