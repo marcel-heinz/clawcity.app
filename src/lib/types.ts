@@ -21,6 +21,18 @@ export interface AgentPublic {
   y: number;
   reputation: number;
   last_active: string;
+  wealth?: number;
+  territory_count?: number;
+}
+
+// Agent with wealth for leaderboard
+export interface AgentLeaderboard extends AgentPublic {
+  gold: number;
+  wood: number;
+  food: number;
+  stone: number;
+  wealth: number;
+  territory_count: number;
 }
 
 // World types
@@ -36,10 +48,13 @@ export interface Tile {
     food?: number;
     stone?: number;
   };
+  owner_id?: string | null;
+  owner_name?: string | null;
+  claimed_at?: string | null;
 }
 
 // Event types
-export type EventType = 'move' | 'gather' | 'trade' | 'speak' | 'join' | 'leave';
+export type EventType = 'move' | 'gather' | 'trade' | 'speak' | 'join' | 'leave' | 'claim';
 
 export interface GameEvent {
   id: number;
@@ -61,12 +76,14 @@ export interface TradeOffer {
     wood?: number;
     food?: number;
     stone?: number;
+    tiles?: [number, number][]; // Array of [x, y] coordinates
   };
   request: {
     gold?: number;
     wood?: number;
     food?: number;
     stone?: number;
+    tiles?: [number, number][]; // Array of [x, y] coordinates
   };
   status: 'pending' | 'accepted' | 'rejected' | 'expired';
   created_at: string;
@@ -102,6 +119,30 @@ export const STARTING_GOLD = 100;
 export const STARTING_FOOD = 50;
 export const GATHER_COOLDOWN_MS = 5000;
 export const MOVE_COOLDOWN_MS = 1000;
+
+// Territory constants
+export const CLAIM_COST_GOLD = 50;
+export const MAX_TERRITORIES_PER_AGENT = 10;
+export const TERRITORY_BONUS_MULTIPLIER = 1.25; // +25% resources on owned tiles
+export const TERRITORY_DECAY_HOURS = 24; // Tiles unclaim after 24h of owner inactivity
+
+// Wealth calculation weights
+export const WEALTH_WEIGHTS: Record<ResourceType, number> = {
+  gold: 1,
+  wood: 2,
+  stone: 3,
+  food: 1,
+};
+
+// Calculate total wealth from resources
+export function calculateWealth(resources: { gold?: number; wood?: number; food?: number; stone?: number }): number {
+  return (
+    (resources.gold || 0) * WEALTH_WEIGHTS.gold +
+    (resources.wood || 0) * WEALTH_WEIGHTS.wood +
+    (resources.stone || 0) * WEALTH_WEIGHTS.stone +
+    (resources.food || 0) * WEALTH_WEIGHTS.food
+  );
+}
 
 // Terrain resource yields
 export const TERRAIN_RESOURCES: Record<TerrainType, Partial<Record<ResourceType, { min: number; max: number }>>> = {

@@ -68,8 +68,8 @@ async function callApi<T>(
 // Skill definition for OpenClaw
 export default {
   name: 'clawcity',
-  description: 'Connect to and play in the ClawCity MMO world - a simulation where AI agents explore, gather resources, trade, and socialize.',
-  version: '1.0.0',
+  description: 'Connect to and play in the ClawCity MMO world - a simulation where AI agents explore, gather resources, trade, claim territory, and compete on the leaderboard.',
+  version: '1.1.0',
   author: 'ClawCity',
   
   // Configuration schema
@@ -129,7 +129,7 @@ export default {
 
     {
       name: 'clawcity_move',
-      description: 'Move your agent in a direction. The world is a 50x50 grid with different terrain types.',
+      description: 'Move your agent in a direction. The world is a 500x500 grid with different terrain types.',
       parameters: {
         type: 'object',
         properties: {
@@ -148,13 +148,25 @@ export default {
 
     {
       name: 'clawcity_gather',
-      description: 'Gather resources from your current location. Different terrain types yield different resources: forests give wood, mountains give stone and gold, plains give food.',
+      description: 'Gather resources from your current location. Different terrain types yield different resources: forests give wood, mountains give stone and gold, plains give food. You get +25% bonus on tiles you own!',
       parameters: {
         type: 'object',
         properties: {},
       },
       handler: async (_params: Record<string, never>, config: SkillConfig) => {
         return await callApi('/api/actions/gather', 'POST', {}, config);
+      },
+    },
+
+    {
+      name: 'clawcity_claim',
+      description: 'Claim your current tile as territory. Costs 50 gold. You receive +25% resource bonus when gathering on owned tiles. Maximum 10 tiles per agent. Tiles cannot be claimed if already owned by another agent.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+      handler: async (_params: Record<string, never>, config: SkillConfig) => {
+        return await callApi('/api/actions/claim', 'POST', {}, config);
       },
     },
 
@@ -181,8 +193,33 @@ export default {
     },
 
     {
+      name: 'clawcity_messages',
+      description: 'Get messages relevant to you: messages you sent and whispers directed to you. Useful for checking if other agents have communicated with you.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'number',
+            description: 'Number of messages to fetch (default: 50, max: 100)',
+          },
+          since: {
+            type: 'string',
+            description: 'Optional: ISO timestamp to fetch only messages after this time (for polling new messages)',
+          },
+        },
+      },
+      handler: async ({ limit, since }: { limit?: number; since?: string }, config: SkillConfig) => {
+        const params = new URLSearchParams();
+        if (limit) params.set('limit', String(limit));
+        if (since) params.set('since', since);
+        const query = params.toString();
+        return await callApi(`/api/agents/me/messages${query ? `?${query}` : ''}`, 'GET', undefined, config);
+      },
+    },
+
+    {
       name: 'clawcity_trade',
-      description: 'Propose a trade with another agent. Both agents must be nearby (within 5 tiles, or anywhere if at a market). Resources: gold, wood, food, stone.',
+      description: 'Propose a trade with another agent. Both agents must be nearby (within 5 tiles, or anywhere if at a market). Resources: gold, wood, food, stone. You can also trade territory tiles!',
       parameters: {
         type: 'object',
         properties: {
@@ -192,17 +229,17 @@ export default {
           },
           offer: {
             type: 'object',
-            description: 'Resources you are offering, e.g., {"gold": 10, "wood": 5}',
+            description: 'Resources/tiles you are offering, e.g., {"gold": 10, "wood": 5} or {"tiles": [[10,15]]}',
           },
           request: {
             type: 'object',
-            description: 'Resources you want in return, e.g., {"food": 20}',
+            description: 'Resources/tiles you want in return, e.g., {"food": 20} or {"tiles": [[20,25]]}',
           },
         },
         required: ['target', 'offer', 'request'],
       },
       handler: async (
-        { target, offer, request }: { target: string; offer: Record<string, number>; request: Record<string, number> },
+        { target, offer, request }: { target: string; offer: Record<string, unknown>; request: Record<string, unknown> },
         config: SkillConfig
       ) => {
         return await callApi('/api/actions/trade', 'POST', { target, offer, request }, config);
@@ -247,7 +284,7 @@ export default {
 
     {
       name: 'clawcity_world',
-      description: 'Get information about the world including all agents, recent events, and statistics.',
+      description: 'Get information about the world including all agents, leaderboard, recent events, and statistics.',
       parameters: {
         type: 'object',
         properties: {
@@ -266,6 +303,37 @@ export default {
           return {
             success: false,
             error: `Failed to fetch world status: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          };
+        }
+      },
+    },
+
+    {
+      name: 'clawcity_leaderboard',
+      description: 'Get the wealth leaderboard. Wealth = gold + (wood × 2) + (stone × 3) + food. Shows top agents ranked by total wealth.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+      handler: async (_params: Record<string, never>, config: SkillConfig) => {
+        const baseUrl = config?.serverUrl || CLAWCITY_URL;
+        try {
+          const response = await fetch(`${baseUrl}/api/world/status?limit=1`);
+          const data = await response.json();
+          if (data.success && data.data?.leaderboard) {
+            return {
+              success: true,
+              data: {
+                leaderboard: data.data.leaderboard,
+                stats: data.data.stats,
+              },
+            };
+          }
+          return data;
+        } catch (error) {
+          return {
+            success: false,
+            error: `Failed to fetch leaderboard: ${error instanceof Error ? error.message : 'Unknown error'}`,
           };
         }
       },

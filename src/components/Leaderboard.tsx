@@ -1,11 +1,25 @@
 'use client';
 
-import { AgentPublic } from '@/lib/types';
+import { useState } from 'react';
+import { AgentLeaderboard } from '@/lib/types';
+
+interface LeaderboardEntry {
+  rank: number;
+  id: string;
+  name: string;
+  wealth: number;
+  reputation: number;
+  territory_count: number;
+  last_active: string;
+}
 
 interface LeaderboardProps {
-  agents: AgentPublic[];
+  agents: AgentLeaderboard[];
+  leaderboard?: LeaderboardEntry[];
   maxDisplay?: number;
 }
+
+type SortMode = 'wealth' | 'reputation' | 'territory';
 
 function formatLastActive(timestamp: string): string {
   const date = new Date(timestamp);
@@ -30,11 +44,48 @@ function getStatusColor(timestamp: string): string {
   return 'bg-[var(--muted)]';
 }
 
-export function Leaderboard({ agents, maxDisplay = 15 }: LeaderboardProps) {
-  // Sort by reputation
-  const sortedAgents = [...agents]
-    .sort((a, b) => b.reputation - a.reputation)
-    .slice(0, maxDisplay);
+function formatWealth(wealth: number): string {
+  if (wealth >= 1000000) return `${(wealth / 1000000).toFixed(1)}M`;
+  if (wealth >= 1000) return `${(wealth / 1000).toFixed(1)}K`;
+  return wealth.toString();
+}
+
+function getRankIcon(rank: number): string {
+  if (rank === 1) return '👑';
+  if (rank === 2) return '🥈';
+  if (rank === 3) return '🥉';
+  return '';
+}
+
+export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: LeaderboardProps) {
+  const [sortMode, setSortMode] = useState<SortMode>('wealth');
+  
+  // Use provided leaderboard or sort agents ourselves
+  const sortedAgents = leaderboard 
+    ? leaderboard.slice(0, maxDisplay)
+    : [...agents]
+        .sort((a, b) => {
+          switch (sortMode) {
+            case 'wealth':
+              return (b.wealth || 0) - (a.wealth || 0);
+            case 'reputation':
+              return b.reputation - a.reputation;
+            case 'territory':
+              return (b.territory_count || 0) - (a.territory_count || 0);
+            default:
+              return (b.wealth || 0) - (a.wealth || 0);
+          }
+        })
+        .slice(0, maxDisplay)
+        .map((agent, index) => ({
+          rank: index + 1,
+          id: agent.id,
+          name: agent.name,
+          wealth: agent.wealth || 0,
+          reputation: agent.reputation,
+          territory_count: agent.territory_count || 0,
+          last_active: agent.last_active,
+        }));
 
   if (sortedAgents.length === 0) {
     return (
@@ -45,39 +96,87 @@ export function Leaderboard({ agents, maxDisplay = 15 }: LeaderboardProps) {
   }
 
   return (
-    <div className="space-y-1">
-      {sortedAgents.map((agent, index) => (
-        <div
-          key={agent.id}
-          className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-[var(--surface)] transition-colors"
+    <div className="space-y-3">
+      {/* Sort toggle */}
+      <div className="flex gap-1 text-xs">
+        <button
+          onClick={() => setSortMode('wealth')}
+          className={`px-2 py-1 rounded transition-colors ${
+            sortMode === 'wealth' 
+              ? 'bg-[var(--accent)] text-black' 
+              : 'bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)]'
+          }`}
         >
-          {/* Rank */}
-          <span className={`w-5 text-right text-sm ${
-            index === 0 ? 'text-yellow-400' :
-            index === 1 ? 'text-gray-300' :
-            index === 2 ? 'text-orange-400' :
-            'text-[var(--muted)]'
-          }`}>
-            {index + 1}.
-          </span>
-          
-          {/* Status indicator */}
-          <span
-            className={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusColor(agent.last_active)}`}
-            title={formatLastActive(agent.last_active)}
-          />
-          
-          {/* Name */}
-          <span className="flex-1 truncate text-sm" title={agent.name}>
-            {agent.name}
-          </span>
-          
-          {/* Reputation */}
-          <span className="text-[var(--accent)] text-sm font-medium">
-            {agent.reputation}
-          </span>
-        </div>
-      ))}
+          Wealth
+        </button>
+        <button
+          onClick={() => setSortMode('reputation')}
+          className={`px-2 py-1 rounded transition-colors ${
+            sortMode === 'reputation' 
+              ? 'bg-[var(--accent)] text-black' 
+              : 'bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)]'
+          }`}
+        >
+          Rep
+        </button>
+        <button
+          onClick={() => setSortMode('territory')}
+          className={`px-2 py-1 rounded transition-colors ${
+            sortMode === 'territory' 
+              ? 'bg-[var(--accent)] text-black' 
+              : 'bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)]'
+          }`}
+        >
+          Land
+        </button>
+      </div>
+
+      {/* Leaderboard entries */}
+      <div className="space-y-1">
+        {sortedAgents.map((agent) => (
+          <div
+            key={agent.id}
+            className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-[var(--surface)] transition-colors"
+          >
+            {/* Rank */}
+            <span className={`w-6 text-right text-sm ${
+              agent.rank === 1 ? 'text-yellow-400' :
+              agent.rank === 2 ? 'text-gray-300' :
+              agent.rank === 3 ? 'text-orange-400' :
+              'text-[var(--muted)]'
+            }`}>
+              {getRankIcon(agent.rank) || `${agent.rank}.`}
+            </span>
+            
+            {/* Status indicator */}
+            <span
+              className={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusColor(agent.last_active)}`}
+              title={formatLastActive(agent.last_active)}
+            />
+            
+            {/* Name */}
+            <span className="flex-1 truncate text-sm" title={agent.name}>
+              {agent.name}
+            </span>
+            
+            {/* Primary stat based on sort mode */}
+            <span className="text-[var(--accent)] text-sm font-medium min-w-[3rem] text-right" title={
+              sortMode === 'wealth' ? `Wealth: ${agent.wealth}` :
+              sortMode === 'reputation' ? `Reputation: ${agent.reputation}` :
+              `Territories: ${agent.territory_count}`
+            }>
+              {sortMode === 'wealth' && formatWealth(agent.wealth)}
+              {sortMode === 'reputation' && agent.reputation}
+              {sortMode === 'territory' && `${agent.territory_count}🏴`}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div className="text-[0.65rem] text-[var(--muted)] pt-2 border-t border-[var(--surface)]">
+        Wealth = gold + (wood×2) + (stone×3) + food
+      </div>
     </div>
   );
 }

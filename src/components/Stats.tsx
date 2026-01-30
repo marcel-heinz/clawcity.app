@@ -4,10 +4,11 @@ interface StatsProps {
   totalAgents: number;
   activeAgents: number;
   totalTrades: number;
+  totalTerritories?: number;
   isConnected: boolean;
 }
 
-export function Stats({ totalAgents, activeAgents, totalTrades, isConnected }: StatsProps) {
+export function Stats({ totalAgents, activeAgents, totalTrades, totalTerritories = 0, isConnected }: StatsProps) {
   return (
     <div className="grid grid-cols-2 gap-3">
       {/* Connection status */}
@@ -41,12 +42,21 @@ export function Stats({ totalAgents, activeAgents, totalTrades, isConnected }: S
         </div>
       </div>
 
-      <div className="col-span-2 bg-[var(--surface)] rounded p-3 border border-[var(--border)]">
+      <div className="bg-[var(--surface)] rounded p-3 border border-[var(--border)]">
         <div className="text-2xl font-bold text-yellow-400">
           {totalTrades}
         </div>
         <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider">
-          Trades Completed
+          Trades
+        </div>
+      </div>
+
+      <div className="bg-[var(--surface)] rounded p-3 border border-[var(--border)]">
+        <div className="text-2xl font-bold text-purple-400">
+          {totalTerritories}
+        </div>
+        <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider">
+          Territories
         </div>
       </div>
     </div>

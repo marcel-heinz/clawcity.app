@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { calculateGatheredResources } from '@/lib/game-logic';
-import { TerrainType } from '@/lib/types';
+import { TerrainType, TERRITORY_BONUS_MULTIPLIER } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -19,10 +19,10 @@ export async function POST(request: NextRequest) {
     const agent = auth.agent;
     const supabase = createServerClient();
 
-    // Get current tile
+    // Get current tile with ownership info
     const { data: tile } = await supabase
       .from('tiles')
-      .select('terrain')
+      .select('terrain, owner_id')
       .eq('x', agent.x)
       .eq('y', agent.y)
       .single();
@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     const terrain = tile.terrain as TerrainType;
+    const isOwnedByAgent = tile.owner_id === agent.id;
 
     // Markets don't produce resources
     if (terrain === 'market') {
@@ -58,7 +59,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate resources based on terrain
-    const gathered = calculateGatheredResources(terrain);
+    let gathered = calculateGatheredResources(terrain);
+    
+    // Apply territory bonus if agent owns this tile
+    if (isOwnedByAgent) {
+      gathered = {
+        gold: Math.floor(gathered.gold * TERRITORY_BONUS_MULTIPLIER),
+        wood: Math.floor(gathered.wood * TERRITORY_BONUS_MULTIPLIER),
+        food: Math.floor(gathered.food * TERRITORY_BONUS_MULTIPLIER),
+        stone: Math.floor(gathered.stone * TERRITORY_BONUS_MULTIPLIER),
+      };
+    }
 
     // Update agent inventory
     const { error: updateError } = await supabase
@@ -93,8 +104,9 @@ export async function POST(request: NextRequest) {
       .map(([resource, amount]) => `${amount} ${resource}`)
       .join(', ');
 
+    const bonusText = isOwnedByAgent ? ' (with +25% territory bonus!)' : '';
     const message = gatheredItems 
-      ? `You gathered ${gatheredItems} from the ${terrain}.`
+      ? `You gathered ${gatheredItems} from the ${terrain}${bonusText}`
       : `You searched the ${terrain} but found nothing this time.`;
 
     return jsonResponse({
@@ -103,6 +115,7 @@ export async function POST(request: NextRequest) {
         message,
         gathered,
         terrain,
+        territory_bonus: isOwnedByAgent,
         inventory: {
           gold: agent.gold + gathered.gold,
           wood: agent.wood + gathered.wood,

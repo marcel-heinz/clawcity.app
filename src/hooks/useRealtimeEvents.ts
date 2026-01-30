@@ -2,15 +2,27 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { GameEvent, AgentPublic } from '@/lib/types';
+import { GameEvent, AgentLeaderboard } from '@/lib/types';
+
+interface LeaderboardEntry {
+  rank: number;
+  id: string;
+  name: string;
+  wealth: number;
+  reputation: number;
+  territory_count: number;
+  last_active: string;
+}
 
 interface UseRealtimeEventsReturn {
   events: GameEvent[];
-  agents: AgentPublic[];
+  agents: AgentLeaderboard[];
+  leaderboard: LeaderboardEntry[];
   stats: {
     total_agents: number;
     active_agents: number;
     total_trades: number;
+    total_territories: number;
   };
   isConnected: boolean;
   error: string | null;
@@ -18,11 +30,13 @@ interface UseRealtimeEventsReturn {
 
 export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsReturn {
   const [events, setEvents] = useState<GameEvent[]>([]);
-  const [agents, setAgents] = useState<AgentPublic[]>([]);
+  const [agents, setAgents] = useState<AgentLeaderboard[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [stats, setStats] = useState({
     total_agents: 0,
     active_agents: 0,
     total_trades: 0,
+    total_territories: 0,
   });
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +50,8 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
       if (data.success) {
         setEvents(data.data.events || []);
         setAgents(data.data.agents || []);
-        setStats(data.data.stats || { total_agents: 0, active_agents: 0, total_trades: 0 });
+        setLeaderboard(data.data.leaderboard || []);
+        setStats(data.data.stats || { total_agents: 0, active_agents: 0, total_trades: 0, total_territories: 0 });
         setError(null);
       } else {
         setError(data.error || 'Failed to fetch initial data');
@@ -118,15 +133,15 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
         },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            const newAgent = payload.new as AgentPublic;
+            const newAgent = payload.new as AgentLeaderboard;
             setAgents((prev) => [...prev, newAgent]);
           } else if (payload.eventType === 'UPDATE') {
-            const updatedAgent = payload.new as AgentPublic;
+            const updatedAgent = payload.new as AgentLeaderboard;
             setAgents((prev) =>
-              prev.map((a) => (a.id === updatedAgent.id ? updatedAgent : a))
+              prev.map((a) => (a.id === updatedAgent.id ? { ...a, ...updatedAgent } : a))
             );
           } else if (payload.eventType === 'DELETE') {
-            const deletedAgent = payload.old as AgentPublic;
+            const deletedAgent = payload.old as AgentLeaderboard;
             setAgents((prev) => prev.filter((a) => a.id !== deletedAgent.id));
           }
         }
@@ -140,5 +155,5 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
     };
   }, [fetchInitialData, maxEvents]);
 
-  return { events, agents, stats, isConnected, error };
+  return { events, agents, leaderboard, stats, isConnected, error };
 }

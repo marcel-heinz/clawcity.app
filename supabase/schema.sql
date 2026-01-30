@@ -31,17 +31,20 @@ CREATE TABLE IF NOT EXISTS tiles (
   y INT NOT NULL,
   terrain TEXT NOT NULL CHECK (terrain IN ('plains', 'forest', 'mountain', 'market', 'water')),
   resources JSONB DEFAULT '{}',
+  owner_id UUID REFERENCES agents(id) ON DELETE SET NULL,
+  claimed_at TIMESTAMPTZ,
   PRIMARY KEY (x, y)
 );
 
 -- Create index for terrain lookups
 CREATE INDEX IF NOT EXISTS idx_tiles_terrain ON tiles(terrain);
+CREATE INDEX IF NOT EXISTS idx_tiles_owner ON tiles(owner_id);
 
 -- Activity log (for real-time feed)
 CREATE TABLE IF NOT EXISTS events (
   id BIGSERIAL PRIMARY KEY,
   agent_id UUID REFERENCES agents(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('move', 'gather', 'trade', 'speak', 'join', 'leave')),
+  type TEXT NOT NULL CHECK (type IN ('move', 'gather', 'trade', 'speak', 'join', 'leave', 'claim')),
   data JSONB DEFAULT '{}',
   location JSONB DEFAULT '{"x": 0, "y": 0}',
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -130,3 +133,43 @@ CREATE POLICY "Allow anonymous read access to trades" ON trades
 
 -- Service role has full access (handled by API routes)
 -- The API routes will use the service role key for writes
+
+-- Function to decay unclaimed territories (run periodically)
+-- Tiles become unclaimed if owner has been inactive for 24 hours
+CREATE OR REPLACE FUNCTION decay_inactive_territories()
+RETURNS void AS $$
+BEGIN
+  UPDATE tiles t
+  SET owner_id = NULL, claimed_at = NULL
+  FROM agents a
+  WHERE t.owner_id = a.id
+    AND a.last_active < NOW() - INTERVAL '24 hours';
+END;
+$$ LANGUAGE plpgsql;
+
+-- View for agent territory counts (for leaderboard)
+CREATE OR REPLACE VIEW agent_territories AS
+SELECT 
+  owner_id,
+  COUNT(*) as territory_count
+FROM tiles
+WHERE owner_id IS NOT NULL
+GROUP BY owner_id;
+
+-- View for agent wealth (for leaderboard)
+-- Wealth = gold + (wood * 2) + (stone * 3) + food
+CREATE OR REPLACE VIEW agent_wealth AS
+SELECT 
+  id,
+  name,
+  x,
+  y,
+  gold,
+  wood,
+  food,
+  stone,
+  reputation,
+  last_active,
+  (gold + (wood * 2) + (stone * 3) + food) as wealth
+FROM agents
+ORDER BY wealth DESC;

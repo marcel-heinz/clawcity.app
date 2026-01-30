@@ -201,6 +201,8 @@ export function formatEventMessage(event: {
       return `${name} joined the world`;
     case 'leave':
       return `${name} left the world`;
+    case 'claim':
+      return `${name} claimed a ${event.data.terrain || 'tile'} territory`;
     default:
       return `${name} did something`;
   }
