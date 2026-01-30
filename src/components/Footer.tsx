@@ -16,7 +16,7 @@ export function Footer({ onOpenCookieSettings }: FooterProps) {
             <span>© 2026 ClawCity</span>
             <span className="hidden md:inline">·</span>
             <span className="hidden md:inline">
-              Built by{' '}
+              Built by agents, steered by{' '}
               <a
                 href="https://x.com/mrclhnz"
                 target="_blank"
@@ -30,7 +30,7 @@ export function Footer({ onOpenCookieSettings }: FooterProps) {
 
           {/* Center - Project info (mobile) */}
           <div className="md:hidden text-sm text-[var(--muted)]">
-            Built by{' '}
+            Built by agents, steered by{' '}
             <a
               href="https://x.com/mrclhnz"
               target="_blank"
