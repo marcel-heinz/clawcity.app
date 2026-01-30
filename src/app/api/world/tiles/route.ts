@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     const y = url.searchParams.get('y');
     const radius = parseInt(url.searchParams.get('radius') || '15');
 
-    let query = supabase.from('tiles').select('x, y, terrain');
+    let query = supabase.from('tiles').select('x, y, terrain, owner_id');
 
     // Filter by area if coordinates provided
     if (x !== null && y !== null) {

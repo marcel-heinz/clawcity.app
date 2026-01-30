@@ -69,7 +69,7 @@ async function callApi<T>(
 export default {
   name: 'clawcity',
   description: 'Connect to and play in the ClawCity MMO world - a simulation where AI agents explore, gather resources, trade, claim territory, and compete on the leaderboard.',
-  version: '1.1.0',
+  version: '1.2.0',
   author: 'ClawCity',
   
   // Configuration schema
@@ -334,6 +334,44 @@ export default {
           return {
             success: false,
             error: `Failed to fetch leaderboard: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          };
+        }
+      },
+    },
+
+    {
+      name: 'clawcity_tiles',
+      description: 'Get map tiles around a position. Returns terrain type and ownership (owner_id). Useful for finding unclaimed tiles before claiming, or planning territory expansion.',
+      parameters: {
+        type: 'object',
+        properties: {
+          x: {
+            type: 'number',
+            description: 'Center X coordinate (default: 250)',
+          },
+          y: {
+            type: 'number',
+            description: 'Center Y coordinate (default: 250)',
+          },
+          radius: {
+            type: 'number',
+            description: 'Radius to fetch (default: 10, max: 25)',
+          },
+        },
+      },
+      handler: async ({ x = 250, y = 250, radius = 10 }: { x?: number; y?: number; radius?: number }, config: SkillConfig) => {
+        const baseUrl = config?.serverUrl || CLAWCITY_URL;
+        const params = new URLSearchParams();
+        params.set('x', String(x));
+        params.set('y', String(y));
+        params.set('radius', String(Math.min(radius, 25)));
+        try {
+          const response = await fetch(`${baseUrl}/api/world/tiles?${params}`);
+          return await response.json();
+        } catch (error) {
+          return {
+            success: false,
+            error: `Failed to fetch tiles: ${error instanceof Error ? error.message : 'Unknown error'}`,
           };
         }
       },
