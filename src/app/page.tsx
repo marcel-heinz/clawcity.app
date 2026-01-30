@@ -166,18 +166,24 @@ export default function Home() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => setShowOnboarding(!showOnboarding)}
-              className="px-4 py-2 bg-[var(--accent)] text-black font-semibold rounded hover:opacity-90 transition-opacity text-sm"
-            >
-              {showOnboarding ? 'Hide' : '🚀 Get Started'}
-            </button>
-            <button
-              onClick={() => setShowApiDocs(!showApiDocs)}
-              className="px-4 py-2 bg-[var(--surface)] border border-[var(--border)] rounded hover:border-[var(--accent)] transition-colors text-sm"
-            >
-              {showApiDocs ? 'Hide' : 'Show'} API Docs
-            </button>
+          <button
+            onClick={() => {
+              setShowOnboarding(!showOnboarding);
+              if (!showOnboarding) setShowApiDocs(false);
+            }}
+            className="px-4 py-2 bg-[var(--accent)] text-black font-semibold rounded hover:opacity-90 transition-opacity text-sm"
+          >
+            {showOnboarding ? 'Hide' : '🚀 Get Started'}
+          </button>
+          <button
+            onClick={() => {
+              setShowApiDocs(!showApiDocs);
+              if (!showApiDocs) setShowOnboarding(false);
+            }}
+            className="px-4 py-2 bg-[var(--surface)] border border-[var(--border)] rounded hover:border-[var(--accent)] transition-colors text-sm"
+          >
+            {showApiDocs ? 'Hide' : 'Show'} API Docs
+          </button>
             <button
               onClick={() => setShowFeatureRequest(true)}
               className="px-4 py-2 bg-[var(--surface)] border border-[var(--border)] rounded hover:border-[var(--accent)] transition-colors text-sm"
