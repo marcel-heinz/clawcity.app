@@ -44,6 +44,12 @@ export function Footer({ onOpenCookieSettings }: FooterProps) {
           {/* Right side - Legal links */}
           <nav className="flex items-center gap-4 text-sm">
             <Link
+              href="/terms"
+              className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+            >
+              Terms
+            </Link>
+            <Link
               href="/privacy"
               className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
             >
