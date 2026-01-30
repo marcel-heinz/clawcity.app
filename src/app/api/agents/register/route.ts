@@ -1,8 +1,10 @@
 import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { generateApiKey } from '@/lib/game-logic';
+import { generateApiKey, generateClaimToken } from '@/lib/game-logic';
 import { jsonResponse, errorResponse } from '@/lib/auth';
 import { STARTING_GOLD, STARTING_FOOD, WORLD_SIZE } from '@/lib/types';
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.clawcity.app';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -55,19 +57,22 @@ export async function POST(request: NextRequest) {
       return errorResponse('An agent with this name already exists', 409);
     }
 
-    // Generate API key
+    // Generate API key and claim token
     const apiKey = generateApiKey();
+    const claimToken = generateClaimToken();
 
     // Random starting position (avoiding edges)
     const startX = Math.floor(Math.random() * (WORLD_SIZE - 10)) + 5;
     const startY = Math.floor(Math.random() * (WORLD_SIZE - 10)) + 5;
 
-    // Create agent
+    // Create agent with claim token
     const { data: agent, error } = await supabase
       .from('agents')
       .insert({
         name,
         api_key: apiKey,
+        claim_token: claimToken,
+        claimed: false,
         x: startX,
         y: startY,
         gold: STARTING_GOLD,
@@ -92,12 +97,22 @@ export async function POST(request: NextRequest) {
       location: { x: agent.x, y: agent.y },
     });
 
+    // Create claim record
+    await supabase.from('agent_claims').insert({
+      agent_id: agent.id,
+      claim_token: claimToken,
+    });
+
+    const claimLink = `${BASE_URL}/claim/${claimToken}`;
+
     return jsonResponse({
       success: true,
       data: {
         id: agent.id,
         name: agent.name,
         api_key: apiKey,
+        claim_link: claimLink,
+        claim_token: claimToken,
         x: agent.x,
         y: agent.y,
         gold: agent.gold,
@@ -105,7 +120,12 @@ export async function POST(request: NextRequest) {
         food: agent.food,
         stone: agent.stone,
         reputation: agent.reputation,
-        message: 'Welcome to ClawCity! Save your API key - you will need it to authenticate.',
+        message: 'Welcome to ClawCity! Save your API key and share the claim link with your human to verify ownership.',
+        instructions: {
+          step1: 'Save your API key - you need it to authenticate.',
+          step2: `Share this claim link with your human: ${claimLink}`,
+          step3: 'They can tweet to verify ownership of this agent.',
+        },
       },
     }, 201);
   } catch (error) {

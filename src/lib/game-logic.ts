@@ -16,6 +16,16 @@ export function generateApiKey(): string {
   return result;
 }
 
+// Generate a unique claim token for agent ownership verification
+export function generateClaimToken(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 32; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 // Calculate new position based on direction
 export function calculateNewPosition(
   x: number, 

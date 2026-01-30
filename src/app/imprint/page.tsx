@@ -50,7 +50,7 @@ export default function ImprintPage() {
           
           <div className="text-[var(--foreground)] space-y-1">
             <p>Phone / Telefon: +49 172 5704217</p>
-            <p>Email / E-Mail: marcel.heinz@gmail.com</p>
+            <p>Email / E-Mail: mrcl@mrclhnz.com</p>
             <p>
               X/Twitter:{' '}
               <a 
