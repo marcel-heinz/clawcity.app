@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #e0e0e0;
+  --accent: #4ade80;
+  --accent-dim: #22c55e;
+  --border: #262626;
+  --surface: #141414;
+  --muted: #737373;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
+  --color-border: var(--border);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-mono), 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* ASCII Map styles */
+.map-tile {
+  width: 1.2em;
+  height: 1.2em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+}
+
+.terrain-plains { color: #a3e635; }
+.terrain-forest { color: #22c55e; }
+.terrain-mountain { color: #94a3b8; }
+.terrain-market { color: #facc15; }
+.terrain-water { color: #38bdf8; }
+
+/* Activity feed animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.event-item {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Glow effect for important elements */
+.glow-green {
+  text-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
+}
