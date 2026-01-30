@@ -31,11 +31,7 @@ export async function GET(
         created_at,
         verified_at,
         expires_at,
-        agent:agents (
-          id,
-          name,
-          created_at
-        )
+        agent_id
       `)
       .eq('claim_token', token)
       .single();
@@ -43,6 +39,13 @@ export async function GET(
     if (error || !claim) {
       return errorResponse('Invalid or expired claim token', 404);
     }
+
+    // Get the agent info separately
+    const { data: agent } = await supabase
+      .from('agents')
+      .select('id, name, created_at')
+      .eq('id', claim.agent_id)
+      .single();
 
     // Check if expired
     if (claim.expires_at && new Date(claim.expires_at) < new Date()) {
@@ -53,8 +56,8 @@ export async function GET(
       success: true,
       data: {
         token: claim.claim_token,
-        agent_name: claim.agent?.name,
-        agent_created_at: claim.agent?.created_at,
+        agent_name: agent?.name,
+        agent_created_at: agent?.created_at,
         verified: claim.verified,
         twitter_handle: claim.twitter_handle,
         verified_at: claim.verified_at,

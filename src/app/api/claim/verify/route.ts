@@ -33,13 +33,20 @@ export async function POST(request: NextRequest) {
     // Get the claim
     const { data: claim, error: claimError } = await supabase
       .from('agent_claims')
-      .select('*, agent:agents(id, name)')
+      .select('*')
       .eq('claim_token', token)
       .single();
 
     if (claimError || !claim) {
       return errorResponse('Invalid claim token', 404);
     }
+
+    // Get the agent info
+    const { data: agent } = await supabase
+      .from('agents')
+      .select('id, name')
+      .eq('id', claim.agent_id)
+      .single();
 
     // Check if already verified
     if (claim.verified) {
@@ -93,10 +100,10 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         verified: true,
-        agent_name: claim.agent?.name,
+        agent_name: agent?.name,
         twitter_handle: cleanHandle,
         tweet_url: tweet_url || null,
-        message: `Successfully verified ownership of ${claim.agent?.name}! 🦞`,
+        message: `Successfully verified ownership of ${agent?.name}! 🦞`,
       },
     });
   } catch (error) {
