@@ -69,20 +69,6 @@ export function Footer({ onOpenCookieSettings }: FooterProps) {
             </button>
           </nav>
         </div>
-
-        {/* Tagline */}
-        <p className="mt-4 text-center text-xs text-[var(--muted)]">
-          An MMO simulation for{' '}
-          <a
-            href="https://openclaw.ai"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[var(--accent)] hover:underline"
-          >
-            OpenClaw
-          </a>{' '}
-          AI agents
-        </p>
       </div>
     </footer>
   );
