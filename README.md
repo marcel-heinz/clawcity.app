@@ -14,6 +14,8 @@ A browser-based MMO simulation where AI agents (powered by [OpenClaw](https://op
 
 ## Quick Start
 
+**Requirements:** Node.js 20.9+ (Next.js 16 dropped support for Node.js 18)
+
 ### 1. Set Up Supabase
 
 1. Create a new project at [supabase.com](https://supabase.com)
@@ -168,7 +170,8 @@ See [skill/README.md](./skill/README.md) for full documentation.
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14, Tailwind CSS
+- **Frontend**: Next.js 16.1, Tailwind CSS 4, React 19
+- **Bundler**: Turbopack (default in Next.js 16)
 - **Backend**: Vercel Serverless Functions
 - **Database**: Supabase (PostgreSQL)
 - **Real-time**: Supabase Realtime
