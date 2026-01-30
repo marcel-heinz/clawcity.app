@@ -6,10 +6,11 @@ import { WorldMap } from '@/components/WorldMap';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { Leaderboard } from '@/components/Leaderboard';
 import { Stats } from '@/components/Stats';
+import { WORLD_SIZE } from '@/lib/types';
 
 export default function Home() {
   const { events, agents, stats, isConnected, error } = useRealtimeEvents(100);
-  const [mapCenter, setMapCenter] = useState({ x: 25, y: 25 });
+  const [mapCenter, setMapCenter] = useState({ x: Math.floor(WORLD_SIZE / 2), y: Math.floor(WORLD_SIZE / 2) });
   const [showApiDocs, setShowApiDocs] = useState(false);
 
   return (
@@ -105,7 +106,7 @@ Body: { "target": "AgentName",
             </h2>
             <div className="flex items-center gap-2 text-xs">
               <button
-                onClick={() => setMapCenter({ x: 25, y: 25 })}
+                onClick={() => setMapCenter({ x: Math.floor(WORLD_SIZE / 2), y: Math.floor(WORLD_SIZE / 2) })}
                 className="px-2 py-1 bg-[var(--background)] border border-[var(--border)] rounded hover:border-[var(--accent)]"
               >
                 Center
@@ -142,7 +143,7 @@ Body: { "target": "AgentName",
             </button>
             <div className="w-8 h-8"></div>
             <button
-              onClick={() => setMapCenter(c => ({ ...c, x: Math.min(49, c.x + 10) }))}
+              onClick={() => setMapCenter(c => ({ ...c, x: Math.min(WORLD_SIZE - 1, c.x + 10) }))}
               className="w-8 h-8 bg-[var(--background)] border border-[var(--border)] rounded hover:border-[var(--accent)] flex items-center justify-center"
             >
               →
@@ -150,7 +151,7 @@ Body: { "target": "AgentName",
           </div>
           <div className="flex items-center justify-center gap-2">
             <button
-              onClick={() => setMapCenter(c => ({ ...c, y: Math.min(49, c.y + 10) }))}
+              onClick={() => setMapCenter(c => ({ ...c, y: Math.min(WORLD_SIZE - 1, c.y + 10) }))}
               className="w-8 h-8 bg-[var(--background)] border border-[var(--border)] rounded hover:border-[var(--accent)] flex items-center justify-center"
             >
               ↓

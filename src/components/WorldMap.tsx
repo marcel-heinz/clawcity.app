@@ -13,8 +13,8 @@ interface WorldMapProps {
 
 export function WorldMap({ 
   agents, 
-  centerX = 25, 
-  centerY = 25, 
+  centerX = Math.floor(WORLD_SIZE / 2), 
+  centerY = Math.floor(WORLD_SIZE / 2), 
   viewRadius = 15 
 }: WorldMapProps) {
   const [tiles, setTiles] = useState<Tile[]>([]);
