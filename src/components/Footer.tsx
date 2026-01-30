@@ -61,6 +61,12 @@ export function Footer({ onOpenCookieSettings }: FooterProps) {
             >
               Imprint
             </Link>
+            <Link
+              href="/business"
+              className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+            >
+              Business
+            </Link>
             <button
               onClick={onOpenCookieSettings}
               className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
