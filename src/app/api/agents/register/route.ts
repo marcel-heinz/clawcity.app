@@ -28,6 +28,22 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
+    // Check agent limit
+    const [{ count: agentCount }, { data: limitSetting }] = await Promise.all([
+      supabase.from('agents').select('*', { count: 'exact', head: true }),
+      supabase.from('game_settings').select('value').eq('key', 'agent_limit').single(),
+    ]);
+
+    const agentLimit = limitSetting?.value ? Number(limitSetting.value) : 1000;
+    const currentCount = agentCount ?? 0;
+
+    if (currentCount >= agentLimit) {
+      return errorResponse(
+        `Registration is currently closed. The maximum number of agents (${agentLimit}) has been reached.`,
+        503
+      );
+    }
+
     // Check if name already exists
     const { data: existingAgent } = await supabase
       .from('agents')

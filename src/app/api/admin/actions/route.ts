@@ -3,7 +3,7 @@ import { verifyAdminSession, isAdminConfigured } from '@/lib/admin-auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { generateWorldTiles } from '@/lib/game-logic';
 
-type AdminAction = 'offboard_all' | 'reset_world' | 'clear_events' | 'clear_trades';
+type AdminAction = 'offboard_all' | 'reset_world' | 'clear_events' | 'clear_trades' | 'update_agent_limit';
 
 // POST - Execute admin action
 export async function POST(request: NextRequest) {
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { action } = body as { action: AdminAction };
+    const { action, value } = body as { action: AdminAction; value?: number };
 
     if (!action) {
       return NextResponse.json(
@@ -173,6 +173,38 @@ export async function POST(request: NextRequest) {
         result = {
           message: `Successfully cleared all trades`,
           details: { trades_removed: count || 0 },
+        };
+        break;
+      }
+
+      case 'update_agent_limit': {
+        // Validate the new limit value
+        if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+          return NextResponse.json(
+            { success: false, error: 'Agent limit must be a non-negative integer' },
+            { status: 400 }
+          );
+        }
+
+        // Update or insert the agent limit setting
+        const { error } = await supabase
+          .from('game_settings')
+          .upsert(
+            { key: 'agent_limit', value: value.toString() },
+            { onConflict: 'key' }
+          );
+
+        if (error) {
+          console.error('Error updating agent limit:', error);
+          return NextResponse.json(
+            { success: false, error: 'Failed to update agent limit' },
+            { status: 500 }
+          );
+        }
+
+        result = {
+          message: `Successfully updated agent limit to ${value}`,
+          details: { new_limit: value },
         };
         break;
       }

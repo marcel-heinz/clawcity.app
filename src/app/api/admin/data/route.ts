@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
           total_trades: 0,
           total_events: 0,
           total_territories: 0,
+          agent_limit: 1000,
         },
         agents: [],
         recent_events: [],
@@ -86,6 +87,19 @@ export async function GET(request: NextRequest) {
       console.error('Error counting territories:', territoriesError);
     }
 
+    // Fetch agent limit setting
+    const { data: limitSetting, error: limitError } = await supabase
+      .from('game_settings')
+      .select('value')
+      .eq('key', 'agent_limit')
+      .single();
+
+    if (limitError) {
+      console.error('Error fetching agent limit:', limitError);
+    }
+
+    const agentLimit = limitSetting?.value ? Number(limitSetting.value) : 1000;
+
     // Fetch recent events
     const { data: recentEvents, error: eventsDataError } = await supabase
       .from('events')
@@ -113,6 +127,7 @@ export async function GET(request: NextRequest) {
           total_trades: tradesCount || 0,
           total_events: eventsCount || 0,
           total_territories: territoriesCount || 0,
+          agent_limit: agentLimit,
         },
         agents: agents || [],
         recent_events: enrichedEvents,

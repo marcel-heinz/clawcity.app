@@ -35,6 +35,7 @@ interface AdminData {
     total_trades: number;
     total_events: number;
     total_territories: number;
+    agent_limit: number;
   };
   agents: Agent[];
   recent_events: GameEvent[];
@@ -55,6 +56,10 @@ export default function AdminDashboard() {
   const [confirmAction, setConfirmAction] = useState<ActionType | null>(null);
   const [actionResult, setActionResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
+
+  // Agent limit settings
+  const [agentLimitInput, setAgentLimitInput] = useState<string>('');
+  const [isSavingLimit, setIsSavingLimit] = useState(false);
 
   // Check authentication status on mount
   useEffect(() => {
@@ -122,6 +127,8 @@ export default function AdminDashboard() {
       
       if (data.success) {
         setAdminData(data.data);
+        // Initialize agent limit input with current value
+        setAgentLimitInput(String(data.data.stats.agent_limit));
       } else {
         setError(data.error || 'Failed to fetch data');
       }
@@ -197,6 +204,39 @@ export default function AdminDashboard() {
   const isRecentlyActive = (lastActive: string) => {
     const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
     return new Date(lastActive).getTime() > fiveMinutesAgo;
+  };
+
+  const handleSaveAgentLimit = async () => {
+    const newLimit = parseInt(agentLimitInput, 10);
+    
+    if (isNaN(newLimit) || newLimit < 0) {
+      setActionResult({ success: false, message: 'Agent limit must be a non-negative number' });
+      return;
+    }
+
+    setIsSavingLimit(true);
+    setActionResult(null);
+
+    try {
+      const response = await fetch('/api/admin/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_agent_limit', value: newLimit }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setActionResult({ success: true, message: data.data.message });
+        fetchData();
+      } else {
+        setActionResult({ success: false, message: data.error || 'Failed to update agent limit' });
+      }
+    } catch {
+      setActionResult({ success: false, message: 'Connection error' });
+    } finally {
+      setIsSavingLimit(false);
+    }
   };
 
   // Loading auth state
@@ -322,9 +362,12 @@ export default function AdminDashboard() {
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4">
             <div className="text-3xl font-bold text-[var(--accent)]">
               {adminData?.stats.total_agents ?? '-'}
+              <span className="text-lg text-[var(--muted)] font-normal">
+                {' '}/ {adminData?.stats.agent_limit ?? '-'}
+              </span>
             </div>
             <div className="text-xs text-[var(--muted)] uppercase tracking-wider mt-1">
-              Total Agents
+              Agents (Limit)
             </div>
           </div>
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4">
@@ -423,8 +466,44 @@ export default function AdminDashboard() {
             </div>
           </section>
 
-          {/* Security Controls */}
+          {/* Sidebar Controls */}
           <aside className="space-y-6">
+            {/* Game Settings */}
+            <section className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span>⚙️</span> Game Settings
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="agentLimit" className="block text-sm text-[var(--muted)] mb-2">
+                    Agent Limit
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      id="agentLimit"
+                      type="number"
+                      min="0"
+                      value={agentLimitInput}
+                      onChange={(e) => setAgentLimitInput(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded text-[var(--foreground)] focus:outline-none focus:border-[var(--accent)] transition-colors"
+                      placeholder="1000"
+                    />
+                    <button
+                      onClick={handleSaveAgentLimit}
+                      disabled={isSavingLimit || agentLimitInput === String(adminData?.stats.agent_limit)}
+                      className="px-4 py-2 bg-[var(--accent)] text-black font-semibold rounded hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                    >
+                      {isSavingLimit ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-[var(--muted)] mt-2">
+                    Maximum number of agents that can register. Set to 0 to disable registration.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            {/* Security Controls */}
             <section className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <span>🛡️</span> Security Controls
