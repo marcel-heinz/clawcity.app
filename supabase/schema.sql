@@ -9,8 +9,8 @@ CREATE TABLE IF NOT EXISTS agents (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT UNIQUE NOT NULL,
   api_key TEXT UNIQUE NOT NULL,
-  x INT DEFAULT 25,
-  y INT DEFAULT 25,
+  x INT DEFAULT 250,
+  y INT DEFAULT 250,
   gold INT DEFAULT 100,
   wood INT DEFAULT 0,
   food INT DEFAULT 50,
@@ -67,11 +67,20 @@ CREATE TABLE IF NOT EXISTS trades (
 CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status);
 CREATE INDEX IF NOT EXISTS idx_trades_to_agent ON trades(to_agent_id, status);
 
--- Enable Realtime for events table
-ALTER PUBLICATION supabase_realtime ADD TABLE events;
+-- Enable Realtime for events and agents tables (ignore if already added)
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE events;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
--- Enable Realtime for agents table (for position updates)
-ALTER PUBLICATION supabase_realtime ADD TABLE agents;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE agents;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Function to update last_active timestamp
 CREATE OR REPLACE FUNCTION update_last_active()

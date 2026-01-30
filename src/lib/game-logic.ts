@@ -69,28 +69,62 @@ export function generateWorldTiles(): Array<{ x: number; y: number; terrain: Ter
     return n - Math.floor(n);
   };
 
+  // Market locations spread across the 500x500 world (25 markets in a 5x5 grid pattern)
+  const marketLocations = new Set<string>();
+  for (let mx = 0; mx < 5; mx++) {
+    for (let my = 0; my < 5; my++) {
+      const marketX = 50 + mx * 100; // Markets at 50, 150, 250, 350, 450
+      const marketY = 50 + my * 100;
+      marketLocations.add(`${marketX},${marketY}`);
+    }
+  }
+
+  // Helper to check if position is in a water body
+  const isWater = (x: number, y: number): boolean => {
+    // Large lakes scattered across the map
+    const lakes = [
+      { cx: 100, cy: 100, r: 30 },
+      { cx: 400, cy: 100, r: 25 },
+      { cx: 100, cy: 400, r: 25 },
+      { cx: 400, cy: 400, r: 30 },
+      { cx: 250, cy: 250, r: 40 }, // Central lake
+    ];
+    
+    for (const lake of lakes) {
+      const dist = Math.sqrt((x - lake.cx) ** 2 + (y - lake.cy) ** 2);
+      if (dist <= lake.r) return true;
+    }
+    
+    // Rivers
+    if (Math.abs(y - 200) <= 5 && x > 50 && x < 450) return true; // Horizontal river
+    if (Math.abs(x - 300) <= 5 && y > 100 && y < 400) return true; // Vertical river
+    
+    return false;
+  };
+
   for (let y = 0; y < WORLD_SIZE; y++) {
     for (let x = 0; x < WORLD_SIZE; x++) {
       const r = random(x, y);
       let terrain: TerrainType;
 
       // Markets at specific locations (trade hubs)
-      if ((x === 10 && y === 10) || (x === 40 && y === 40) || 
-          (x === 25 && y === 25) || (x === 10 && y === 40) || 
-          (x === 40 && y === 10)) {
+      if (marketLocations.has(`${x},${y}`)) {
         terrain = 'market';
       }
       // Water bodies
-      else if (
-        (x >= 20 && x <= 30 && y >= 0 && y <= 5) ||
-        (x >= 0 && x <= 5 && y >= 20 && y <= 30)
-      ) {
+      else if (isWater(x, y)) {
         terrain = 'water';
       }
-      // Mountains in corners and edges
-      else if (r < 0.15 || 
-               (x < 5 && y < 5) || 
-               (x > WORLD_SIZE - 6 && y > WORLD_SIZE - 6)) {
+      // Mountains in corners and mountain ranges
+      else if (
+        r < 0.08 || 
+        (x < 20 && y < 20) || 
+        (x > WORLD_SIZE - 21 && y > WORLD_SIZE - 21) ||
+        (x < 20 && y > WORLD_SIZE - 21) ||
+        (x > WORLD_SIZE - 21 && y < 20) ||
+        // Mountain ranges
+        (Math.abs(y - x) < 10 && x > 150 && x < 350) // Diagonal range
+      ) {
         terrain = 'mountain';
       }
       // Forests

@@ -97,7 +97,7 @@ export type Direction = 'north' | 'south' | 'east' | 'west';
 export type ResourceType = 'gold' | 'wood' | 'food' | 'stone';
 
 // Game constants
-export const WORLD_SIZE = 50;
+export const WORLD_SIZE = 500;
 export const STARTING_GOLD = 100;
 export const STARTING_FOOD = 50;
 export const GATHER_COOLDOWN_MS = 5000;
