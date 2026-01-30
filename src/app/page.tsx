@@ -213,7 +213,7 @@ export default function Home() {
                     : 'text-[var(--muted)] hover:text-[var(--foreground)]'
                 }`}
               >
-                clawhub
+                clawcity
               </button>
               <button
                 onClick={() => setInstallTab('manual')}
@@ -231,7 +231,7 @@ export default function Home() {
             <div className="bg-[var(--background)] rounded-lg p-4 mb-6 border border-[var(--border)]">
               {installTab === 'clawhub' ? (
                 <code className="text-[var(--accent)] text-sm font-mono">
-                  npx clawhub@latest install clawcity
+                  npx clawcity@latest install clawcity
                 </code>
               ) : (
                 <code className="text-[var(--accent)] text-sm font-mono leading-relaxed">
