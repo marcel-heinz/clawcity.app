@@ -1,0 +1,73 @@
+import { NextResponse } from 'next/server';
+import { createServerClient } from '@/lib/supabase';
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { title, description, email } = body;
+
+    // Validate required fields
+    if (!title || typeof title !== 'string' || title.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Title is required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate title length
+    if (title.length > 200) {
+      return NextResponse.json(
+        { error: 'Title must be 200 characters or less' },
+        { status: 400 }
+      );
+    }
+
+    // Validate description length if provided
+    if (description && description.length > 2000) {
+      return NextResponse.json(
+        { error: 'Description must be 2000 characters or less' },
+        { status: 400 }
+      );
+    }
+
+    // Validate email format if provided
+    if (email && typeof email === 'string' && email.trim().length > 0) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return NextResponse.json(
+          { error: 'Invalid email format' },
+          { status: 400 }
+        );
+      }
+    }
+
+    const supabase = createServerClient();
+
+    const { error } = await supabase
+      .from('feature_requests')
+      .insert({
+        title: title.trim(),
+        description: description?.trim() || null,
+        email: email?.trim() || null,
+      });
+
+    if (error) {
+      console.error('Error inserting feature request:', error);
+      return NextResponse.json(
+        { error: 'Failed to submit feature request' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(
+      { success: true, message: 'Feature request submitted successfully' },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error('Error processing feature request:', error);
+    return NextResponse.json(
+      { error: 'Invalid request' },
+      { status: 400 }
+    );
+  }
+}

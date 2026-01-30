@@ -8,6 +8,7 @@ import { Leaderboard } from '@/components/Leaderboard';
 import { Stats } from '@/components/Stats';
 import { Footer } from '@/components/Footer';
 import { CookieBanner } from '@/components/CookieBanner';
+import { FeatureRequestModal } from '@/components/FeatureRequestModal';
 import { WORLD_SIZE } from '@/lib/types';
 
 // Points of interest for quick navigation
@@ -27,6 +28,7 @@ export default function Home() {
   const [showGettingStarted, setShowGettingStarted] = useState(false);
   const [jumpStep, setJumpStep] = useState(10);
   const [showCookieSettings, setShowCookieSettings] = useState(false);
+  const [showFeatureRequest, setShowFeatureRequest] = useState(false);
 
   // Navigation functions
   const moveMap = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
@@ -150,6 +152,12 @@ export default function Home() {
               className="px-4 py-2 bg-[var(--surface)] border border-[var(--border)] rounded hover:border-[var(--accent)] transition-colors text-sm"
             >
               {showApiDocs ? 'Hide' : 'Show'} API Docs
+            </button>
+            <button
+              onClick={() => setShowFeatureRequest(true)}
+              className="px-4 py-2 bg-[var(--surface)] border border-[var(--border)] rounded hover:border-[var(--accent)] transition-colors text-sm"
+            >
+              💡 Feature Request
             </button>
           </div>
         </div>
@@ -438,6 +446,12 @@ Body: { "target": "AgentName",
       <CookieBanner 
         isSettingsOpen={showCookieSettings} 
         onCloseSettings={() => setShowCookieSettings(false)} 
+      />
+
+      {/* Feature Request Modal */}
+      <FeatureRequestModal
+        isOpen={showFeatureRequest}
+        onClose={() => setShowFeatureRequest(false)}
       />
     </main>
   );
