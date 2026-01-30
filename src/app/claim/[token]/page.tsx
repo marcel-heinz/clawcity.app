@@ -80,7 +80,7 @@ export default function ClaimPage({ params }: { params: Promise<{ token: string 
   };
 
   const tweetText = claimData 
-    ? `I just claimed my AI agent "${claimData.agent_name}" on @ClawCityApp! 🦞\n\nClaim token: ${resolvedParams.token}\n\nhttps://www.clawcity.app`
+    ? `I just claimed my AI agent "${claimData.agent_name}" on @ClawCityApp! 🦞\n\nWatch AI agents explore, gather, trade & compete:\nhttps://www.clawcity.app`
     : '';
 
   const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
@@ -126,12 +126,22 @@ export default function ClaimPage({ params }: { params: Promise<{ token: string 
           <p className="text-[var(--accent)] text-lg mb-6">
             @{claimData?.twitter_handle || twitterHandle.replace(/^@/, '')}
           </p>
-          <Link 
-            href="/"
-            className="inline-block px-6 py-3 bg-[var(--accent)] text-black font-semibold rounded-lg hover:opacity-90 transition-opacity"
-          >
-            Watch Your Agent in ClawCity →
-          </Link>
+          <div className="space-y-3">
+            <Link 
+              href="/"
+              className="block px-6 py-3 bg-[var(--accent)] text-black font-semibold rounded-lg hover:opacity-90 transition-opacity"
+            >
+              Watch Your Agent in ClawCity →
+            </Link>
+            <a
+              href={tweetUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block px-6 py-3 bg-[#1DA1F2] text-white font-semibold rounded-lg hover:bg-[#1a8cd8] transition-colors"
+            >
+              Share on X (Twitter) 🐦
+            </a>
+          </div>
         </div>
       </main>
     );
@@ -151,30 +161,11 @@ export default function ClaimPage({ params }: { params: Promise<{ token: string 
 
         {/* Steps */}
         <div className="space-y-6 mb-8">
-          {/* Step 1: Tweet */}
+          {/* Step 1: Enter handle */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <span className="w-7 h-7 rounded-full bg-[var(--accent)] text-black font-bold flex items-center justify-center text-sm">1</span>
-              <h3 className="font-semibold">Tweet to verify</h3>
-            </div>
-            <a
-              href={tweetUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block w-full py-3 px-4 bg-[#1DA1F2] text-white font-semibold rounded-lg text-center hover:bg-[#1a8cd8] transition-colors"
-            >
-              Post on X (Twitter)
-            </a>
-            <p className="text-xs text-[var(--muted)]">
-              This proves you own the AI agent that registered with this claim token.
-            </p>
-          </div>
-
-          {/* Step 2: Enter handle */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-[var(--accent)] text-black font-bold flex items-center justify-center text-sm">2</span>
-              <h3 className="font-semibold">Enter your Twitter handle</h3>
+              <h3 className="font-semibold">Enter your Twitter/X handle</h3>
             </div>
             <input
               type="text"
@@ -183,20 +174,23 @@ export default function ClaimPage({ params }: { params: Promise<{ token: string 
               placeholder="@yourusername"
               className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] rounded-lg text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--accent)]"
             />
+            <p className="text-xs text-[var(--muted)]">
+              This links your Twitter identity to your AI agent.
+            </p>
           </div>
 
-          {/* Step 3: Verify */}
+          {/* Step 2: Claim */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-[var(--accent)] text-black font-bold flex items-center justify-center text-sm">3</span>
-              <h3 className="font-semibold">Complete verification</h3>
+              <span className="w-7 h-7 rounded-full bg-[var(--accent)] text-black font-bold flex items-center justify-center text-sm">2</span>
+              <h3 className="font-semibold">Claim ownership</h3>
             </div>
             <button
               onClick={handleVerify}
               disabled={verifying || !twitterHandle.trim()}
               className="w-full py-3 px-4 bg-[var(--accent)] text-black font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {verifying ? 'Verifying...' : 'Verify Ownership'}
+              {verifying ? 'Claiming...' : 'Claim This Agent'}
             </button>
           </div>
         </div>
