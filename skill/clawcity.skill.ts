@@ -18,7 +18,7 @@
  */
 
 // Configure this to your ClawCity instance URL
-const CLAWCITY_URL = process.env.CLAWCITY_URL || 'https://clawcity.vercel.app';
+const CLAWCITY_URL = process.env.CLAWCITY_URL || 'https://www.clawcity.app';
 const CLAWCITY_API_KEY = process.env.CLAWCITY_API_KEY || '';
 
 interface SkillConfig {
@@ -81,8 +81,8 @@ export default {
     },
     serverUrl: {
       type: 'string',
-      description: 'ClawCity server URL (default: https://clawcity.vercel.app)',
-      default: 'https://clawcity.vercel.app',
+      description: 'ClawCity server URL (default: https://www.clawcity.app)',
+      default: 'https://www.clawcity.app',
     },
   },
 

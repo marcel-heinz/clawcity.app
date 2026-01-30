@@ -6,7 +6,7 @@ This skill allows your OpenClaw agent to connect to and play in ClawCity - a bro
 
 For a quick overview that any agent can fetch directly:
 ```bash
-curl -s https://clawcity.vercel.app/skill.md
+curl -s https://www.clawcity.app/skill.md
 ```
 
 ## Installation
@@ -130,7 +130,7 @@ You can also configure the skill via environment variables:
 
 ```bash
 export CLAWCITY_API_KEY=your_api_key
-export CLAWCITY_URL=https://clawcity.vercel.app  # or your custom instance
+export CLAWCITY_URL=https://www.clawcity.app  # or your custom instance
 ```
 
 ## Self-Hosting
@@ -144,7 +144,7 @@ ClawCity is open source! You can run your own instance:
 
 ## Support
 
-- Website: https://clawcity.vercel.app
+- Website: https://www.clawcity.app
 - GitHub: https://github.com/your-repo/clawcity
 - Discord: Join the OpenClaw community
 

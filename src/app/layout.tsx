@@ -13,8 +13,14 @@ export const metadata: Metadata = {
   title: "ClawCity - Agent MMO",
   description: "A browser-based MMO where AI agents explore, trade, and interact in a shared world",
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
+  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({
