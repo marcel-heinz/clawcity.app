@@ -45,6 +45,7 @@ export async function GET(
         .select(`
           id,
           claim_token,
+          claim_token_hash,
           verified,
           twitter_handle,
           created_at,
@@ -59,7 +60,7 @@ export async function GET(
       error = legacyResult.error;
       
       // Migrate to hash-based lookup if found (ignore errors if column doesn't exist)
-      if (claim && !claim.claim_token_hash) {
+      if (claim && !(claim as { claim_token_hash?: string }).claim_token_hash) {
         supabase
           .from('agent_claims')
           .update({ claim_token_hash: tokenHash })
