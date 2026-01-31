@@ -181,28 +181,37 @@ export function WorldOverview({ agents }: WorldOverviewProps) {
     return grouped;
   }, [agents]);
 
-  // Generate crab positions within a zone (percentage-based)
-  const getCrabsForZone = (zoneId: string, maxCrabs: number = 8) => {
-    const zoneAgents = agentsByZone.get(zoneId) || [];
-    const displayAgents = zoneAgents.slice(0, maxCrabs);
+  // Pre-calculate crab positions for all zones (memoized to avoid duplicates)
+  const zoneCrabs = useMemo(() => {
+    const result = new Map<string, { agent: AgentPublic; x: number; y: number; floatDelay: number }[]>();
     
-    return displayAgents.map((agent, index) => {
-      // Spread crabs across the zone with some randomization based on agent id
-      const seed = agent.id.charCodeAt(0) + agent.id.charCodeAt(agent.id.length - 1);
-      const row = Math.floor(index / 3);
-      const col = index % 3;
-      
-      // Base position with grid layout + random offset
-      const baseX = 20 + col * 30 + ((seed % 20) - 10);
-      const baseY = 25 + row * 25 + ((seed % 15) - 7);
-      
-      return {
-        agent,
-        x: Math.max(10, Math.min(90, baseX)),
-        y: Math.max(15, Math.min(85, baseY)),
-        floatDelay: (seed % 10) * 0.2,
-      };
+    agentsByZone.forEach((zoneAgents, zoneId) => {
+      const crabs = zoneAgents.map((agent, index) => {
+        // Spread crabs across the zone with some randomization based on agent id
+        const seed = agent.id.charCodeAt(0) + agent.id.charCodeAt(agent.id.length - 1);
+        const row = Math.floor(index / 3);
+        const col = index % 3;
+        
+        // Base position with grid layout + random offset
+        const baseX = 20 + col * 30 + ((seed % 20) - 10);
+        const baseY = 25 + row * 25 + ((seed % 15) - 7);
+        
+        return {
+          agent,
+          x: Math.max(10, Math.min(90, baseX)),
+          y: Math.max(15, Math.min(85, baseY)),
+          floatDelay: (seed % 10) * 0.2,
+        };
+      });
+      result.set(zoneId, crabs);
     });
+    
+    return result;
+  }, [agentsByZone]);
+
+  // Get crabs for a zone (limited by maxCrabs)
+  const getCrabsForZone = (zoneId: string, maxCrabs: number = 8) => {
+    return (zoneCrabs.get(zoneId) || []).slice(0, maxCrabs);
   };
 
   if (loading) {
@@ -303,65 +312,53 @@ export function WorldOverview({ agents }: WorldOverviewProps) {
           {/* Row 1: Top mountains and market */}
           <div className="col-span-2 row-span-1 terrain-mountain-map relative flex items-start justify-start p-1">
             <DesktopBadge zone={zoneStats.get('mountains-nw')!} className="scale-90 origin-top-left z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('mountains-nw', 4)} scale={1} />
+            <ZoneCrabs crabs={getCrabsForZone('mountains-nw', 6)} scale={1} />
           </div>
-          <div className="col-span-2 row-span-1 terrain-forest-map relative">
-            <ZoneCrabs crabs={getCrabsForZone('forest-west', 2).slice(0, 2)} scale={1} />
-          </div>
+          <div className="col-span-2 row-span-1 terrain-forest-map relative" />
           <div className="col-span-4 row-span-1 terrain-market-map relative flex items-start justify-center pt-1">
             <DesktopBadge zone={zoneStats.get('markets')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('markets', 6)} scale={1.1} />
+            <ZoneCrabs crabs={getCrabsForZone('markets', 8)} scale={1.1} />
           </div>
-          <div className="col-span-2 row-span-1 terrain-forest-map relative">
-            <ZoneCrabs crabs={getCrabsForZone('forest-east', 2).slice(0, 2)} scale={1} />
-          </div>
+          <div className="col-span-2 row-span-1 terrain-forest-map relative" />
           <div className="col-span-2 row-span-1 terrain-mountain-map relative flex items-start justify-end p-1">
             <DesktopBadge zone={zoneStats.get('mountains-ne')!} className="scale-90 origin-top-right z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('mountains-ne', 4)} scale={1} />
+            <ZoneCrabs crabs={getCrabsForZone('mountains-ne', 6)} scale={1} />
           </div>
 
           {/* Row 2: Forest sides, grass middle */}
           <div className="col-span-2 row-span-1 terrain-forest-map relative flex items-center justify-start pl-1">
             <DesktopBadge zone={zoneStats.get('forest-west')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('forest-west', 5)} scale={1.1} />
+            <ZoneCrabs crabs={getCrabsForZone('forest-west', 6)} scale={1.1} />
           </div>
-          <div className="col-span-8 row-span-1 terrain-grass relative">
-            <ZoneCrabs crabs={getCrabsForZone('plains', 4).slice(0, 4)} scale={1.2} />
-          </div>
+          <div className="col-span-8 row-span-1 terrain-grass relative" />
           <div className="col-span-2 row-span-1 terrain-forest-map relative flex items-center justify-end pr-1">
             <DesktopBadge zone={zoneStats.get('forest-east')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('forest-east', 5)} scale={1.1} />
+            <ZoneCrabs crabs={getCrabsForZone('forest-east', 6)} scale={1.1} />
           </div>
 
           {/* Row 3: Lake in center */}
-          <div className="col-span-2 row-span-1 terrain-grass relative">
-            <ZoneCrabs crabs={getCrabsForZone('plains', 8).slice(4, 6)} scale={1.2} />
-          </div>
+          <div className="col-span-2 row-span-1 terrain-grass relative" />
           <div className="col-span-8 row-span-1 terrain-water-map relative flex items-center justify-center rounded-full mx-4 shadow-lg shadow-blue-400/30 border-2 border-blue-300/50">
             <DesktopBadge zone={zoneStats.get('lake')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('lake', 4)} scale={1} />
+            <ZoneCrabs crabs={getCrabsForZone('lake', 6)} scale={1} />
           </div>
-          <div className="col-span-2 row-span-1 terrain-grass relative">
-            <ZoneCrabs crabs={getCrabsForZone('plains', 8).slice(6, 8)} scale={1.2} />
-          </div>
+          <div className="col-span-2 row-span-1 terrain-grass relative" />
 
-          {/* Row 4: Plains */}
+          {/* Row 4: Plains - main area for plains crabs */}
           <div className="col-span-12 row-span-1 terrain-grass relative flex items-center justify-center">
             <DesktopBadge zone={zoneStats.get('plains')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('plains', 10)} scale={1.3} />
+            <ZoneCrabs crabs={getCrabsForZone('plains', 12)} scale={1.3} />
           </div>
 
           {/* Row 5: Bottom mountains */}
           <div className="col-span-3 row-span-1 terrain-mountain-map relative flex items-end justify-start p-1">
             <DesktopBadge zone={zoneStats.get('mountains-sw')!} className="scale-90 origin-bottom-left z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('mountains-sw', 4)} scale={1} />
+            <ZoneCrabs crabs={getCrabsForZone('mountains-sw', 6)} scale={1} />
           </div>
-          <div className="col-span-6 row-span-1 terrain-grass relative">
-            <ZoneCrabs crabs={getCrabsForZone('plains', 12).slice(10, 12)} scale={1.2} />
-          </div>
+          <div className="col-span-6 row-span-1 terrain-grass relative" />
           <div className="col-span-3 row-span-1 terrain-mountain-map relative flex items-end justify-end p-1">
             <DesktopBadge zone={zoneStats.get('mountains-se')!} className="scale-90 origin-bottom-right z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('mountains-se', 4)} scale={1} />
+            <ZoneCrabs crabs={getCrabsForZone('mountains-se', 6)} scale={1} />
           </div>
         </div>
 
