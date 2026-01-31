@@ -1,7 +1,29 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { 
+  checkRateLimit, 
+  rateLimitHeaders, 
+  FEEDBACK_RATE_LIMIT 
+} from '@/lib/rate-limit';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // Check rate limit BEFORE processing feedback
+  const rateLimitResult = checkRateLimit(request, FEEDBACK_RATE_LIMIT);
+  
+  if (!rateLimitResult.success) {
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: 'Too many feedback submissions. Please try again later.',
+        retryAfter: Math.ceil((rateLimitResult.retryAfterMs || 3600000) / 1000),
+      },
+      { 
+        status: 429,
+        headers: rateLimitHeaders(rateLimitResult),
+      }
+    );
+  }
+
   try {
     const body = await request.json();
     const { title, description, email } = body;
@@ -61,7 +83,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       { success: true, message: 'Feature request submitted successfully' },
-      { status: 201 }
+      { 
+        status: 201,
+        headers: rateLimitHeaders(rateLimitResult),
+      }
     );
   } catch (error) {
     console.error('Error processing feature request:', error);

@@ -5,25 +5,38 @@ import {
   WORLD_SIZE, 
   TERRAIN_RESOURCES 
 } from './types';
+import { randomBytes, createHash } from 'crypto';
 
-// Generate a random API key
+// Generate a cryptographically secure random API key
 export function generateApiKey(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = 'clawcity_';
-  for (let i = 0; i < 32; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+  // Use 24 bytes = 32 base64 chars (after removing padding)
+  const bytes = randomBytes(24);
+  const token = bytes.toString('base64url');
+  return `clawcity_${token}`;
 }
 
-// Generate a unique claim token for agent ownership verification
+// Generate a cryptographically secure claim token for agent ownership verification
 export function generateClaimToken(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < 32; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  // Use 24 bytes = 32 base64url chars
+  const bytes = randomBytes(24);
+  return bytes.toString('base64url');
+}
+
+// Hash a token using SHA-256 for secure storage
+export function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+// Verify a token against its hash (constant-time comparison)
+export function verifyTokenHash(token: string, hash: string): boolean {
+  const tokenHash = hashToken(token);
+  // Use timing-safe comparison to prevent timing attacks
+  if (tokenHash.length !== hash.length) return false;
+  let result = 0;
+  for (let i = 0; i < tokenHash.length; i++) {
+    result |= tokenHash.charCodeAt(i) ^ hash.charCodeAt(i);
   }
-  return result;
+  return result === 0;
 }
 
 // Calculate new position based on direction

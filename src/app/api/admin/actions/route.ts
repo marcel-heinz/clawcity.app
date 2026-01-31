@@ -2,8 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminSession, isAdminConfigured } from '@/lib/admin-auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { generateWorldTiles } from '@/lib/game-logic';
+import { getClientIdentifier } from '@/lib/rate-limit';
 
 type AdminAction = 'offboard_all' | 'reset_world' | 'clear_events' | 'clear_trades' | 'update_agent_limit';
+
+/**
+ * Log admin action to audit log
+ */
+async function logAdminAction(
+  action: AdminAction,
+  request: NextRequest,
+  success: boolean,
+  details: Record<string, unknown> = {}
+) {
+  if (!isSupabaseConfigured) return;
+  
+  try {
+    const supabase = createServerClient();
+    await supabase.from('admin_audit_log').insert({
+      action: `admin_action_${action}`,
+      details: { ...details, success },
+      ip_address: getClientIdentifier(request),
+    });
+  } catch (error) {
+    console.error('Failed to log admin action:', error);
+  }
+}
 
 // POST - Execute admin action
 export async function POST(request: NextRequest) {
@@ -75,6 +99,16 @@ export async function POST(request: NextRequest) {
           console.error('Error deleting events:', eventsError);
         }
 
+        // Delete all agent claims
+        const { error: claimsError } = await supabase
+          .from('agent_claims')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000');
+
+        if (claimsError) {
+          console.error('Error deleting agent claims:', claimsError);
+        }
+
         // Delete all agents
         const { error: agentsError, count } = await supabase
           .from('agents')
@@ -83,6 +117,7 @@ export async function POST(request: NextRequest) {
 
         if (agentsError) {
           console.error('Error deleting agents:', agentsError);
+          await logAdminAction(action, request, false, { error: 'Failed to delete agents' });
           return NextResponse.json(
             { success: false, error: 'Failed to offboard agents' },
             { status: 500 }
@@ -93,6 +128,8 @@ export async function POST(request: NextRequest) {
           message: `Successfully offboarded all agents`,
           details: { agents_removed: count || 0 },
         };
+        
+        await logAdminAction(action, request, true, result.details);
         break;
       }
 
@@ -108,6 +145,7 @@ export async function POST(request: NextRequest) {
 
         if (deleteError) {
           console.error('Error deleting tiles:', deleteError);
+          await logAdminAction(action, request, false, { error: 'Failed to clear tiles' });
           return NextResponse.json(
             { success: false, error: 'Failed to clear tiles' },
             { status: 500 }
@@ -121,6 +159,7 @@ export async function POST(request: NextRequest) {
           const { error } = await supabase.from('tiles').insert(batch);
           if (error) {
             console.error('Error inserting tiles batch:', error);
+            await logAdminAction(action, request, false, { error: 'Failed to seed tiles' });
             return NextResponse.json(
               { success: false, error: 'Failed to seed tiles' },
               { status: 500 }
@@ -132,6 +171,8 @@ export async function POST(request: NextRequest) {
           message: `Successfully reset world`,
           details: { tiles_created: tiles.length },
         };
+        
+        await logAdminAction(action, request, true, result.details);
         break;
       }
 
@@ -143,6 +184,7 @@ export async function POST(request: NextRequest) {
 
         if (error) {
           console.error('Error clearing events:', error);
+          await logAdminAction(action, request, false, { error: 'Failed to clear events' });
           return NextResponse.json(
             { success: false, error: 'Failed to clear events' },
             { status: 500 }
@@ -153,6 +195,8 @@ export async function POST(request: NextRequest) {
           message: `Successfully cleared all events`,
           details: { events_removed: count || 0 },
         };
+        
+        await logAdminAction(action, request, true, result.details);
         break;
       }
 
@@ -164,6 +208,7 @@ export async function POST(request: NextRequest) {
 
         if (error) {
           console.error('Error clearing trades:', error);
+          await logAdminAction(action, request, false, { error: 'Failed to clear trades' });
           return NextResponse.json(
             { success: false, error: 'Failed to clear trades' },
             { status: 500 }
@@ -174,6 +219,8 @@ export async function POST(request: NextRequest) {
           message: `Successfully cleared all trades`,
           details: { trades_removed: count || 0 },
         };
+        
+        await logAdminAction(action, request, true, result.details);
         break;
       }
 
@@ -196,6 +243,7 @@ export async function POST(request: NextRequest) {
 
         if (error) {
           console.error('Error updating agent limit:', error);
+          await logAdminAction(action, request, false, { error: 'Failed to update limit', value });
           return NextResponse.json(
             { success: false, error: 'Failed to update agent limit' },
             { status: 500 }
@@ -206,6 +254,8 @@ export async function POST(request: NextRequest) {
           message: `Successfully updated agent limit to ${value}`,
           details: { new_limit: value },
         };
+        
+        await logAdminAction(action, request, true, result.details);
         break;
       }
 

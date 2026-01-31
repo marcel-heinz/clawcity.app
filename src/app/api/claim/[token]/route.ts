@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { jsonResponse, errorResponse } from '@/lib/auth';
+import { hashToken } from '@/lib/game-logic';
 
 // GET /api/claim/[token] - Get claim info for a token
 export async function GET(
@@ -20,8 +21,9 @@ export async function GET(
 
     const supabase = createServerClient();
 
-    // Get the claim and associated agent info
-    const { data: claim, error } = await supabase
+    // Try hash-based lookup first (secure method)
+    const tokenHash = hashToken(token);
+    let { data: claim, error } = await supabase
       .from('agent_claims')
       .select(`
         id,
@@ -33,8 +35,39 @@ export async function GET(
         expires_at,
         agent_id
       `)
-      .eq('claim_token', token)
+      .eq('claim_token_hash', tokenHash)
       .single();
+
+    // Fall back to plaintext lookup for backwards compatibility
+    if (error || !claim) {
+      const legacyResult = await supabase
+        .from('agent_claims')
+        .select(`
+          id,
+          claim_token,
+          verified,
+          twitter_handle,
+          created_at,
+          verified_at,
+          expires_at,
+          agent_id
+        `)
+        .eq('claim_token', token)
+        .single();
+      
+      claim = legacyResult.data;
+      error = legacyResult.error;
+      
+      // Migrate to hash-based lookup if found (ignore errors if column doesn't exist)
+      if (claim && !claim.claim_token_hash) {
+        supabase
+          .from('agent_claims')
+          .update({ claim_token_hash: tokenHash })
+          .eq('id', claim.id)
+          .then(() => {})
+          .catch(() => {}); // Ignore errors - migration is optional
+      }
+    }
 
     if (error || !claim) {
       return errorResponse('Invalid or expired claim token', 404);
@@ -55,7 +88,7 @@ export async function GET(
     return jsonResponse({
       success: true,
       data: {
-        token: claim.claim_token,
+        token: token,  // Return the token they provided, not from DB
         agent_name: agent?.name,
         agent_created_at: agent?.created_at,
         verified: claim.verified,

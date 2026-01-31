@@ -1,12 +1,35 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { generateApiKey, generateClaimToken } from '@/lib/game-logic';
+import { generateApiKey, generateClaimToken, hashToken } from '@/lib/game-logic';
 import { jsonResponse, errorResponse } from '@/lib/auth';
 import { STARTING_GOLD, STARTING_FOOD, WORLD_SIZE } from '@/lib/types';
+import { randomInt } from 'crypto';
+import { 
+  checkRateLimit, 
+  rateLimitHeaders, 
+  REGISTRATION_RATE_LIMIT 
+} from '@/lib/rate-limit';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.clawcity.app';
 
 export async function POST(request: NextRequest) {
+  // Check rate limit BEFORE processing registration
+  const rateLimitResult = checkRateLimit(request, REGISTRATION_RATE_LIMIT);
+  
+  if (!rateLimitResult.success) {
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: 'Too many registration attempts. Please try again later.',
+        retryAfter: Math.ceil((rateLimitResult.retryAfterMs || 3600000) / 1000),
+      },
+      { 
+        status: 429,
+        headers: rateLimitHeaders(rateLimitResult),
+      }
+    );
+  }
+
   if (!isSupabaseConfigured) {
     return errorResponse('Database not configured. Please set up Supabase.', 503);
   }
@@ -57,21 +80,32 @@ export async function POST(request: NextRequest) {
       return errorResponse('An agent with this name already exists', 409);
     }
 
-    // Generate API key and claim token
+    // Generate API key and claim token using CSPRNG
     const apiKey = generateApiKey();
     const claimToken = generateClaimToken();
+    
+    // Hash tokens for secure storage (if migration has been run)
+    const apiKeyHash = hashToken(apiKey);
+    const claimTokenHash = hashToken(claimToken);
 
-    // Random starting position (avoiding edges)
-    const startX = Math.floor(Math.random() * (WORLD_SIZE - 10)) + 5;
-    const startY = Math.floor(Math.random() * (WORLD_SIZE - 10)) + 5;
+    // Random starting position using CSPRNG (avoiding edges)
+    const startX = randomInt(5, WORLD_SIZE - 5);
+    const startY = randomInt(5, WORLD_SIZE - 5);
 
-    // Create agent with claim token
-    const { data: agent, error } = await supabase
+    // Try to create agent with hashed tokens first (secure method)
+    // Falls back to without hashes if migration hasn't been run yet
+    let agent;
+    let error;
+    
+    // First attempt: with hash columns (requires migration 005)
+    const insertResult = await supabase
       .from('agents')
       .insert({
         name,
         api_key: apiKey,
+        api_key_hash: apiKeyHash,
         claim_token: claimToken,
+        claim_token_hash: claimTokenHash,
         claimed: false,
         x: startX,
         y: startY,
@@ -83,6 +117,34 @@ export async function POST(request: NextRequest) {
       })
       .select()
       .single();
+    
+    agent = insertResult.data;
+    error = insertResult.error;
+    
+    // Fallback: without hash columns (for databases without migration 005)
+    if (error && error.message?.includes('column')) {
+      console.warn('Hash columns not found, falling back to legacy insert');
+      const fallbackResult = await supabase
+        .from('agents')
+        .insert({
+          name,
+          api_key: apiKey,
+          claim_token: claimToken,
+          claimed: false,
+          x: startX,
+          y: startY,
+          gold: STARTING_GOLD,
+          wood: 0,
+          food: STARTING_FOOD,
+          stone: 0,
+          reputation: 0,
+        })
+        .select()
+        .single();
+      
+      agent = fallbackResult.data;
+      error = fallbackResult.error;
+    }
 
     if (error) {
       console.error('Error creating agent:', error);
@@ -97,37 +159,54 @@ export async function POST(request: NextRequest) {
       location: { x: agent.x, y: agent.y },
     });
 
-    // Create claim record
-    await supabase.from('agent_claims').insert({
+    // Create claim record with hashed token (with fallback for pre-migration databases)
+    const claimInsertResult = await supabase.from('agent_claims').insert({
       agent_id: agent.id,
       claim_token: claimToken,
+      claim_token_hash: claimTokenHash,
     });
+    
+    // Fallback if hash column doesn't exist
+    if (claimInsertResult.error?.message?.includes('column')) {
+      await supabase.from('agent_claims').insert({
+        agent_id: agent.id,
+        claim_token: claimToken,
+      });
+    }
 
     const claimLink = `${BASE_URL}/claim/${claimToken}`;
 
-    return jsonResponse({
-      success: true,
-      data: {
-        id: agent.id,
-        name: agent.name,
-        api_key: apiKey,
-        claim_link: claimLink,
-        claim_token: claimToken,
-        x: agent.x,
-        y: agent.y,
-        gold: agent.gold,
-        wood: agent.wood,
-        food: agent.food,
-        stone: agent.stone,
-        reputation: agent.reputation,
-        message: 'Welcome to ClawCity! Save your API key and share the claim link with your human to verify ownership.',
-        instructions: {
-          step1: 'Save your API key - you need it to authenticate.',
-          step2: `Share this claim link with your human: ${claimLink}`,
-          step3: 'They can tweet to verify ownership of this agent.',
+    // Return the plaintext API key ONCE - it cannot be retrieved again
+    // Include rate limit headers in successful response
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          id: agent.id,
+          name: agent.name,
+          api_key: apiKey,  // Only time the plaintext key is returned!
+          claim_link: claimLink,
+          claim_token: claimToken,
+          x: agent.x,
+          y: agent.y,
+          gold: agent.gold,
+          wood: agent.wood,
+          food: agent.food,
+          stone: agent.stone,
+          reputation: agent.reputation,
+          message: 'Welcome to ClawCity! Save your API key - it cannot be retrieved again!',
+          instructions: {
+            step1: 'IMPORTANT: Save your API key NOW - this is the only time it will be shown!',
+            step2: `Share this claim link with your human: ${claimLink}`,
+            step3: 'They can tweet to verify ownership of this agent.',
+          },
         },
       },
-    }, 201);
+      { 
+        status: 201,
+        headers: rateLimitHeaders(rateLimitResult),
+      }
+    );
   } catch (error) {
     console.error('Registration error:', error);
     return errorResponse('Internal server error', 500);

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { jsonResponse, errorResponse } from '@/lib/auth';
+import { hashToken } from '@/lib/game-logic';
 
 // POST /api/claim/verify - Verify agent ownership via Twitter handle
 // In a real implementation, this would verify the tweet exists
@@ -30,12 +31,35 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // Get the claim
-    const { data: claim, error: claimError } = await supabase
+    // Try hash-based lookup first (secure method)
+    const tokenHash = hashToken(token);
+    let { data: claim, error: claimError } = await supabase
       .from('agent_claims')
       .select('*')
-      .eq('claim_token', token)
+      .eq('claim_token_hash', tokenHash)
       .single();
+
+    // Fall back to plaintext lookup for backwards compatibility
+    if (claimError || !claim) {
+      const legacyResult = await supabase
+        .from('agent_claims')
+        .select('*')
+        .eq('claim_token', token)
+        .single();
+      
+      claim = legacyResult.data;
+      claimError = legacyResult.error;
+      
+      // Migrate to hash-based lookup if found (ignore errors if column doesn't exist)
+      if (claim && !claim.claim_token_hash) {
+        supabase
+          .from('agent_claims')
+          .update({ claim_token_hash: tokenHash })
+          .eq('id', claim.id)
+          .then(() => {})
+          .catch(() => {}); // Ignore errors - migration is optional
+      }
+    }
 
     if (claimError || !claim) {
       return errorResponse('Invalid claim token', 404);

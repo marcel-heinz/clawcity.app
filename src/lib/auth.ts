@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from './supabase';
 import { Agent } from './types';
+import { hashToken } from './game-logic';
 
 export interface AuthResult {
   success: boolean;
@@ -11,6 +12,10 @@ export interface AuthResult {
 /**
  * Authenticate an agent from the request headers
  * Expects: Authorization: Bearer <api_key>
+ * 
+ * Supports both:
+ * - Hash-based lookup (secure, for new agents)
+ * - Legacy plaintext lookup (for backwards compatibility)
  */
 export async function authenticateAgent(request: NextRequest): Promise<AuthResult> {
   if (!isSupabaseConfigured) {
@@ -32,11 +37,36 @@ export async function authenticateAgent(request: NextRequest): Promise<AuthResul
   try {
     const supabase = createServerClient();
     
-    const { data: agent, error } = await supabase
+    // First, try hash-based lookup (secure method for new agents)
+    const apiKeyHash = hashToken(apiKey);
+    let { data: agent, error } = await supabase
       .from('agents')
       .select('*')
-      .eq('api_key', apiKey)
+      .eq('api_key_hash', apiKeyHash)
       .single();
+
+    // If hash lookup fails, fall back to legacy plaintext lookup
+    // This allows existing agents to continue working during migration
+    if (error || !agent) {
+      const legacyResult = await supabase
+        .from('agents')
+        .select('*')
+        .eq('api_key', apiKey)
+        .single();
+      
+      agent = legacyResult.data;
+      error = legacyResult.error;
+      
+      // If legacy lookup succeeds, migrate to hash-based auth (ignore errors if column doesn't exist)
+      if (agent && !agent.api_key_hash) {
+        supabase
+          .from('agents')
+          .update({ api_key_hash: apiKeyHash })
+          .eq('id', agent.id)
+          .then(() => {})
+          .catch(() => {}); // Ignore errors - migration is optional
+      }
+    }
 
     if (error || !agent) {
       return { success: false, error: 'Invalid API key' };

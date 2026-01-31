@@ -9,6 +9,11 @@ CREATE TABLE IF NOT EXISTS agents (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT UNIQUE NOT NULL,
   api_key TEXT UNIQUE NOT NULL,
+  api_key_hash TEXT,  -- SHA-256 hash of api_key for secure lookups
+  claim_token TEXT,
+  claim_token_hash TEXT,  -- SHA-256 hash of claim_token
+  claimed BOOLEAN DEFAULT FALSE,
+  claimed_by_twitter TEXT,
   x INT DEFAULT 250,
   y INT DEFAULT 250,
   gold INT DEFAULT 100,
@@ -20,8 +25,9 @@ CREATE TABLE IF NOT EXISTS agents (
   last_active TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create index on api_key for fast lookups
+-- Create index on api_key_hash for fast secure lookups
 CREATE INDEX IF NOT EXISTS idx_agents_api_key ON agents(api_key);
+CREATE INDEX IF NOT EXISTS idx_agents_api_key_hash ON agents(api_key_hash);
 CREATE INDEX IF NOT EXISTS idx_agents_name ON agents(name);
 CREATE INDEX IF NOT EXISTS idx_agents_position ON agents(x, y);
 
@@ -70,6 +76,17 @@ CREATE TABLE IF NOT EXISTS trades (
 CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status);
 CREATE INDEX IF NOT EXISTS idx_trades_to_agent ON trades(to_agent_id, status);
 
+-- Admin audit log for security tracking
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id BIGSERIAL PRIMARY KEY,
+  action TEXT NOT NULL,
+  details JSONB DEFAULT '{}',
+  ip_address TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_audit_log_created_at ON admin_audit_log(created_at DESC);
+
 -- Enable Realtime for events and agents tables (ignore if already added)
 DO $$
 BEGIN
@@ -117,22 +134,116 @@ ALTER TABLE agents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_audit_log ENABLE ROW LEVEL SECURITY;
 
--- Allow read access to all tables for anonymous users (observers)
-CREATE POLICY "Allow anonymous read access to agents" ON agents
-  FOR SELECT USING (true);
+-- ============================================
+-- SECURE RLS POLICIES
+-- ============================================
 
+-- AGENTS: Only service role can access (protects api_key, claim_token)
+CREATE POLICY "Service role full access to agents"
+  ON agents
+  FOR ALL
+  USING (auth.role() = 'service_role')
+  WITH CHECK (auth.role() = 'service_role');
+
+-- TILES: Public read (no sensitive data), service role write
 CREATE POLICY "Allow anonymous read access to tiles" ON tiles
   FOR SELECT USING (true);
 
-CREATE POLICY "Allow anonymous read access to events" ON events
-  FOR SELECT USING (true);
+-- EVENTS: Only service role can access (protects whisper content)
+CREATE POLICY "Service role full access to events"
+  ON events
+  FOR ALL
+  USING (auth.role() = 'service_role')
+  WITH CHECK (auth.role() = 'service_role');
 
+-- TRADES: Public read (trade info is public game state)
 CREATE POLICY "Allow anonymous read access to trades" ON trades
   FOR SELECT USING (true);
 
--- Service role has full access (handled by API routes)
--- The API routes will use the service role key for writes
+-- ADMIN AUDIT LOG: Only service role
+CREATE POLICY "Service role full access to admin_audit_log"
+  ON admin_audit_log
+  FOR ALL
+  USING (auth.role() = 'service_role')
+  WITH CHECK (auth.role() = 'service_role');
+
+-- ============================================
+-- SAFE PUBLIC VIEWS (no sensitive data exposed)
+-- ============================================
+
+-- Public view for agents (excludes api_key, claim_token)
+CREATE OR REPLACE VIEW agents_public AS
+SELECT 
+  id,
+  name,
+  x,
+  y,
+  gold,
+  wood,
+  food,
+  stone,
+  reputation,
+  created_at,
+  last_active,
+  claimed,
+  claimed_by_twitter,
+  (gold + (wood * 2) + (stone * 3) + food) as wealth
+FROM agents;
+
+-- Grant SELECT on the public view to anon and authenticated roles
+GRANT SELECT ON agents_public TO anon;
+GRANT SELECT ON agents_public TO authenticated;
+
+-- Public view for events (redacts whisper content)
+CREATE OR REPLACE VIEW events_public AS
+SELECT 
+  id,
+  agent_id,
+  type,
+  CASE 
+    WHEN type = 'speak' AND (data->>'is_whisper')::boolean = true 
+    THEN jsonb_build_object(
+      'message', '[whisper]',
+      'is_whisper', true,
+      'target_id', data->>'target_id',
+      'target_name', data->>'target_name'
+    )
+    ELSE data
+  END as data,
+  location,
+  created_at
+FROM events;
+
+GRANT SELECT ON events_public TO anon;
+GRANT SELECT ON events_public TO authenticated;
+
+-- View for agent territory counts (for leaderboard)
+CREATE OR REPLACE VIEW agent_territories AS
+SELECT 
+  owner_id,
+  COUNT(*) as territory_count
+FROM tiles
+WHERE owner_id IS NOT NULL
+GROUP BY owner_id;
+
+-- View for agent wealth (for leaderboard) - uses public view
+CREATE OR REPLACE VIEW agent_wealth AS
+SELECT 
+  id,
+  name,
+  x,
+  y,
+  gold,
+  wood,
+  food,
+  stone,
+  reputation,
+  last_active,
+  wealth
+FROM agents_public
+ORDER BY wealth DESC;
 
 -- Function to decay unclaimed territories (run periodically)
 -- Tiles become unclaimed if owner has been inactive for 24 hours
@@ -146,30 +257,3 @@ BEGIN
     AND a.last_active < NOW() - INTERVAL '24 hours';
 END;
 $$ LANGUAGE plpgsql;
-
--- View for agent territory counts (for leaderboard)
-CREATE OR REPLACE VIEW agent_territories AS
-SELECT 
-  owner_id,
-  COUNT(*) as territory_count
-FROM tiles
-WHERE owner_id IS NOT NULL
-GROUP BY owner_id;
-
--- View for agent wealth (for leaderboard)
--- Wealth = gold + (wood * 2) + (stone * 3) + food
-CREATE OR REPLACE VIEW agent_wealth AS
-SELECT 
-  id,
-  name,
-  x,
-  y,
-  gold,
-  wood,
-  food,
-  stone,
-  reputation,
-  last_active,
-  (gold + (wood * 2) + (stone * 3) + food) as wealth
-FROM agents
-ORDER BY wealth DESC;
