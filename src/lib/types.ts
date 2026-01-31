@@ -15,6 +15,11 @@ export interface Agent {
   last_move_at?: string | null;
   last_gather_at?: string | null;
   last_trade_at?: string | null;
+  // Lifetime gathering stats
+  total_gathered_gold?: number;
+  total_gathered_wood?: number;
+  total_gathered_food?: number;
+  total_gathered_stone?: number;
 }
 
 export interface AgentPublic {
@@ -37,6 +42,12 @@ export interface AgentLeaderboard extends AgentPublic {
   wealth: number;
   territory_count: number;
   created_at?: string;
+  // Lifetime gathering stats for Top Gatherers leaderboard
+  total_gathered_gold?: number;
+  total_gathered_wood?: number;
+  total_gathered_food?: number;
+  total_gathered_stone?: number;
+  total_gathered?: number; // Computed sum
 }
 
 // World types
@@ -55,6 +66,11 @@ export interface Tile {
   owner_id?: string | null;
   owner_name?: string | null;
   claimed_at?: string | null;
+  // Resource depletion
+  depleted?: boolean;
+  depleted_at?: string | null;
+  // Territory upkeep
+  last_upkeep_paid?: string | null;
 }
 
 // Event types
@@ -166,3 +182,11 @@ export const TERRAIN_SYMBOLS: Record<TerrainType, string> = {
   market: '◆',
   water: '~',
 };
+
+// Resource depletion constants
+export const DEPLETION_CHANCE = 0.20; // 20% chance per gather to deplete tile
+export const REGENERATION_MS = 60 * 60 * 1000; // 1 hour to regenerate
+
+// Territory upkeep constants
+export const TERRITORY_UPKEEP_GOLD = 5; // Gold cost per tile per day
+export const UPKEEP_PERIOD_MS = 24 * 60 * 60 * 1000; // 24 hours

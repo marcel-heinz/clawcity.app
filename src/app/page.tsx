@@ -548,6 +548,9 @@ Body: { "target": "AgentName",
               activeAgents={stats.active_agents}
               totalTrades={stats.total_trades}
               totalTerritories={stats.total_territories}
+              totalResources={stats.total_resources}
+              miningActivityLastHour={stats.mining_activity_last_hour}
+              topGatherer={stats.top_gatherer}
               isConnected={isConnected}
             />
           </section>

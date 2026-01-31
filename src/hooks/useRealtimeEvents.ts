@@ -12,6 +12,18 @@ interface LeaderboardEntry {
   reputation: number;
   territory_count: number;
   last_active: string;
+  total_gathered?: number;
+}
+
+interface TopGathererEntry {
+  rank: number;
+  id: string;
+  name: string;
+  total_gathered: number;
+  total_gathered_gold: number;
+  total_gathered_wood: number;
+  total_gathered_food: number;
+  total_gathered_stone: number;
 }
 
 interface RecentlyJoinedEntry {
@@ -19,32 +31,49 @@ interface RecentlyJoinedEntry {
   name: string;
 }
 
+interface WorldStats {
+  total_agents: number;
+  active_agents: number;
+  total_trades: number;
+  total_territories: number;
+  total_resources: {
+    gold: number;
+    wood: number;
+    food: number;
+    stone: number;
+  };
+  mining_activity_last_hour: number;
+  top_gatherer: string | null;
+}
+
 interface UseRealtimeEventsReturn {
   events: GameEvent[];
   agents: AgentLeaderboard[];
   leaderboard: LeaderboardEntry[];
+  topGatherers: TopGathererEntry[];
   recentlyJoined: RecentlyJoinedEntry[];
-  stats: {
-    total_agents: number;
-    active_agents: number;
-    total_trades: number;
-    total_territories: number;
-  };
+  stats: WorldStats;
   isConnected: boolean;
   error: string | null;
 }
+
+const defaultStats: WorldStats = {
+  total_agents: 0,
+  active_agents: 0,
+  total_trades: 0,
+  total_territories: 0,
+  total_resources: { gold: 0, wood: 0, food: 0, stone: 0 },
+  mining_activity_last_hour: 0,
+  top_gatherer: null,
+};
 
 export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsReturn {
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [agents, setAgents] = useState<AgentLeaderboard[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [topGatherers, setTopGatherers] = useState<TopGathererEntry[]>([]);
   const [recentlyJoined, setRecentlyJoined] = useState<RecentlyJoinedEntry[]>([]);
-  const [stats, setStats] = useState({
-    total_agents: 0,
-    active_agents: 0,
-    total_trades: 0,
-    total_territories: 0,
-  });
+  const [stats, setStats] = useState<WorldStats>(defaultStats);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,8 +87,9 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
         setEvents(data.data.events || []);
         setAgents(data.data.agents || []);
         setLeaderboard(data.data.leaderboard || []);
+        setTopGatherers(data.data.topGatherers || []);
         setRecentlyJoined(data.data.recentlyJoined || []);
-        setStats(data.data.stats || { total_agents: 0, active_agents: 0, total_trades: 0, total_territories: 0 });
+        setStats(data.data.stats || defaultStats);
         setError(null);
       } else {
         setError(data.error || 'Failed to fetch initial data');
@@ -120,6 +150,14 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
               total_trades: prev.total_trades + 1,
             }));
           }
+
+          // Update mining activity for gather events
+          if (newEvent.type === 'gather') {
+            setStats((prev) => ({
+              ...prev,
+              mining_activity_last_hour: prev.mining_activity_last_hour + 1,
+            }));
+          }
         }
       )
       .subscribe((status) => {
@@ -163,5 +201,5 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
     };
   }, [fetchInitialData, maxEvents]);
 
-  return { events, agents, leaderboard, recentlyJoined, stats, isConnected, error };
+  return { events, agents, leaderboard, topGatherers, recentlyJoined, stats, isConnected, error };
 }
