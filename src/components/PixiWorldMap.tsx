@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Application, Container, Sprite, Texture, Graphics, Text, TextStyle } from 'pixi.js';
+import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { AgentPublic, Tile, WORLD_SIZE } from '@/lib/types';
-import { TILE_SIZE, SCALE, VIEWPORT, PALETTE, getTileIndex } from '@/lib/tileset';
+import { TILE_SIZE, SCALE, VIEWPORT, PALETTE } from '@/lib/tileset';
 
 interface PixiWorldMapProps {
   agents: AgentPublic[];
@@ -13,179 +13,32 @@ interface PixiWorldMapProps {
   onCenterChange?: (x: number, y: number) => void;
 }
 
-// Generate a simple colored tile texture
-function createTileTexture(app: Application, color: string, variant: number = 0): Texture {
-  const graphics = new Graphics();
-  
-  // Base color
-  graphics.rect(0, 0, TILE_SIZE, TILE_SIZE);
-  graphics.fill(color);
-  
-  // Add some pixel variation for visual interest
-  if (variant > 0) {
-    const darkerColor = adjustColor(color, -20);
-    for (let i = 0; i < variant * 2; i++) {
-      const px = Math.floor(Math.random() * TILE_SIZE);
-      const py = Math.floor(Math.random() * TILE_SIZE);
-      graphics.rect(px, py, 1, 1);
-      graphics.fill(darkerColor);
-    }
-  }
-  
-  return app.renderer.generateTexture(graphics);
+// Convert hex string to number
+function hexToNumber(hex: string): number {
+  return parseInt(hex.replace('#', ''), 16);
 }
 
-// Create a tree sprite texture
-function createTreeTexture(app: Application, depleted: boolean = false): Texture {
-  const graphics = new Graphics();
-  
-  if (depleted) {
-    // Stump
-    graphics.rect(6, 10, 4, 6);
-    graphics.fill(PALETTE.stump);
-    // Dead grass
-    graphics.rect(0, 14, TILE_SIZE, 2);
-    graphics.fill(PALETTE.grassDead);
-  } else {
-    // Tree trunk
-    graphics.rect(6, 8, 4, 8);
-    graphics.fill(PALETTE.treeTrunk);
-    // Tree leaves (triangular shape)
-    graphics.poly([8, 0, 2, 8, 14, 8]);
-    graphics.fill(PALETTE.treeLeaves);
-    graphics.poly([8, 2, 4, 7, 12, 7]);
-    graphics.fill(PALETTE.treeLeavesDark);
-  }
-  
-  return app.renderer.generateTexture(graphics);
-}
-
-// Create mountain/rock texture
-function createMountainTexture(app: Application, depleted: boolean = false): Texture {
-  const graphics = new Graphics();
-  
-  if (depleted) {
-    // Crumbled rocks
-    graphics.circle(4, 12, 3);
-    graphics.fill(PALETTE.rockCrumbled);
-    graphics.circle(10, 10, 4);
-    graphics.fill(PALETTE.rock2);
-    graphics.circle(12, 14, 2);
-    graphics.fill(PALETTE.rockCrumbled);
-  } else {
-    // Mountain peak
-    graphics.poly([8, 0, 0, 16, 16, 16]);
-    graphics.fill(PALETTE.rock1);
-    graphics.poly([8, 0, 4, 10, 12, 10]);
-    graphics.fill(PALETTE.rockLight);
-    // Snow cap
-    graphics.poly([8, 0, 6, 4, 10, 4]);
-    graphics.fill('#ffffff');
-  }
-  
-  return app.renderer.generateTexture(graphics);
-}
-
-// Create water texture
-function createWaterTexture(app: Application, frame: number = 0, depleted: boolean = false): Texture {
-  const graphics = new Graphics();
-  
-  if (depleted) {
-    // Dried riverbed
-    graphics.rect(0, 0, TILE_SIZE, TILE_SIZE);
-    graphics.fill(PALETTE.waterDried);
-    // Cracks
-    graphics.moveTo(2, 2);
-    graphics.lineTo(6, 8);
-    graphics.lineTo(4, 14);
-    graphics.stroke({ width: 1, color: '#a08060' });
-    graphics.moveTo(10, 4);
-    graphics.lineTo(12, 10);
-    graphics.stroke({ width: 1, color: '#a08060' });
-  } else {
-    // Animated water
-    graphics.rect(0, 0, TILE_SIZE, TILE_SIZE);
-    graphics.fill(PALETTE.water1);
-    // Wave highlights (animated by frame)
-    const offset = frame * 2;
-    for (let i = 0; i < 3; i++) {
-      const y = ((i * 5 + offset) % TILE_SIZE);
-      graphics.rect(2 + i * 3, y, 4, 1);
-      graphics.fill(PALETTE.waterShallow);
-    }
-  }
-  
-  return app.renderer.generateTexture(graphics);
-}
-
-// Create market building texture
-function createMarketTexture(app: Application): Texture {
-  const graphics = new Graphics();
-  
-  // Floor
-  graphics.rect(0, 0, TILE_SIZE, TILE_SIZE);
-  graphics.fill(PALETTE.grass1);
-  
-  // Building base
-  graphics.rect(2, 4, 12, 12);
-  graphics.fill(PALETTE.marketWall);
-  
-  // Roof
-  graphics.poly([8, 0, 1, 5, 15, 5]);
-  graphics.fill(PALETTE.marketRoof);
-  
-  // Door
-  graphics.rect(6, 10, 4, 6);
-  graphics.fill(PALETTE.marketDoor);
-  
-  // Sign
-  graphics.rect(4, 6, 8, 3);
-  graphics.fill('#ffd700');
-  
-  return app.renderer.generateTexture(graphics);
-}
-
-// Create agent sprite texture
-function createAgentTexture(app: Application): Texture {
-  const graphics = new Graphics();
-  
-  // Shadow
-  graphics.ellipse(8, 14, 5, 2);
-  graphics.fill({ color: 0x000000, alpha: 0.3 });
-  
-  // Body
-  graphics.circle(8, 8, 5);
-  graphics.fill(PALETTE.agentBody);
-  graphics.stroke({ width: 1, color: PALETTE.agentOutline });
-  
-  // Eyes
-  graphics.circle(6, 7, 1);
-  graphics.fill('#ffffff');
-  graphics.circle(10, 7, 1);
-  graphics.fill('#ffffff');
-  graphics.circle(6, 7, 0.5);
-  graphics.fill('#000000');
-  graphics.circle(10, 7, 0.5);
-  graphics.fill('#000000');
-  
-  // Antenna/claw
-  graphics.moveTo(5, 3);
-  graphics.lineTo(3, 0);
-  graphics.moveTo(11, 3);
-  graphics.lineTo(13, 0);
-  graphics.stroke({ width: 1, color: PALETTE.agentBody });
-  
-  return app.renderer.generateTexture(graphics);
-}
-
-// Adjust color brightness
-function adjustColor(hex: string, amount: number): string {
-  const num = parseInt(hex.replace('#', ''), 16);
-  const r = Math.max(0, Math.min(255, (num >> 16) + amount));
-  const g = Math.max(0, Math.min(255, ((num >> 8) & 0x00ff) + amount));
-  const b = Math.max(0, Math.min(255, (num & 0x0000ff) + amount));
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
-}
+// Terrain colors as numbers
+const COLORS = {
+  grass: [0x7ec850, 0x6db840, 0x5ea830, 0x4e9820],
+  grassDead: [0xb8a060, 0xa89050, 0x988040, 0x887030],
+  forest: 0x228b22,
+  forestDark: 0x1a6b1a,
+  trunk: 0x8b5a2b,
+  stump: 0x6b4423,
+  rock: [0x808080, 0x707070, 0x606060, 0x505050],
+  rockLight: 0xa0a0a0,
+  snow: 0xffffff,
+  water: [0x4a90d9, 0x3a80c9, 0x4a90d9, 0x5aa0e9],
+  waterDried: 0xc4a882,
+  market: 0xcc6633,
+  marketWall: 0xf5deb3,
+  marketDoor: 0x8b4513,
+  agent: 0xff6b6b,
+  agentOutline: 0x333333,
+  territory: 0xffd700,
+  background: 0x1a1a2e,
+};
 
 export function PixiWorldMap({
   agents,
@@ -197,11 +50,11 @@ export function PixiWorldMap({
   const appRef = useRef<Application | null>(null);
   const tilesContainerRef = useRef<Container | null>(null);
   const agentsContainerRef = useRef<Container | null>(null);
-  const texturesRef = useRef<Map<string, Texture>>(new Map());
   
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const dragStartRef = useRef<{ x: number; y: number; centerX: number; centerY: number } | null>(null);
 
   // Fetch tiles from API
@@ -228,7 +81,7 @@ export function PixiWorldMap({
 
   // Initialize PixiJS
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || isInitialized) return;
 
     let app: Application;
     let destroyed = false;
@@ -239,9 +92,10 @@ export function PixiWorldMap({
       await app.init({
         width: VIEWPORT.pixelWidth,
         height: VIEWPORT.pixelHeight,
-        backgroundColor: 0x1a1a2e,
+        backgroundColor: COLORS.background,
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,
+        antialias: false,
       });
 
       if (destroyed) {
@@ -249,7 +103,12 @@ export function PixiWorldMap({
         return;
       }
 
-      containerRef.current?.appendChild(app.canvas);
+      // Clear container and add canvas
+      if (containerRef.current) {
+        containerRef.current.innerHTML = '';
+        containerRef.current.appendChild(app.canvas);
+      }
+      
       appRef.current = app;
 
       // Create containers
@@ -261,43 +120,8 @@ export function PixiWorldMap({
       
       tilesContainerRef.current = tilesContainer;
       agentsContainerRef.current = agentsContainer;
-
-      // Generate textures
-      const textures = new Map<string, Texture>();
       
-      // Grass variants
-      for (let i = 0; i < 4; i++) {
-        textures.set(`plains_${i}`, createTileTexture(app, PALETTE.grass1, i));
-        textures.set(`plains_depleted_${i}`, createTileTexture(app, PALETTE.grassDead, i));
-      }
-      
-      // Forest
-      textures.set('forest', createTreeTexture(app, false));
-      textures.set('forest_depleted', createTreeTexture(app, true));
-      
-      // Mountain
-      textures.set('mountain', createMountainTexture(app, false));
-      textures.set('mountain_depleted', createMountainTexture(app, true));
-      
-      // Water (multiple frames for animation)
-      for (let i = 0; i < 4; i++) {
-        textures.set(`water_${i}`, createWaterTexture(app, i, false));
-      }
-      textures.set('water_depleted', createWaterTexture(app, 0, true));
-      
-      // Market
-      textures.set('market', createMarketTexture(app));
-      
-      // Agent
-      textures.set('agent', createAgentTexture(app));
-      
-      texturesRef.current = textures;
-
-      // Water animation ticker
-      let waterFrame = 0;
-      app.ticker.add(() => {
-        waterFrame = (waterFrame + 0.05) % 4;
-      });
+      setIsInitialized(true);
     }
 
     initPixi();
@@ -307,19 +131,133 @@ export function PixiWorldMap({
       if (appRef.current) {
         appRef.current.destroy(true, { children: true });
         appRef.current = null;
+        tilesContainerRef.current = null;
+        agentsContainerRef.current = null;
+        setIsInitialized(false);
       }
     };
+  }, []);
+
+  // Draw a single tile
+  const drawTile = useCallback((
+    graphics: Graphics,
+    x: number,
+    y: number,
+    terrain: string,
+    depleted: boolean,
+    owned: boolean,
+    seed: number
+  ) => {
+    const px = x * TILE_SIZE * SCALE;
+    const py = y * TILE_SIZE * SCALE;
+    const size = TILE_SIZE * SCALE;
+    const variant = seed % 4;
+
+    // Draw base terrain
+    switch (terrain) {
+      case 'plains':
+        if (depleted) {
+          graphics.rect(px, py, size, size).fill(COLORS.grassDead[variant]);
+          // Cracks
+          graphics.moveTo(px + 4, py + 4).lineTo(px + 12, py + 20).stroke({ width: 1, color: 0x907040 });
+          graphics.moveTo(px + 20, py + 8).lineTo(px + 16, py + 24).stroke({ width: 1, color: 0x907040 });
+        } else {
+          graphics.rect(px, py, size, size).fill(COLORS.grass[variant]);
+          // Grass details
+          if (variant === 0) {
+            graphics.rect(px + 8, py + 12, 2, 4).fill(0x5ea030);
+            graphics.rect(px + 20, py + 8, 2, 4).fill(0x5ea030);
+          }
+        }
+        break;
+
+      case 'forest':
+        // Ground
+        graphics.rect(px, py, size, size).fill(depleted ? COLORS.grassDead[0] : COLORS.grass[1]);
+        
+        if (depleted) {
+          // Stump
+          graphics.rect(px + 10, py + 18, 12, 10).fill(COLORS.stump);
+          graphics.rect(px + 8, py + 16, 16, 4).fill(COLORS.trunk);
+        } else {
+          // Tree trunk
+          graphics.rect(px + 12, py + 16, 8, 14).fill(COLORS.trunk);
+          // Tree canopy (layered circles for fullness)
+          graphics.circle(px + 16, py + 12, 10).fill(COLORS.forest);
+          graphics.circle(px + 12, py + 10, 7).fill(COLORS.forestDark);
+          graphics.circle(px + 20, py + 10, 7).fill(COLORS.forestDark);
+          graphics.circle(px + 16, py + 6, 6).fill(COLORS.forest);
+        }
+        break;
+
+      case 'mountain':
+        // Base
+        graphics.rect(px, py, size, size).fill(depleted ? COLORS.grassDead[0] : COLORS.grass[2]);
+        
+        if (depleted) {
+          // Crumbled rocks
+          graphics.circle(px + 8, py + 22, 6).fill(COLORS.rock[2]);
+          graphics.circle(px + 20, py + 18, 8).fill(COLORS.rock[1]);
+          graphics.circle(px + 26, py + 24, 5).fill(COLORS.rock[3]);
+        } else {
+          // Mountain triangle
+          graphics.poly([px + 16, py + 2, px + 2, py + 30, px + 30, py + 30]).fill(COLORS.rock[variant]);
+          // Highlight
+          graphics.poly([px + 16, py + 2, px + 10, py + 16, px + 22, py + 16]).fill(COLORS.rockLight);
+          // Snow cap
+          graphics.poly([px + 16, py + 2, px + 13, py + 8, px + 19, py + 8]).fill(COLORS.snow);
+        }
+        break;
+
+      case 'water':
+        if (depleted) {
+          graphics.rect(px, py, size, size).fill(COLORS.waterDried);
+          // Dried cracks
+          graphics.moveTo(px + 6, py + 6).lineTo(px + 14, py + 18).stroke({ width: 2, color: 0xa08060 });
+          graphics.moveTo(px + 22, py + 10).lineTo(px + 18, py + 26).stroke({ width: 2, color: 0xa08060 });
+        } else {
+          graphics.rect(px, py, size, size).fill(COLORS.water[variant]);
+          // Wave highlights
+          graphics.rect(px + 4, py + 8, 8, 2).fill(0x6ab0e9);
+          graphics.rect(px + 16, py + 16, 10, 2).fill(0x6ab0e9);
+          graphics.rect(px + 8, py + 24, 6, 2).fill(0x6ab0e9);
+        }
+        break;
+
+      case 'market':
+        // Ground
+        graphics.rect(px, py, size, size).fill(COLORS.grass[0]);
+        // Building
+        graphics.rect(px + 4, py + 10, 24, 20).fill(COLORS.marketWall);
+        // Roof
+        graphics.poly([px + 16, py + 2, px + 2, py + 12, px + 30, py + 12]).fill(COLORS.market);
+        // Door
+        graphics.rect(px + 12, py + 20, 8, 10).fill(COLORS.marketDoor);
+        // Sign
+        graphics.rect(px + 8, py + 14, 16, 4).fill(0xffd700);
+        break;
+
+      default:
+        graphics.rect(px, py, size, size).fill(COLORS.background);
+    }
+
+    // Territory border
+    if (owned) {
+      graphics.rect(px + 1, py + 1, size - 2, size - 2).stroke({ width: 2, color: COLORS.territory });
+    }
   }, []);
 
   // Render tiles
   useEffect(() => {
     const tilesContainer = tilesContainerRef.current;
-    const textures = texturesRef.current;
     
-    if (!tilesContainer || textures.size === 0) return;
+    if (!tilesContainer || !isInitialized) return;
 
     // Clear existing tiles
     tilesContainer.removeChildren();
+
+    // Create a single graphics object for all tiles (better performance)
+    const graphics = new Graphics();
 
     // Create tile map for quick lookup
     const tileMap = new Map<string, Tile>();
@@ -341,64 +279,38 @@ export function PixiWorldMap({
         const key = `${worldX},${worldY}`;
         const tile = tileMap.get(key);
 
-        // Get appropriate texture
-        let texture: Texture | undefined;
-        const variant = (worldX * 7 + worldY * 13) % 4; // Deterministic variation
+        const seed = (worldX * 7 + worldY * 13) % 100;
         
         if (tile) {
-          const depleted = tile.depleted || false;
-          
-          switch (tile.terrain) {
-            case 'plains':
-              texture = textures.get(`plains_${depleted ? 'depleted_' : ''}${variant}`);
-              break;
-            case 'forest':
-              texture = textures.get(depleted ? 'forest_depleted' : 'forest');
-              break;
-            case 'mountain':
-              texture = textures.get(depleted ? 'mountain_depleted' : 'mountain');
-              break;
-            case 'water':
-              texture = textures.get(depleted ? 'water_depleted' : `water_${variant}`);
-              break;
-            case 'market':
-              texture = textures.get('market');
-              break;
-          }
-
-          // Add territory border if owned
-          if (tile.owner_id) {
-            const border = new Graphics();
-            border.rect(dx * TILE_SIZE * SCALE, dy * TILE_SIZE * SCALE, TILE_SIZE * SCALE, TILE_SIZE * SCALE);
-            border.stroke({ width: 2, color: 0xffd700 });
-            border.fill({ color: 0xffd700, alpha: 0.15 });
-            tilesContainer.addChild(border);
-          }
-        }
-
-        if (texture) {
-          const sprite = new Sprite(texture);
-          sprite.x = dx * TILE_SIZE * SCALE;
-          sprite.y = dy * TILE_SIZE * SCALE;
-          sprite.scale.set(SCALE);
-          tilesContainer.addChild(sprite);
+          drawTile(
+            graphics,
+            dx,
+            dy,
+            tile.terrain,
+            tile.depleted || false,
+            !!tile.owner_id,
+            seed
+          );
         } else {
-          // Fallback: dark tile for unknown/out of bounds
-          const graphics = new Graphics();
-          graphics.rect(dx * TILE_SIZE * SCALE, dy * TILE_SIZE * SCALE, TILE_SIZE * SCALE, TILE_SIZE * SCALE);
-          graphics.fill(0x1a1a2e);
-          tilesContainer.addChild(graphics);
+          // Out of bounds or unknown tile
+          graphics.rect(
+            dx * TILE_SIZE * SCALE,
+            dy * TILE_SIZE * SCALE,
+            TILE_SIZE * SCALE,
+            TILE_SIZE * SCALE
+          ).fill(COLORS.background);
         }
       }
     }
-  }, [tiles, centerX, centerY]);
+
+    tilesContainer.addChild(graphics);
+  }, [tiles, centerX, centerY, isInitialized, drawTile]);
 
   // Render agents
   useEffect(() => {
     const agentsContainer = agentsContainerRef.current;
-    const textures = texturesRef.current;
     
-    if (!agentsContainer || textures.size === 0) return;
+    if (!agentsContainer || !isInitialized) return;
 
     // Clear existing agents
     agentsContainer.removeChildren();
@@ -415,30 +327,44 @@ export function PixiWorldMap({
 
       // Check if agent is in view
       if (screenX >= 0 && screenX < VIEWPORT.tilesWide && screenY >= 0 && screenY < VIEWPORT.tilesHigh) {
-        const agentTexture = textures.get('agent');
-        if (agentTexture) {
-          const sprite = new Sprite(agentTexture);
-          sprite.x = screenX * TILE_SIZE * SCALE;
-          sprite.y = screenY * TILE_SIZE * SCALE;
-          sprite.scale.set(SCALE);
-          agentsContainer.addChild(sprite);
+        const graphics = new Graphics();
+        const px = screenX * TILE_SIZE * SCALE;
+        const py = screenY * TILE_SIZE * SCALE;
 
-          // Name label
-          const style = new TextStyle({
-            fontFamily: 'JetBrains Mono, monospace',
-            fontSize: 10,
-            fill: '#ffffff',
-            stroke: { color: '#000000', width: 2 },
-          });
-          const nameText = new Text({ text: agent.name, style });
-          nameText.x = screenX * TILE_SIZE * SCALE + (TILE_SIZE * SCALE) / 2;
-          nameText.y = screenY * TILE_SIZE * SCALE - 12;
-          nameText.anchor.set(0.5, 1);
-          agentsContainer.addChild(nameText);
-        }
+        // Shadow
+        graphics.ellipse(px + 16, py + 28, 10, 4).fill({ color: 0x000000, alpha: 0.3 });
+        
+        // Body
+        graphics.circle(px + 16, py + 16, 10).fill(COLORS.agent);
+        graphics.circle(px + 16, py + 16, 10).stroke({ width: 2, color: COLORS.agentOutline });
+        
+        // Eyes
+        graphics.circle(px + 12, py + 14, 2).fill(0xffffff);
+        graphics.circle(px + 20, py + 14, 2).fill(0xffffff);
+        graphics.circle(px + 12, py + 14, 1).fill(0x000000);
+        graphics.circle(px + 20, py + 14, 1).fill(0x000000);
+        
+        // Antennae (claw-like)
+        graphics.moveTo(px + 10, py + 6).lineTo(px + 6, py + 0).stroke({ width: 2, color: COLORS.agent });
+        graphics.moveTo(px + 22, py + 6).lineTo(px + 26, py + 0).stroke({ width: 2, color: COLORS.agent });
+
+        agentsContainer.addChild(graphics);
+
+        // Name label
+        const style = new TextStyle({
+          fontFamily: 'JetBrains Mono, monospace',
+          fontSize: 10,
+          fill: 0xffffff,
+          stroke: { color: 0x000000, width: 3 },
+        });
+        const nameText = new Text({ text: agent.name, style });
+        nameText.x = px + 16;
+        nameText.y = py - 8;
+        nameText.anchor.set(0.5, 1);
+        agentsContainer.addChild(nameText);
       }
     });
-  }, [agents, centerX, centerY]);
+  }, [agents, centerX, centerY, isInitialized]);
 
   // Mouse drag handling
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -470,7 +396,7 @@ export function PixiWorldMap({
 
   if (loading && tiles.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-[var(--muted)]">
+      <div className="flex items-center justify-center h-[480px] text-[var(--muted)]">
         Loading world...
       </div>
     );
@@ -500,25 +426,25 @@ export function PixiWorldMap({
       {/* Legend */}
       <div className="mt-3 flex flex-wrap gap-3 text-[10px] text-[var(--muted)]">
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded" style={{ backgroundColor: PALETTE.grass1 }} /> Plains
+          <span className="w-3 h-3 rounded" style={{ backgroundColor: '#7ec850' }} /> Plains
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded" style={{ backgroundColor: PALETTE.treeLeaves }} /> Forest
+          <span className="w-3 h-3 rounded" style={{ backgroundColor: '#228b22' }} /> Forest
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded" style={{ backgroundColor: PALETTE.rock1 }} /> Mountain
+          <span className="w-3 h-3 rounded" style={{ backgroundColor: '#808080' }} /> Mountain
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded" style={{ backgroundColor: PALETTE.marketRoof }} /> Market
+          <span className="w-3 h-3 rounded" style={{ backgroundColor: '#cc6633' }} /> Market
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded" style={{ backgroundColor: PALETTE.water1 }} /> Water
+          <span className="w-3 h-3 rounded" style={{ backgroundColor: '#4a90d9' }} /> Water
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded" style={{ backgroundColor: PALETTE.agentBody }} /> Agent
+          <span className="w-3 h-3 rounded" style={{ backgroundColor: '#ff6b6b' }} /> Agent
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded border-2" style={{ borderColor: PALETTE.territoryBorder, backgroundColor: 'transparent' }} /> Territory
+          <span className="w-3 h-3 rounded border-2" style={{ borderColor: '#ffd700', backgroundColor: 'transparent' }} /> Territory
         </span>
       </div>
     </div>
