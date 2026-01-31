@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { hasEnoughResources, areAgentsNearby } from '@/lib/game-logic';
+import { hasEnoughResources, areAgentsNearby, checkCooldown } from '@/lib/game-logic';
+import { TRADE_COOLDOWN_MS } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (action === 'reject') {
+        // Reject does NOT have cooldown - allows quick cleanup of spam offers
         await supabase
           .from('trades')
           .update({ status: 'rejected' })
@@ -49,6 +51,16 @@ export async function POST(request: NextRequest) {
           success: true,
           data: { message: 'Trade rejected' },
         });
+      }
+
+      // Check trade cooldown for accept action
+      const acceptCooldown = checkCooldown(agent.last_trade_at, TRADE_COOLDOWN_MS);
+      if (!acceptCooldown.allowed) {
+        const waitSeconds = Math.ceil(acceptCooldown.remainingMs / 1000);
+        return errorResponse(
+          `Trade cooldown active. Wait ${waitSeconds}s before accepting another trade.`,
+          429
+        );
       }
 
       // Accept trade - verify both parties have resources
@@ -94,7 +106,7 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', fromAgent.id);
 
-      // Deduct from acceptor, add to acceptor
+      // Deduct from acceptor, add to acceptor, and update cooldown timestamp
       await supabase
         .from('agents')
         .update({
@@ -102,6 +114,7 @@ export async function POST(request: NextRequest) {
           wood: agent.wood - (trade.request.wood || 0) + (trade.offer.wood || 0),
           food: agent.food - (trade.request.food || 0) + (trade.offer.food || 0),
           stone: agent.stone - (trade.request.stone || 0) + (trade.offer.stone || 0),
+          last_trade_at: new Date().toISOString(),
         })
         .eq('id', agent.id);
 
@@ -146,6 +159,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Create a new trade offer
+    // Check trade cooldown for creating offers
+    const createCooldown = checkCooldown(agent.last_trade_at, TRADE_COOLDOWN_MS);
+    if (!createCooldown.allowed) {
+      const waitSeconds = Math.ceil(createCooldown.remainingMs / 1000);
+      return errorResponse(
+        `Trade cooldown active. Wait ${waitSeconds}s before creating another trade offer.`,
+        429
+      );
+    }
+
     if (!target || !offer || !tradeRequest) {
       return errorResponse('target, offer, and request are required to propose a trade');
     }
@@ -208,6 +231,12 @@ export async function POST(request: NextRequest) {
       console.error('Error creating trade:', tradeError);
       return errorResponse('Failed to create trade', 500);
     }
+
+    // Update cooldown timestamp for trade creation
+    await supabase
+      .from('agents')
+      .update({ last_trade_at: new Date().toISOString() })
+      .eq('id', agent.id);
 
     return jsonResponse({
       success: true,

@@ -3,7 +3,10 @@ import {
   TerrainType, 
   ResourceType,
   WORLD_SIZE, 
-  TERRAIN_RESOURCES 
+  TERRAIN_RESOURCES,
+  MOVE_COOLDOWN_MS,
+  GATHER_COOLDOWN_MS,
+  TRADE_COOLDOWN_MS
 } from './types';
 import { randomBytes, createHash } from 'crypto';
 
@@ -241,4 +244,42 @@ export function getTerrainColorClass(terrain: TerrainType): string {
     water: 'terrain-water',
   };
   return colors[terrain];
+}
+
+// Cooldown check result
+export interface CooldownResult {
+  allowed: boolean;
+  remainingMs: number;
+}
+
+// Check if an action is allowed based on cooldown
+export function checkCooldown(
+  lastActionAt: string | null | undefined,
+  cooldownMs: number
+): CooldownResult {
+  if (!lastActionAt) {
+    return { allowed: true, remainingMs: 0 };
+  }
+  
+  const lastAction = new Date(lastActionAt).getTime();
+  const now = Date.now();
+  const elapsed = now - lastAction;
+  
+  if (elapsed >= cooldownMs) {
+    return { allowed: true, remainingMs: 0 };
+  }
+  
+  return { allowed: false, remainingMs: cooldownMs - elapsed };
+}
+
+// Get cooldown duration for a specific action type
+export function getCooldownMs(actionType: 'move' | 'gather' | 'trade'): number {
+  switch (actionType) {
+    case 'move':
+      return MOVE_COOLDOWN_MS;
+    case 'gather':
+      return GATHER_COOLDOWN_MS;
+    case 'trade':
+      return TRADE_COOLDOWN_MS;
+  }
 }

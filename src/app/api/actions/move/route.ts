@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { calculateNewPosition } from '@/lib/game-logic';
-import { Direction } from '@/lib/types';
+import { calculateNewPosition, checkCooldown } from '@/lib/game-logic';
+import { Direction, MOVE_COOLDOWN_MS } from '@/lib/types';
 
 const VALID_DIRECTIONS: Direction[] = ['north', 'south', 'east', 'west'];
 
@@ -28,6 +28,16 @@ export async function POST(request: NextRequest) {
     const agent = auth.agent;
     const supabase = createServerClient();
 
+    // Check move cooldown
+    const cooldown = checkCooldown(agent.last_move_at, MOVE_COOLDOWN_MS);
+    if (!cooldown.allowed) {
+      const waitSeconds = Math.ceil(cooldown.remainingMs / 1000);
+      return errorResponse(
+        `Move cooldown active. Wait ${waitSeconds}s before moving again.`,
+        429
+      );
+    }
+
     // Calculate new position
     const newPos = calculateNewPosition(agent.x, agent.y, direction as Direction);
 
@@ -43,10 +53,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Update agent position
+    // Update agent position and cooldown timestamp
     const { error: updateError } = await supabase
       .from('agents')
-      .update({ x: newPos.x, y: newPos.y })
+      .update({ 
+        x: newPos.x, 
+        y: newPos.y,
+        last_move_at: new Date().toISOString()
+      })
       .eq('id', agent.id);
 
     if (updateError) {
