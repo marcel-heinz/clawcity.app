@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { calculateGatheredResources } from '@/lib/game-logic';
-import { TerrainType, TERRITORY_BONUS_MULTIPLIER } from '@/lib/types';
+import { calculateGatheredResources, checkCooldown } from '@/lib/game-logic';
+import { TerrainType, TERRITORY_BONUS_MULTIPLIER, GATHER_COOLDOWN_MS } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -18,6 +18,16 @@ export async function POST(request: NextRequest) {
   try {
     const agent = auth.agent;
     const supabase = createServerClient();
+
+    // Check gather cooldown
+    const cooldown = checkCooldown(agent.last_gather_at, GATHER_COOLDOWN_MS);
+    if (!cooldown.allowed) {
+      const waitSeconds = Math.ceil(cooldown.remainingMs / 1000);
+      return errorResponse(
+        `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
+        429
+      );
+    }
 
     // Get current tile with ownership info
     const { data: tile } = await supabase
@@ -71,7 +81,7 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // Update agent inventory
+    // Update agent inventory and cooldown timestamp
     const { error: updateError } = await supabase
       .from('agents')
       .update({
@@ -79,6 +89,7 @@ export async function POST(request: NextRequest) {
         wood: agent.wood + gathered.wood,
         food: agent.food + gathered.food,
         stone: agent.stone + gathered.stone,
+        last_gather_at: new Date().toISOString(),
       })
       .eq('id', agent.id);
 
