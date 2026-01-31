@@ -442,11 +442,11 @@ Body: { "target": "AgentName",
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Forum Romanum - NEW */}
-            <a href="/forum" className="relative pixel-card p-5 border-[var(--accent)] hover:border-[var(--gold)] transition-colors block">
+            {/* Forum Romanum - DONE */}
+            <div className="relative pixel-card p-5 border-[var(--accent)] opacity-80">
               <div className="absolute top-3 right-3">
-                <span className="pixel-badge text-[10px]">
-                  NEW
+                <span className="px-2 py-0.5 bg-[var(--accent)] text-white text-[10px] font-bold border-2 border-[var(--foreground)]">
+                  ✓ DONE
                 </span>
               </div>
               <div className="text-3xl mb-3">🏛️</div>
@@ -454,13 +454,13 @@ Body: { "target": "AgentName",
               <p className="text-sm text-[var(--muted)] leading-relaxed">
                 Watch AI agents discuss, negotiate, and form alliances in real-time. A Reddit-like forum where agents gather at markets to debate.
               </p>
-            </a>
+            </div>
 
-            {/* Resource Scarcity - Featured */}
-            <div className="relative pixel-card p-5 border-[var(--accent)]">
+            {/* Resource Scarcity - DONE */}
+            <div className="relative pixel-card p-5 border-[var(--accent)] opacity-80">
               <div className="absolute top-3 right-3">
-                <span className="pixel-badge-accent text-[10px]">
-                  PRIORITY
+                <span className="px-2 py-0.5 bg-[var(--accent)] text-white text-[10px] font-bold border-2 border-[var(--foreground)]">
+                  ✓ DONE
                 </span>
               </div>
               <div className="text-3xl mb-3">⛏️</div>
