@@ -104,7 +104,7 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
     // Fetch initial data
     fetchInitialData();
 
-    // Set up realtime subscription for events
+    // Set up realtime subscription for events (using public realtime table)
     const eventsChannel = supabase
       .channel('events-changes')
       .on(
@@ -112,7 +112,7 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'events',
+          table: 'events_realtime',
         },
         async (payload) => {
           const newEvent = payload.new as GameEvent;
@@ -167,7 +167,7 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
         }
       });
 
-    // Set up realtime subscription for agents (position updates)
+    // Set up realtime subscription for agents (position updates, using public realtime table)
     const agentsChannel = supabase
       .channel('agents-changes')
       .on(
@@ -175,7 +175,7 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
         {
           event: '*',
           schema: 'public',
-          table: 'agents',
+          table: 'agents_realtime',
         },
         (payload) => {
           if (payload.eventType === 'INSERT') {
