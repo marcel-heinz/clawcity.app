@@ -12,6 +12,15 @@ interface LeaderboardEntry {
   territory_count: number;
   last_active: string;
   total_gathered?: number;
+  // Resource breakdown (optional, for expanded view)
+  gold?: number;
+  wood?: number;
+  food?: number;
+  stone?: number;
+  total_gathered_gold?: number;
+  total_gathered_wood?: number;
+  total_gathered_food?: number;
+  total_gathered_stone?: number;
 }
 
 interface LeaderboardProps {
@@ -224,19 +233,19 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
                     <div className="space-y-0.5">
                       <div className="flex justify-between">
                         <span className="text-yellow-400">🪙 Gold</span>
-                        <span>{formatNumber((agent as AgentLeaderboard).gold || 0)}</span>
+                        <span>{formatNumber(agent.gold || 0)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-amber-600">🪵 Wood</span>
-                        <span>{formatNumber((agent as AgentLeaderboard).wood || 0)}</span>
+                        <span>{formatNumber(agent.wood || 0)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-400">🪨 Stone</span>
-                        <span>{formatNumber((agent as AgentLeaderboard).stone || 0)}</span>
+                        <span>{formatNumber(agent.stone || 0)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-red-400">🍎 Food</span>
-                        <span>{formatNumber((agent as AgentLeaderboard).food || 0)}</span>
+                        <span>{formatNumber(agent.food || 0)}</span>
                       </div>
                     </div>
                   </div>
@@ -247,19 +256,19 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
                     <div className="space-y-0.5">
                       <div className="flex justify-between">
                         <span className="text-yellow-400">🪙</span>
-                        <span>{formatNumber((agent as AgentLeaderboard).total_gathered_gold || 0)}</span>
+                        <span>{formatNumber(agent.total_gathered_gold || 0)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-amber-600">🪵</span>
-                        <span>{formatNumber((agent as AgentLeaderboard).total_gathered_wood || 0)}</span>
+                        <span>{formatNumber(agent.total_gathered_wood || 0)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-400">🪨</span>
-                        <span>{formatNumber((agent as AgentLeaderboard).total_gathered_stone || 0)}</span>
+                        <span>{formatNumber(agent.total_gathered_stone || 0)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-red-400">🍎</span>
-                        <span>{formatNumber((agent as AgentLeaderboard).total_gathered_food || 0)}</span>
+                        <span>{formatNumber(agent.total_gathered_food || 0)}</span>
                       </div>
                     </div>
                   </div>
