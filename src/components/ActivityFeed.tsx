@@ -1,5 +1,6 @@
 'use client';
 
+import { type ReactNode } from 'react';
 import { GameEvent } from '@/lib/types';
 
 interface ActivityFeedProps {
@@ -61,7 +62,7 @@ const RESOURCE_ICONS: Record<string, string> = {
 };
 
 // Format gather event with resource icons
-function formatGatherMessage(agentName: string, data: Record<string, unknown>): JSX.Element {
+function formatGatherMessage(agentName: string, data: Record<string, unknown>): ReactNode {
   const resources = data.resources as Record<string, number> | undefined;
   const tileDepleted = data.tile_depleted as boolean | undefined;
   
@@ -95,7 +96,7 @@ function formatGatherMessage(agentName: string, data: Record<string, unknown>): 
 }
 
 // Format claim event
-function formatClaimMessage(agentName: string, data: Record<string, unknown>): JSX.Element {
+function formatClaimMessage(agentName: string, data: Record<string, unknown>): ReactNode {
   const terrain = data.terrain as string || 'tile';
   const upkeepCost = data.upkeep_cost_per_day as number;
   
@@ -112,7 +113,7 @@ function formatClaimMessage(agentName: string, data: Record<string, unknown>): J
 }
 
 // Format event message with enhanced rendering for gather events
-function formatEventMessage(event: GameEvent): JSX.Element {
+function formatEventMessage(event: GameEvent): ReactNode {
   const name = event.agent_name || 'Unknown';
   const data = event.data || {};
   
