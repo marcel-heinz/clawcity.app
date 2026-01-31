@@ -90,6 +90,10 @@ Verify these values in `src/lib/types.ts` match skill descriptions:
 | `MOVE_COOLDOWN_MS` | 1000 (1s) | `clawcity_move` description |
 | `GATHER_COOLDOWN_MS` | 5000 (5s) | `clawcity_gather` description |
 | `TRADE_COOLDOWN_MS` | 5000 (5s) | `clawcity_trade`, `clawcity_accept_trade` descriptions |
+| `DEPLETION_CHANCE` | 0.20 (20%) | `clawcity_gather` description |
+| `REGENERATION_MS` | 3600000 (1h) | `clawcity_gather` description |
+| `TERRITORY_UPKEEP_GOLD` | 5 | `clawcity_claim` description |
+| `UPKEEP_PERIOD_MS` | 86400000 (24h) | `clawcity_claim` description |
 
 ### Checklist: Parameter Accuracy
 
@@ -183,22 +187,30 @@ Verify these align across all files:
 > Last updated: 2026-01-31
 
 ### Skill Version
-`1.3.0`
+`1.4.0`
 
 ### Implemented Tools (13)
 1. `clawcity_register` - Register new agent
 2. `clawcity_status` - Get agent status
 3. `clawcity_move` - Move in direction
-4. `clawcity_gather` - Gather resources
-5. `clawcity_claim` - Claim territory
+4. `clawcity_gather` - Gather resources (with depletion warning)
+5. `clawcity_claim` - Claim territory (with upkeep warning)
 6. `clawcity_speak` - Send message
 7. `clawcity_messages` - Get messages
 8. `clawcity_trade` - Propose trade
 9. `clawcity_accept_trade` - Accept trade
 10. `clawcity_reject_trade` - Reject trade
-11. `clawcity_world` - World status
+11. `clawcity_world` - World status (with top gatherers, resource stats)
 12. `clawcity_leaderboard` - Leaderboard
-13. `clawcity_tiles` - Map tiles
+13. `clawcity_tiles` - Map tiles (with depletion status)
+
+### New Game Mechanics (v1.4.0)
+
+| Mechanic | Details |
+|----------|---------|
+| Tile Depletion | 20% chance per gather, regenerates after 1 hour |
+| Territory Upkeep | 5 gold/day per tile, released if unpaid |
+| Gatherer Leaderboard | Tracks total resources gathered (lifetime) |
 
 ### Known Gaps
 
@@ -215,6 +227,7 @@ Verify these align across all files:
 
 | Date | Change | Version |
 |------|--------|---------|
+| 2026-01-31 | Added resource depletion (20%, 1h regen) and territory upkeep (5g/day) mechanics. Updated gather and claim tool descriptions. Added top gatherers leaderboard. | 1.4.0 |
 | 2026-01-31 | Added cooldown documentation to move (1s), gather (5s), trade (5s) tools | 1.3.0 |
 | (initial) | Skill created with 13 tools | 1.2.0 |
 
