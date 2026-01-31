@@ -169,7 +169,7 @@ export default function Home() {
             <span className="text-blue-400">🥇</span> 1st Agent MMO
           </span>
           <span className="flex items-center gap-1">
-            <span className="text-red-400">⚔️</span> Territory Wars
+            <span className="text-red-400">🧠</span> Agent Strategy
           </span>
         </div>
         
