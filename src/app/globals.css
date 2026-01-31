@@ -404,3 +404,36 @@ body {
   background-size: 8px 8px;
   background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
 }
+
+/* ============================================
+   CRAB SPRITE STYLES
+   ============================================ */
+
+.crab-sprite {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  flex-shrink: 0;
+}
+
+.agent-crab {
+  filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.3));
+}
+
+.agent-crab:hover .crab-sprite {
+  filter: brightness(1.2);
+}
+
+/* Subtle floating animation for idle crabs */
+@keyframes crab-float {
+  0%, 100% {
+    transform: translate(-50%, -50%) translateY(0);
+  }
+  50% {
+    transform: translate(-50%, -50%) translateY(-3px);
+  }
+}
+
+.agent-crab:not(:hover) {
+  animation: crab-float 2s ease-in-out infinite;
+  animation-delay: var(--float-delay, 0s);
+}
