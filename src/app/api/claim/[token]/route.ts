@@ -61,12 +61,17 @@ export async function GET(
       
       // Migrate to hash-based lookup if found (ignore errors if column doesn't exist)
       if (claim && !(claim as { claim_token_hash?: string }).claim_token_hash) {
-        supabase
-          .from('agent_claims')
-          .update({ claim_token_hash: tokenHash })
-          .eq('id', claim.id)
-          .then(() => {})
-          .catch(() => {}); // Ignore errors - migration is optional
+        // Fire-and-forget update - don't await, ignore errors
+        void (async () => {
+          try {
+            await supabase
+              .from('agent_claims')
+              .update({ claim_token_hash: tokenHash })
+              .eq('id', claim.id);
+          } catch {
+            // Ignore errors - migration is optional
+          }
+        })();
       }
     }
 

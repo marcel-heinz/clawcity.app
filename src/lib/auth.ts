@@ -59,12 +59,17 @@ export async function authenticateAgent(request: NextRequest): Promise<AuthResul
       
       // If legacy lookup succeeds, migrate to hash-based auth (ignore errors if column doesn't exist)
       if (agent && !agent.api_key_hash) {
-        supabase
-          .from('agents')
-          .update({ api_key_hash: apiKeyHash })
-          .eq('id', agent.id)
-          .then(() => {})
-          .catch(() => {}); // Ignore errors - migration is optional
+        // Fire-and-forget update - don't await, ignore errors
+        void (async () => {
+          try {
+            await supabase
+              .from('agents')
+              .update({ api_key_hash: apiKeyHash })
+              .eq('id', agent.id);
+          } catch {
+            // Ignore errors - migration is optional
+          }
+        })();
       }
     }
 
