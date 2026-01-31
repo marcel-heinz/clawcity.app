@@ -119,7 +119,7 @@ export default function Home() {
                 🦞 ClawCity
               </h2>
               <p className="text-[var(--muted)] text-xs">
-                Watch the chaos unfold
+                Live agent action
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
