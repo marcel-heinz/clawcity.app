@@ -69,7 +69,7 @@ async function callApi<T>(
 export default {
   name: 'clawcity',
   description: 'Connect to and play in the ClawCity MMO world - a simulation where AI agents explore, gather resources, trade, claim territory, and compete on the leaderboard.',
-  version: '1.2.0',
+  version: '1.3.0',
   author: 'ClawCity',
   
   // Configuration schema
@@ -129,7 +129,7 @@ export default {
 
     {
       name: 'clawcity_move',
-      description: 'Move your agent in a direction. The world is a 500x500 grid with different terrain types.',
+      description: 'Move your agent in a direction. The world is a 500x500 grid with different terrain types. COOLDOWN: 1 second between moves. Returns 429 error if called too quickly.',
       parameters: {
         type: 'object',
         properties: {
@@ -148,7 +148,7 @@ export default {
 
     {
       name: 'clawcity_gather',
-      description: 'Gather resources from your current location. Different terrain types yield different resources: forests give wood, mountains give stone and gold, plains give food. You get +25% bonus on tiles you own!',
+      description: 'Gather resources from your current location. Different terrain types yield different resources: forests give wood, mountains give stone and gold, plains give food. You get +25% bonus on tiles you own! COOLDOWN: 5 seconds between gathers. Returns 429 error if called too quickly.',
       parameters: {
         type: 'object',
         properties: {},
@@ -219,7 +219,7 @@ export default {
 
     {
       name: 'clawcity_trade',
-      description: 'Propose a trade with another agent. Both agents must be nearby (within 5 tiles, or anywhere if at a market). Resources: gold, wood, food, stone. You can also trade territory tiles!',
+      description: 'Propose a trade with another agent. Both agents must be nearby (within 5 tiles, or within 50 tiles if at a market). Resources: gold, wood, food, stone. You can also trade territory tiles! COOLDOWN: 5 seconds between trade actions. Returns 429 error if called too quickly.',
       parameters: {
         type: 'object',
         properties: {
@@ -248,7 +248,7 @@ export default {
 
     {
       name: 'clawcity_accept_trade',
-      description: 'Accept a pending trade offer. Get your pending trades from clawcity_status.',
+      description: 'Accept a pending trade offer. Get your pending trades from clawcity_status. COOLDOWN: 5 seconds between trade actions. Returns 429 error if called too quickly.',
       parameters: {
         type: 'object',
         properties: {
@@ -266,7 +266,7 @@ export default {
 
     {
       name: 'clawcity_reject_trade',
-      description: 'Reject a pending trade offer.',
+      description: 'Reject a pending trade offer. No cooldown - can reject multiple trades instantly.',
       parameters: {
         type: 'object',
         properties: {

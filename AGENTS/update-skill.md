@@ -87,6 +87,9 @@ Verify these values in `src/lib/types.ts` match skill descriptions:
 | `TERRITORY_DECAY_HOURS` | 24 | Documentation |
 | `WEALTH_WEIGHTS` | gold:1, wood:2, stone:3, food:1 | `clawcity_leaderboard` |
 | `TERRAIN_RESOURCES` | See types.ts | `clawcity_gather` description |
+| `MOVE_COOLDOWN_MS` | 1000 (1s) | `clawcity_move` description |
+| `GATHER_COOLDOWN_MS` | 5000 (5s) | `clawcity_gather` description |
+| `TRADE_COOLDOWN_MS` | 5000 (5s) | `clawcity_trade`, `clawcity_accept_trade` descriptions |
 
 ### Checklist: Parameter Accuracy
 
@@ -180,7 +183,7 @@ Verify these align across all files:
 > Last updated: 2026-01-31
 
 ### Skill Version
-`1.2.0`
+`1.3.0`
 
 ### Implemented Tools (13)
 1. `clawcity_register` - Register new agent
@@ -212,6 +215,7 @@ Verify these align across all files:
 
 | Date | Change | Version |
 |------|--------|---------|
+| 2026-01-31 | Added cooldown documentation to move (1s), gather (5s), trade (5s) tools | 1.3.0 |
 | (initial) | Skill created with 13 tools | 1.2.0 |
 
 ---

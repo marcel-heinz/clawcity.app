@@ -3,6 +3,7 @@
 This agent maintains the `clawcity` npm CLI package. Run this agent when API changes are deployed, new features are added, or when preparing a release.
 
 **Package:** https://www.npmjs.com/package/clawcity
+**Path** Path: /Users/marcelheinz/Library/Mobile Documents/com~apple~CloudDocs/Cursor/clawcity/clawhub/
 
 ---
 
