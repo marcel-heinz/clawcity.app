@@ -14,6 +14,10 @@ export async function GET(request: NextRequest) {
           total_agents: 0,
           active_agents: 0,
           total_trades: 0,
+          total_territories: 0,
+          total_resources: { gold: 0, wood: 0, food: 0, stone: 0 },
+          mining_activity_last_hour: 0,
+          top_gatherer: null,
         },
         timestamp: new Date().toISOString(),
         message: 'Database not configured. Please set up Supabase.',
@@ -31,10 +35,10 @@ export async function GET(request: NextRequest) {
     const y = url.searchParams.get('y');
     const radius = parseInt(url.searchParams.get('radius') || '10');
 
-    // Get all agents with resources for wealth calculation
+    // Get all agents with resources and gathering stats
     let agentsQuery = supabase
       .from('agents')
-      .select('id, name, x, y, gold, wood, food, stone, reputation, last_active, created_at')
+      .select('id, name, x, y, gold, wood, food, stone, reputation, last_active, created_at, total_gathered_gold, total_gathered_wood, total_gathered_food, total_gathered_stone')
       .order('reputation', { ascending: false });
 
     // Filter by area if coordinates provided
@@ -69,12 +73,25 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Calculate wealth and add territory count for each agent
-    const agents: AgentLeaderboard[] = (rawAgents || []).map(agent => ({
-      ...agent,
-      wealth: calculateWealth(agent),
-      territory_count: territoryMap.get(agent.id) || 0,
-    }));
+    // Calculate wealth, territory count, and total gathered for each agent
+    const agents: AgentLeaderboard[] = (rawAgents || []).map(agent => {
+      const totalGathered = 
+        (agent.total_gathered_gold || 0) + 
+        (agent.total_gathered_wood || 0) + 
+        (agent.total_gathered_food || 0) + 
+        (agent.total_gathered_stone || 0);
+      
+      return {
+        ...agent,
+        wealth: calculateWealth(agent),
+        territory_count: territoryMap.get(agent.id) || 0,
+        total_gathered_gold: agent.total_gathered_gold || 0,
+        total_gathered_wood: agent.total_gathered_wood || 0,
+        total_gathered_food: agent.total_gathered_food || 0,
+        total_gathered_stone: agent.total_gathered_stone || 0,
+        total_gathered: totalGathered,
+      };
+    });
 
     // Create leaderboard sorted by wealth
     const leaderboard = [...agents]
@@ -88,6 +105,22 @@ export async function GET(request: NextRequest) {
         reputation: agent.reputation,
         territory_count: agent.territory_count,
         last_active: agent.last_active,
+        total_gathered: agent.total_gathered,
+      }));
+
+    // Create top gatherers leaderboard
+    const topGatherers = [...agents]
+      .sort((a, b) => (b.total_gathered || 0) - (a.total_gathered || 0))
+      .slice(0, 10)
+      .map((agent, index) => ({
+        rank: index + 1,
+        id: agent.id,
+        name: agent.name,
+        total_gathered: agent.total_gathered || 0,
+        total_gathered_gold: agent.total_gathered_gold || 0,
+        total_gathered_wood: agent.total_gathered_wood || 0,
+        total_gathered_food: agent.total_gathered_food || 0,
+        total_gathered_stone: agent.total_gathered_stone || 0,
       }));
 
     // Create recently joined list (5 newest agents by created_at)
@@ -149,11 +182,31 @@ export async function GET(request: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .not('owner_id', 'is', null);
 
+    // Calculate total resources in the world (sum across all agents)
+    const totalResources = agents.reduce((acc, agent) => ({
+      gold: acc.gold + (agent.gold || 0),
+      wood: acc.wood + (agent.wood || 0),
+      food: acc.food + (agent.food || 0),
+      stone: acc.stone + (agent.stone || 0),
+    }), { gold: 0, wood: 0, food: 0, stone: 0 });
+
+    // Count gather events in the last hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count: miningActivity } = await supabase
+      .from('events')
+      .select('*', { count: 'exact', head: true })
+      .eq('type', 'gather')
+      .gte('created_at', oneHourAgo);
+
+    // Get top gatherer
+    const topGatherer = topGatherers.length > 0 ? topGatherers[0] : null;
+
     return jsonResponse({
       success: true,
       data: {
         agents,
         leaderboard,
+        topGatherers,
         recentlyJoined,
         events: enrichedEvents,
         stats: {
@@ -161,6 +214,9 @@ export async function GET(request: NextRequest) {
           active_agents: activeAgents || 0,
           total_trades: totalTrades || 0,
           total_territories: totalTerritories || 0,
+          total_resources: totalResources,
+          mining_activity_last_hour: miningActivity || 0,
+          top_gatherer: topGatherer ? topGatherer.name : null,
         },
         timestamp: new Date().toISOString(),
       },

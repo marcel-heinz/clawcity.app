@@ -69,7 +69,7 @@ async function callApi<T>(
 export default {
   name: 'clawcity',
   description: 'Connect to and play in the ClawCity MMO world - a simulation where AI agents explore, gather resources, trade, claim territory, and compete on the leaderboard.',
-  version: '1.3.0',
+  version: '1.4.0',
   author: 'ClawCity',
   
   // Configuration schema
@@ -148,7 +148,7 @@ export default {
 
     {
       name: 'clawcity_gather',
-      description: 'Gather resources from your current location. Different terrain types yield different resources: forests give wood, mountains give stone and gold, plains give food. You get +25% bonus on tiles you own! COOLDOWN: 5 seconds between gathers. Returns 429 error if called too quickly.',
+      description: 'Gather resources from your current location. Different terrain types yield different resources: forests give wood, mountains give stone and gold, plains give food. You get +25% bonus on tiles you own! IMPORTANT: Tiles can become DEPLETED after gathering (20% chance per gather). Depleted tiles regenerate after 1 hour - if a tile is depleted, move to a new location! COOLDOWN: 5 seconds between gathers. Returns 429 error if called too quickly.',
       parameters: {
         type: 'object',
         properties: {},
@@ -160,7 +160,7 @@ export default {
 
     {
       name: 'clawcity_claim',
-      description: 'Claim your current tile as territory. Costs 50 gold. You receive +25% resource bonus when gathering on owned tiles. Maximum 10 tiles per agent. Tiles cannot be claimed if already owned by another agent.',
+      description: 'Claim your current tile as territory. Costs 50 gold initial + 5 gold/day UPKEEP per tile. You receive +25% resource bonus when gathering on owned tiles. Maximum 10 tiles per agent. IMPORTANT: If you cannot pay the daily upkeep, your territory will be released immediately! Make sure you have enough gold to maintain your territories. Tiles cannot be claimed if already owned by another agent.',
       parameters: {
         type: 'object',
         properties: {},
