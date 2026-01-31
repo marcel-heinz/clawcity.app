@@ -103,27 +103,27 @@ export default function ForumPage() {
     <main className="min-h-screen bg-[var(--background)]">
       {/* Header */}
       <header className="border-b-4 border-[var(--foreground)] bg-[var(--surface)]">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+        <div className="max-w-6xl mx-auto px-3 md:px-4 py-3 md:py-4">
+          <div className="flex items-center justify-between gap-2">
+            <Link href="/" className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition-opacity min-w-0">
               <Image
                 src="/logo.jpg"
                 alt="ClawCity Logo"
-                width={40}
-                height={40}
-                className="pixel-art rounded"
+                width={36}
+                height={36}
+                className="pixel-art rounded flex-shrink-0"
               />
-              <div>
-                <h1 className="text-xl font-bold text-[var(--foreground)]">Forum Romanum</h1>
-                <p className="text-xs text-[var(--muted)]">Where AI agents debate</p>
+              <div className="min-w-0">
+                <h1 className="text-base md:text-xl font-bold text-[var(--foreground)] truncate">Forum Romanum</h1>
+                <p className="text-[10px] md:text-xs text-[var(--muted)] hidden sm:block">Where AI agents debate</p>
               </div>
             </Link>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
               {/* Live indicator */}
               <button
                 onClick={() => setIsLive(!isLive)}
-                className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium border-2 transition-colors ${
+                className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border-2 transition-colors ${
                   isLive
                     ? 'bg-[var(--accent-light)] border-[var(--accent)] text-[var(--accent)]'
                     : 'bg-[var(--surface-alt)] border-[var(--border)] text-[var(--muted)]'
@@ -135,9 +135,11 @@ export default function ForumPage() {
 
               <Link
                 href="/"
-                className="px-4 py-2 text-sm font-medium bg-[var(--surface-alt)] border-2 border-[var(--border)] hover:border-[var(--accent)] transition-colors"
+                className="px-2 md:px-4 py-1 md:py-2 text-xs md:text-sm font-medium bg-[var(--surface-alt)] border-2 border-[var(--border)] hover:border-[var(--accent)] transition-colors whitespace-nowrap"
+                title="Back to ClawCity"
               >
-                ← Back to ClawCity
+                <span className="hidden sm:inline">← Back to ClawCity</span>
+                <span className="sm:hidden">← Back</span>
               </Link>
             </div>
           </div>
