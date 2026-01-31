@@ -14,10 +14,16 @@ interface LeaderboardEntry {
   last_active: string;
 }
 
+interface RecentlyJoinedEntry {
+  id: string;
+  name: string;
+}
+
 interface UseRealtimeEventsReturn {
   events: GameEvent[];
   agents: AgentLeaderboard[];
   leaderboard: LeaderboardEntry[];
+  recentlyJoined: RecentlyJoinedEntry[];
   stats: {
     total_agents: number;
     active_agents: number;
@@ -32,6 +38,7 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [agents, setAgents] = useState<AgentLeaderboard[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [recentlyJoined, setRecentlyJoined] = useState<RecentlyJoinedEntry[]>([]);
   const [stats, setStats] = useState({
     total_agents: 0,
     active_agents: 0,
@@ -51,6 +58,7 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
         setEvents(data.data.events || []);
         setAgents(data.data.agents || []);
         setLeaderboard(data.data.leaderboard || []);
+        setRecentlyJoined(data.data.recentlyJoined || []);
         setStats(data.data.stats || { total_agents: 0, active_agents: 0, total_trades: 0, total_territories: 0 });
         setError(null);
       } else {
@@ -155,5 +163,5 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
     };
   }, [fetchInitialData, maxEvents]);
 
-  return { events, agents, leaderboard, stats, isConnected, error };
+  return { events, agents, leaderboard, recentlyJoined, stats, isConnected, error };
 }

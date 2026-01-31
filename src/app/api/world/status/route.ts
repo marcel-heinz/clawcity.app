@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     // Get all agents with resources for wealth calculation
     let agentsQuery = supabase
       .from('agents')
-      .select('id, name, x, y, gold, wood, food, stone, reputation, last_active')
+      .select('id, name, x, y, gold, wood, food, stone, reputation, last_active, created_at')
       .order('reputation', { ascending: false });
 
     // Filter by area if coordinates provided
@@ -88,6 +88,15 @@ export async function GET(request: NextRequest) {
         reputation: agent.reputation,
         territory_count: agent.territory_count,
         last_active: agent.last_active,
+      }));
+
+    // Create recently joined list (5 newest agents by created_at)
+    const recentlyJoined = [...agents]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5)
+      .map(agent => ({
+        id: agent.id,
+        name: agent.name,
       }));
 
     // Get recent events
@@ -145,6 +154,7 @@ export async function GET(request: NextRequest) {
       data: {
         agents,
         leaderboard,
+        recentlyJoined,
         events: enrichedEvents,
         stats: {
           total_agents: totalAgents || 0,

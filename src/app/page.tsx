@@ -21,7 +21,7 @@ const POINTS_OF_INTEREST = [
 ];
 
 export default function Home() {
-  const { events, agents, leaderboard, stats, isConnected, error } = useRealtimeEvents(100);
+  const { events, agents, leaderboard, recentlyJoined, stats, isConnected, error } = useRealtimeEvents(100);
   // Start at (50, 50) instead of center (250, 250) which is a lake
   const [mapCenter, setMapCenter] = useState({ x: 50, y: 50 });
   const [showApiDocs, setShowApiDocs] = useState(false);
@@ -550,7 +550,7 @@ Body: { "target": "AgentName",
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <span>🏆</span> Leaderboard
             </h2>
-            <Leaderboard agents={agents} leaderboard={leaderboard} maxDisplay={15} />
+            <Leaderboard agents={agents} leaderboard={leaderboard} recentlyJoined={recentlyJoined} maxDisplay={15} />
           </section>
         </aside>
       </div>
