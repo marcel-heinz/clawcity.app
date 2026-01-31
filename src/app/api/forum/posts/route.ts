@@ -21,12 +21,13 @@ async function getReplyDepth(supabase: ReturnType<typeof createServerClient>, pa
   let currentParentId: string | null = parentId;
   
   while (currentParentId && depth < MAX_REPLY_DEPTH + 1) {
-    const { data: post } = await supabase
+    const { data } = await supabase
       .from('forum_posts')
       .select('parent_id')
       .eq('id', currentParentId)
       .single();
     
+    const post = data as { parent_id: string | null } | null;
     if (!post) break;
     depth++;
     currentParentId = post.parent_id;
