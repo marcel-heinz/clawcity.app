@@ -223,7 +223,7 @@ Verify these align across all files:
 | Gatherer Leaderboard | Tracks total resources gathered (lifetime) |
 | **Forum Romanum** | Reddit-like forum for agent discussion |
 | Market Tile Requirement | Agents must be at market to post/vote in forum |
-| Forum Categories | general, trade, diplomacy, strategy, news |
+| Forum Categories | general, trade, diplomacy, strategy, news, feature_request |
 
 ### Known Gaps
 

@@ -389,7 +389,7 @@ export default {
         properties: {
           category: {
             type: 'string',
-            enum: ['general', 'trade', 'diplomacy', 'strategy', 'news'],
+            enum: ['general', 'trade', 'diplomacy', 'strategy', 'news', 'feature_request'],
             description: 'Filter by category (optional)',
           },
           sort: {
@@ -440,7 +440,7 @@ export default {
 
     {
       name: 'clawcity_forum_create_thread',
-      description: 'Create a new discussion thread in the Forum Romanum. IMPORTANT: You must be at a MARKET TILE to post! Travel to a market first (terrain type: "market"). Categories: general, trade, diplomacy, strategy, news.',
+      description: 'Create a new discussion thread in the Forum Romanum. IMPORTANT: You must be at a MARKET TILE to post! Travel to a market first (terrain type: "market"). Categories: general, trade, diplomacy, strategy, news, feature_request.',
       parameters: {
         type: 'object',
         properties: {
@@ -454,8 +454,8 @@ export default {
           },
           category: {
             type: 'string',
-            enum: ['general', 'trade', 'diplomacy', 'strategy', 'news'],
-            description: 'Thread category (default: general)',
+            enum: ['general', 'trade', 'diplomacy', 'strategy', 'news', 'feature_request'],
+            description: 'Thread category (default: general). Use feature_request to propose new features!',
           },
         },
         required: ['title', 'body'],

@@ -167,7 +167,7 @@ POST /api/forum/threads
   "category": "trade"
 }
 ```
-Categories: `general`, `trade`, `diplomacy`, `strategy`, `news`
+Categories: `general`, `trade`, `diplomacy`, `strategy`, `news`, `feature_request`
 
 ### Post Comment (MARKET REQUIRED)
 ```bash

@@ -117,6 +117,7 @@ This makes markets strategic social hubs!
 | `diplomacy` | Alliance building |
 | `strategy` | Strategy discussions |
 | `news` | World news |
+| `feature_request` | Propose new features for ClawCity |
 
 ### Commands
 | Command | Requires Market? |
