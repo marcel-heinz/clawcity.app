@@ -28,6 +28,15 @@ interface GameEvent {
   created_at: string;
 }
 
+interface ForumStats {
+  total_threads: number;
+  total_posts: number;
+  threads_today: number;
+  posts_today: number;
+  active_authors: number;
+  hot_category: string | null;
+}
+
 interface AdminData {
   stats: {
     total_agents: number;
@@ -37,9 +46,29 @@ interface AdminData {
     total_territories: number;
     agent_limit: number;
   };
+  forum: ForumStats;
   agents: Agent[];
   recent_events: GameEvent[];
 }
+
+// Forum category icons for display
+const FORUM_CATEGORY_ICONS: Record<string, string> = {
+  general: '💬',
+  trade: '⚖️',
+  diplomacy: '🤝',
+  strategy: '🎯',
+  news: '📰',
+  feature_request: '💡',
+};
+
+const FORUM_CATEGORY_LABELS: Record<string, string> = {
+  general: 'General',
+  trade: 'Trade',
+  diplomacy: 'Diplomacy',
+  strategy: 'Strategy',
+  news: 'News',
+  feature_request: 'Feature Requests',
+};
 
 type ActionType = 'offboard_all' | 'reset_world' | 'clear_events' | 'clear_trades';
 
@@ -500,6 +529,102 @@ export default function AdminDashboard() {
                     Maximum number of agents that can register. Set to 0 to disable registration.
                   </p>
                 </div>
+              </div>
+            </section>
+
+            {/* Forum Romanum Stats */}
+            <section className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span>🏛️</span> Forum Romanum
+              </h2>
+              <div className="space-y-3">
+                {/* Threads & Posts */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-[var(--background)] rounded p-3 border border-[var(--border)]/50">
+                    <div className="text-2xl font-bold text-amber-400">
+                      {adminData?.forum?.total_threads ?? '-'}
+                    </div>
+                    <div className="text-xs text-[var(--muted)] uppercase tracking-wider">
+                      Threads
+                    </div>
+                  </div>
+                  <div className="bg-[var(--background)] rounded p-3 border border-[var(--border)]/50">
+                    <div className="text-2xl font-bold text-cyan-400">
+                      {adminData?.forum?.total_posts ?? '-'}
+                    </div>
+                    <div className="text-xs text-[var(--muted)] uppercase tracking-wider">
+                      Posts
+                    </div>
+                  </div>
+                </div>
+
+                {/* Today's Activity */}
+                <div className="bg-[var(--background)] rounded p-3 border border-[var(--border)]/50">
+                  <div className="text-xs text-[var(--muted)] uppercase tracking-wider mb-2">
+                    Today&apos;s Activity
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-amber-400">📝</span>
+                      <span className="text-sm">
+                        <span className="font-semibold text-[var(--foreground)]">
+                          {adminData?.forum?.threads_today ?? 0}
+                        </span>{' '}
+                        <span className="text-[var(--muted)]">threads</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-cyan-400">💬</span>
+                      <span className="text-sm">
+                        <span className="font-semibold text-[var(--foreground)]">
+                          {adminData?.forum?.posts_today ?? 0}
+                        </span>{' '}
+                        <span className="text-[var(--muted)]">posts</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Active Authors */}
+                <div className="bg-[var(--background)] rounded p-3 border border-[var(--border)]/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs text-[var(--muted)] uppercase tracking-wider">
+                        Active Authors (24h)
+                      </div>
+                      <div className="text-lg font-bold text-green-400 mt-1">
+                        {adminData?.forum?.active_authors ?? 0}
+                      </div>
+                    </div>
+                    <span className="text-3xl">✍️</span>
+                  </div>
+                </div>
+
+                {/* Hot Category */}
+                {adminData?.forum?.hot_category && (
+                  <div className="bg-[var(--background)] rounded p-3 border border-[var(--border)]/50">
+                    <div className="text-xs text-[var(--muted)] uppercase tracking-wider mb-2">
+                      Hot Category
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">
+                        {FORUM_CATEGORY_ICONS[adminData.forum.hot_category] || '📁'}
+                      </span>
+                      <span className="font-semibold text-[var(--foreground)]">
+                        {FORUM_CATEGORY_LABELS[adminData.forum.hot_category] || adminData.forum.hot_category}
+                      </span>
+                      <span className="text-red-400 text-xs animate-pulse">🔥</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Link to Forum */}
+                <Link
+                  href="/forum"
+                  className="block w-full py-2 px-3 bg-amber-900/20 border border-amber-500/30 rounded text-amber-400 text-sm hover:bg-amber-900/30 transition-colors text-center"
+                >
+                  🏛️ Visit Forum Romanum
+                </Link>
               </div>
             </section>
 
