@@ -95,3 +95,172 @@ body {
 .bg-gradient-radial {
   background: radial-gradient(ellipse at center, var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to));
 }
+
+/* ============================================
+   PIXEL ART MAP STYLES
+   ============================================ */
+
+/* Base pixel art rendering */
+.pixel-art {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* Grass/Plains pattern - pixel dots */
+.terrain-grass {
+  background-color: #5a8f29;
+  background-image: 
+    radial-gradient(circle at 25% 25%, #6ba832 2px, transparent 2px),
+    radial-gradient(circle at 75% 75%, #4a7a20 2px, transparent 2px),
+    radial-gradient(circle at 50% 10%, #7bc043 1px, transparent 1px),
+    radial-gradient(circle at 20% 80%, #7bc043 1px, transparent 1px),
+    radial-gradient(circle at 90% 40%, #4a7a20 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* Forest pattern - trees */
+.terrain-forest {
+  background-color: #2d5a1d;
+  background-image:
+    /* Tree canopies */
+    radial-gradient(ellipse 8px 10px at 50% 30%, #1a4a10 100%, transparent 100%),
+    radial-gradient(ellipse 6px 8px at 30% 60%, #236b15 100%, transparent 100%),
+    radial-gradient(ellipse 7px 9px at 70% 70%, #1a4a10 100%, transparent 100%),
+    /* Trunks */
+    linear-gradient(to bottom, transparent 70%, #5c3d2e 70%, #5c3d2e 85%, transparent 85%),
+    /* Base grass */
+    radial-gradient(circle at 50% 90%, #3d6b24 3px, transparent 3px);
+  background-size: 32px 32px;
+}
+
+/* Mountain pattern - peaks */
+.terrain-mountain {
+  background-color: #4a5568;
+  background-image:
+    /* Snow caps */
+    linear-gradient(135deg, transparent 40%, #e8e8e8 40%, #e8e8e8 45%, transparent 45%),
+    /* Mountain shapes */
+    linear-gradient(135deg, #6b7280 25%, transparent 25%),
+    linear-gradient(225deg, #374151 25%, transparent 25%),
+    linear-gradient(45deg, #4b5563 30%, transparent 30%),
+    /* Rocky texture */
+    radial-gradient(circle at 60% 80%, #374151 2px, transparent 2px),
+    radial-gradient(circle at 30% 70%, #6b7280 2px, transparent 2px);
+  background-size: 24px 24px;
+}
+
+/* Water pattern - animated waves */
+.terrain-water {
+  background-color: #1e5f8a;
+  background-image:
+    linear-gradient(90deg, transparent 0%, rgba(56, 189, 248, 0.3) 50%, transparent 100%),
+    linear-gradient(180deg, 
+      #1e5f8a 0%, 
+      #2980b9 20%, 
+      #3498db 40%, 
+      #2980b9 60%, 
+      #1e5f8a 80%,
+      #2980b9 100%
+    );
+  background-size: 40px 20px, 100% 100%;
+  animation: waterWave 3s ease-in-out infinite;
+}
+
+@keyframes waterWave {
+  0%, 100% { background-position: 0px 0px, 0px 0px; }
+  50% { background-position: 20px 0px, 0px 0px; }
+}
+
+/* Market/Town pattern - buildings */
+.terrain-market {
+  background-color: #8b7355;
+  background-image:
+    /* Roofs */
+    linear-gradient(135deg, #c45c26 0%, #c45c26 50%, transparent 50%),
+    linear-gradient(225deg, #a84820 0%, #a84820 50%, transparent 50%),
+    /* Walls */
+    linear-gradient(to bottom, transparent 50%, #deb887 50%, #deb887 90%, #654321 90%),
+    /* Ground */
+    linear-gradient(to right, #9a8b7a 0%, #8b7d6b 50%, #9a8b7a 100%);
+  background-size: 24px 24px, 24px 24px, 24px 24px, 8px 8px;
+  background-position: 0 0, 12px 0, 0 0, 0 0;
+}
+
+/* Pixel trees for decoration */
+.pixel-tree {
+  width: 16px;
+  height: 24px;
+  position: relative;
+}
+
+.pixel-tree::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 6px;
+  width: 4px;
+  height: 8px;
+  background: #5c3d2e;
+}
+
+.pixel-tree::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 16px solid #228b22;
+}
+
+/* Pixel mountain */
+.pixel-mountain {
+  width: 32px;
+  height: 24px;
+  position: relative;
+  background: linear-gradient(135deg, transparent 50%, #6b7280 50%),
+              linear-gradient(225deg, transparent 50%, #4b5563 50%);
+  background-size: 100% 100%;
+}
+
+.pixel-mountain::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 8px solid #e8e8e8;
+}
+
+/* Zone overlay badge */
+.zone-badge {
+  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+/* Hover glow effect for zones */
+.zone-hover-glow {
+  transition: all 0.3s ease;
+}
+
+.zone-hover-glow:hover {
+  box-shadow: inset 0 0 30px rgba(255, 255, 255, 0.1);
+}
+
+/* Path/road pattern */
+.terrain-path {
+  background-color: #a89078;
+  background-image:
+    radial-gradient(circle at 20% 50%, #8b7355 3px, transparent 3px),
+    radial-gradient(circle at 80% 30%, #9a8b7a 2px, transparent 2px),
+    radial-gradient(circle at 50% 80%, #8b7355 2px, transparent 2px);
+  background-size: 12px 12px;
+}
