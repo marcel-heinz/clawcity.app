@@ -10,6 +10,73 @@ interface ThreadDetailClientProps {
   threadId: string;
 }
 
+// Simple markdown renderer for forum posts
+function renderMarkdown(text: string): React.ReactNode {
+  // Split by newlines first to preserve line structure
+  const lines = text.split('\n');
+  
+  return lines.map((line, lineIndex) => {
+    // Parse inline formatting
+    const parts: React.ReactNode[] = [];
+    let remaining = line;
+    let keyIndex = 0;
+    
+    while (remaining.length > 0) {
+      // Bold: **text**
+      const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/);
+      if (boldMatch) {
+        parts.push(<strong key={`${lineIndex}-${keyIndex++}`} className="font-bold">{boldMatch[1]}</strong>);
+        remaining = remaining.slice(boldMatch[0].length);
+        continue;
+      }
+      
+      // Italic: *text*
+      const italicMatch = remaining.match(/^\*([^*]+)\*/);
+      if (italicMatch) {
+        parts.push(<em key={`${lineIndex}-${keyIndex++}`} className="italic">{italicMatch[1]}</em>);
+        remaining = remaining.slice(italicMatch[0].length);
+        continue;
+      }
+      
+      // Code: `text`
+      const codeMatch = remaining.match(/^`([^`]+)`/);
+      if (codeMatch) {
+        parts.push(
+          <code key={`${lineIndex}-${keyIndex++}`} className="px-1.5 py-0.5 bg-[var(--surface-alt)] border border-[var(--border)] text-sm font-mono rounded">
+            {codeMatch[1]}
+          </code>
+        );
+        remaining = remaining.slice(codeMatch[0].length);
+        continue;
+      }
+      
+      // Find next special character
+      const nextSpecial = remaining.search(/[\*`]/);
+      if (nextSpecial === -1) {
+        // No more special chars, add rest as text
+        parts.push(<span key={`${lineIndex}-${keyIndex++}`}>{remaining}</span>);
+        break;
+      } else if (nextSpecial === 0) {
+        // Special char at start but didn't match pattern, add it as text
+        parts.push(<span key={`${lineIndex}-${keyIndex++}`}>{remaining[0]}</span>);
+        remaining = remaining.slice(1);
+      } else {
+        // Add text before special char
+        parts.push(<span key={`${lineIndex}-${keyIndex++}`}>{remaining.slice(0, nextSpecial)}</span>);
+        remaining = remaining.slice(nextSpecial);
+      }
+    }
+    
+    // Return line with linebreak (except for last line)
+    return (
+      <span key={lineIndex}>
+        {parts}
+        {lineIndex < lines.length - 1 && <br />}
+      </span>
+    );
+  });
+}
+
 function PostCard({ post, depth = 0 }: { post: ForumPost; depth?: number }) {
   const maxIndent = 4;
   const indent = Math.min(depth, maxIndent);
@@ -34,9 +101,9 @@ function PostCard({ post, depth = 0 }: { post: ForumPost; depth?: number }) {
               <span>•</span>
               <span>{formatForumTime(post.created_at)}</span>
             </div>
-            <p className="text-sm text-[var(--foreground)] whitespace-pre-wrap break-words">
-              {post.body}
-            </p>
+            <div className="text-sm text-[var(--foreground)] break-words leading-relaxed">
+              {renderMarkdown(post.body)}
+            </div>
           </div>
         </div>
       </div>
@@ -233,9 +300,9 @@ export default function ThreadDetailClient({ threadId }: ThreadDetailClientProps
                 {thread.title}
               </h1>
 
-              <p className="text-[var(--foreground)] whitespace-pre-wrap mb-4">
-                {thread.body}
-              </p>
+              <div className="text-[var(--foreground)] mb-4 leading-relaxed">
+                {renderMarkdown(thread.body)}
+              </div>
 
               <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--muted)]">
                 <span>
