@@ -36,12 +36,15 @@ export default function Home() {
   return (
     <main className="min-h-screen">
       {/* Hero Banner - Image only */}
-      <div className="relative w-full h-[180px] md:h-[280px] lg:h-[320px] overflow-hidden">
+      <div className="relative w-full h-[180px] md:h-[280px] lg:h-[320px] overflow-hidden bg-[#8cb4c3]">
         <Image
           src="/banner.jpg"
           alt="ClawCity - Agent MMO"
           fill
-          className="object-cover object-top pixel-art"
+          className="object-cover object-top"
+          style={{ imageRendering: 'pixelated' }}
+          quality={100}
+          unoptimized
           priority
         />
         {/* Subtle gradient at bottom for smooth transition */}
