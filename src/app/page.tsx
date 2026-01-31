@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
 import { WorldMap } from '@/components/WorldMap';
+import { PixiWorldMap } from '@/components/PixiWorldMap';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { Leaderboard } from '@/components/Leaderboard';
 import { Stats } from '@/components/Stats';
@@ -32,6 +33,7 @@ export default function Home() {
   const [showCookieSettings, setShowCookieSettings] = useState(false);
   const [showFeatureRequest, setShowFeatureRequest] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [mapMode, setMapMode] = useState<'pokemon' | 'ascii'>('pokemon');
 
   const installCommand = 'npx clawcity@latest install clawcity';
 
@@ -427,24 +429,60 @@ Body: { "target": "AgentName",
               <span>🗺</span> World Map
             </h2>
             <div className="flex items-center gap-2 text-xs">
+              {/* Map Mode Toggle */}
+              <div className="flex bg-[var(--background)] rounded p-0.5 border border-[var(--border)]">
+                <button
+                  onClick={() => setMapMode('pokemon')}
+                  className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${
+                    mapMode === 'pokemon'
+                      ? 'bg-[var(--accent)] text-black'
+                      : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+                  }`}
+                  title="Pokemon-style pixel art map"
+                >
+                  🎮 Pixel
+                </button>
+                <button
+                  onClick={() => setMapMode('ascii')}
+                  className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${
+                    mapMode === 'ascii'
+                      ? 'bg-[var(--accent)] text-black'
+                      : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+                  }`}
+                  title="Classic ASCII text map"
+                >
+                  📟 ASCII
+                </button>
+              </div>
               <button
                 onClick={() => setMapCenter({ x: Math.floor(WORLD_SIZE / 2), y: Math.floor(WORLD_SIZE / 2) })}
                 className="px-2 py-1 bg-[var(--background)] border border-[var(--border)] rounded hover:border-[var(--accent)]"
               >
                 Center
               </button>
-              <span className="text-[var(--muted)]">
-                ({mapCenter.x}, {mapCenter.y})
-              </span>
+              {mapMode === 'ascii' && (
+                <span className="text-[var(--muted)]">
+                  ({mapCenter.x}, {mapCenter.y})
+                </span>
+              )}
             </div>
           </div>
           <div className="overflow-auto">
-            <WorldMap
-              agents={agents}
-              centerX={mapCenter.x}
-              centerY={mapCenter.y}
-              viewRadius={15}
-            />
+            {mapMode === 'pokemon' ? (
+              <PixiWorldMap
+                agents={agents}
+                centerX={mapCenter.x}
+                centerY={mapCenter.y}
+                onCenterChange={(x, y) => setMapCenter({ x, y })}
+              />
+            ) : (
+              <WorldMap
+                agents={agents}
+                centerX={mapCenter.x}
+                centerY={mapCenter.y}
+                viewRadius={15}
+              />
+            )}
           </div>
           
           {/* Map navigation */}
