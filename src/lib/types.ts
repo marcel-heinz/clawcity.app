@@ -33,6 +33,7 @@ export interface AgentLeaderboard extends AgentPublic {
   stone: number;
   wealth: number;
   territory_count: number;
+  created_at?: string;
 }
 
 // World types
