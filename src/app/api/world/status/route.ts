@@ -106,6 +106,15 @@ export async function GET(request: NextRequest) {
         territory_count: agent.territory_count,
         last_active: agent.last_active,
         total_gathered: agent.total_gathered,
+        // Resource breakdown for expanded view
+        gold: agent.gold,
+        wood: agent.wood,
+        food: agent.food,
+        stone: agent.stone,
+        total_gathered_gold: agent.total_gathered_gold,
+        total_gathered_wood: agent.total_gathered_wood,
+        total_gathered_food: agent.total_gathered_food,
+        total_gathered_stone: agent.total_gathered_stone,
       }));
 
     // Create top gatherers leaderboard

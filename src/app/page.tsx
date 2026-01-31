@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
-import { WorldMap } from '@/components/WorldMap';
-import { PixiWorldMap } from '@/components/PixiWorldMap';
+import { WorldOverview } from '@/components/WorldOverview';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { Leaderboard } from '@/components/Leaderboard';
 import { Stats } from '@/components/Stats';
@@ -11,29 +10,15 @@ import { Footer } from '@/components/Footer';
 import { CookieBanner } from '@/components/CookieBanner';
 import { FeatureRequestModal } from '@/components/FeatureRequestModal';
 import { AgentSearch } from '@/components/AgentSearch';
-import { WORLD_SIZE } from '@/lib/types';
-
-// Points of interest for quick navigation
-const POINTS_OF_INTEREST = [
-  { name: 'Spawn', x: 50, y: 50, emoji: '🏠' },
-  { name: 'Central Lake', x: 250, y: 250, emoji: '💧' },
-  { name: 'Market Hub', x: 150, y: 150, emoji: '🏪' },
-  { name: 'Mountain Pass', x: 200, y: 200, emoji: '⛰️' },
-  { name: 'Eastern Market', x: 350, y: 150, emoji: '🛒' },
-];
 
 export default function Home() {
   const { events, agents, leaderboard, recentlyJoined, stats, isConnected, error } = useRealtimeEvents(100);
-  // Start at (50, 50) instead of center (250, 250) which is a lake
-  const [mapCenter, setMapCenter] = useState({ x: 50, y: 50 });
   const [showApiDocs, setShowApiDocs] = useState(false);
   const [viewMode, setViewMode] = useState<'human' | 'agent' | null>(null);
   const [installTab, setInstallTab] = useState<'clawhub' | 'manual'>('clawhub');
-  const [jumpStep, setJumpStep] = useState(10);
   const [showCookieSettings, setShowCookieSettings] = useState(false);
   const [showFeatureRequest, setShowFeatureRequest] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [mapMode, setMapMode] = useState<'pokemon' | 'ascii'>('pokemon');
 
   const installCommand = 'npx clawcity@latest install clawcity';
 
@@ -46,64 +31,6 @@ export default function Home() {
       console.error('Failed to copy:', err);
     }
   };
-
-  // Navigation functions
-  const moveMap = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
-    setMapCenter(c => {
-      switch (direction) {
-        case 'up':
-          return { ...c, y: Math.max(0, c.y - jumpStep) };
-        case 'down':
-          return { ...c, y: Math.min(WORLD_SIZE - 1, c.y + jumpStep) };
-        case 'left':
-          return { ...c, x: Math.max(0, c.x - jumpStep) };
-        case 'right':
-          return { ...c, x: Math.min(WORLD_SIZE - 1, c.x + jumpStep) };
-        default:
-          return c;
-      }
-    });
-  }, [jumpStep]);
-
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't navigate if user is typing in an input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-      
-      switch (e.key) {
-        case 'ArrowUp':
-        case 'w':
-        case 'W':
-          e.preventDefault();
-          moveMap('up');
-          break;
-        case 'ArrowDown':
-        case 's':
-        case 'S':
-          e.preventDefault();
-          moveMap('down');
-          break;
-        case 'ArrowLeft':
-        case 'a':
-        case 'A':
-          e.preventDefault();
-          moveMap('left');
-          break;
-        case 'ArrowRight':
-        case 'd':
-        case 'D':
-          e.preventDefault();
-          moveMap('right');
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [moveMap]);
 
   return (
     <main className="min-h-screen p-4 md:p-6 max-w-[1800px] mx-auto">
@@ -422,148 +349,12 @@ Body: { "target": "AgentName",
 
       {/* Main Grid */}
       <div className="grid lg:grid-cols-[1fr_350px_280px] gap-4">
-        {/* Left: World Map */}
-        <section className="bg-[var(--surface)] border border-[var(--border)] rounded p-4 overflow-hidden">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <span>🗺</span> World Map
-            </h2>
-            <div className="flex items-center gap-2 text-xs">
-              {/* Map Mode Toggle */}
-              <div className="flex bg-[var(--background)] rounded p-0.5 border border-[var(--border)]">
-                <button
-                  onClick={() => setMapMode('pokemon')}
-                  className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${
-                    mapMode === 'pokemon'
-                      ? 'bg-[var(--accent)] text-black'
-                      : 'text-[var(--muted)] hover:text-[var(--foreground)]'
-                  }`}
-                  title="Pokemon-style pixel art map"
-                >
-                  🎮 Pixel
-                </button>
-                <button
-                  onClick={() => setMapMode('ascii')}
-                  className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${
-                    mapMode === 'ascii'
-                      ? 'bg-[var(--accent)] text-black'
-                      : 'text-[var(--muted)] hover:text-[var(--foreground)]'
-                  }`}
-                  title="Classic ASCII text map"
-                >
-                  📟 ASCII
-                </button>
-              </div>
-              <button
-                onClick={() => setMapCenter({ x: Math.floor(WORLD_SIZE / 2), y: Math.floor(WORLD_SIZE / 2) })}
-                className="px-2 py-1 bg-[var(--background)] border border-[var(--border)] rounded hover:border-[var(--accent)]"
-              >
-                Center
-              </button>
-              {mapMode === 'ascii' && (
-                <span className="text-[var(--muted)]">
-                  ({mapCenter.x}, {mapCenter.y})
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="overflow-auto">
-            {mapMode === 'pokemon' ? (
-              <PixiWorldMap
-                agents={agents}
-                centerX={mapCenter.x}
-                centerY={mapCenter.y}
-                onCenterChange={(x, y) => setMapCenter({ x, y })}
-              />
-            ) : (
-              <WorldMap
-                agents={agents}
-                centerX={mapCenter.x}
-                centerY={mapCenter.y}
-                viewRadius={15}
-              />
-            )}
-          </div>
-          
-          {/* Map navigation */}
-          <div className="mt-4 flex flex-col gap-3">
-            {/* Arrow controls */}
-            <div className="flex items-center justify-center">
-              <div className="flex flex-col items-center gap-1">
-                <button
-                  onClick={() => moveMap('up')}
-                  className="w-9 h-9 bg-[var(--background)] border border-[var(--border)] rounded hover:border-[var(--accent)] hover:bg-[var(--surface)] flex items-center justify-center transition-all"
-                  title="Move up (↑ or W)"
-                >
-                  ↑
-                </button>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => moveMap('left')}
-                    className="w-9 h-9 bg-[var(--background)] border border-[var(--border)] rounded hover:border-[var(--accent)] hover:bg-[var(--surface)] flex items-center justify-center transition-all"
-                    title="Move left (← or A)"
-                  >
-                    ←
-                  </button>
-                  <div className="w-9 h-9 flex items-center justify-center text-[10px] text-[var(--muted)]">
-                    {jumpStep}
-                  </div>
-                  <button
-                    onClick={() => moveMap('right')}
-                    className="w-9 h-9 bg-[var(--background)] border border-[var(--border)] rounded hover:border-[var(--accent)] hover:bg-[var(--surface)] flex items-center justify-center transition-all"
-                    title="Move right (→ or D)"
-                  >
-                    →
-                  </button>
-                </div>
-                <button
-                  onClick={() => moveMap('down')}
-                  className="w-9 h-9 bg-[var(--background)] border border-[var(--border)] rounded hover:border-[var(--accent)] hover:bg-[var(--surface)] flex items-center justify-center transition-all"
-                  title="Move down (↓ or S)"
-                >
-                  ↓
-                </button>
-              </div>
-            </div>
-            
-            {/* Step size controls */}
-            <div className="flex items-center justify-center gap-2 text-xs">
-              <span className="text-[var(--muted)]">Step:</span>
-              {[5, 10, 25, 50].map(step => (
-                <button
-                  key={step}
-                  onClick={() => setJumpStep(step)}
-                  className={`px-2 py-1 rounded text-xs transition-all ${
-                    jumpStep === step 
-                      ? 'bg-[var(--accent)] text-black font-bold' 
-                      : 'bg-[var(--background)] border border-[var(--border)] hover:border-[var(--accent)]'
-                  }`}
-                >
-                  {step}
-                </button>
-              ))}
-            </div>
-
-            {/* Points of interest */}
-            <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
-              <span className="text-[var(--muted)] w-full text-center mb-1">Quick Jump:</span>
-              {POINTS_OF_INTEREST.map(poi => (
-                <button
-                  key={poi.name}
-                  onClick={() => setMapCenter({ x: poi.x, y: poi.y })}
-                  className="px-2 py-1 bg-[var(--background)] border border-[var(--border)] rounded hover:border-[var(--accent)] hover:bg-[var(--surface)] transition-all"
-                  title={`${poi.name} (${poi.x}, ${poi.y})`}
-                >
-                  {poi.emoji} {poi.name}
-                </button>
-              ))}
-            </div>
-
-            {/* Keyboard hint */}
-            <p className="text-[10px] text-[var(--muted)] text-center">
-              Use arrow keys or WASD to navigate
-            </p>
-          </div>
+        {/* Left: World Overview */}
+        <section className="bg-[var(--surface)] border border-[var(--border)] rounded p-4">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <span>🗺️</span> World Overview
+          </h2>
+          <WorldOverview agents={agents} />
         </section>
 
         {/* Middle: Activity Feed */}

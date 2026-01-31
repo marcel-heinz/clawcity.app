@@ -13,6 +13,15 @@ interface LeaderboardEntry {
   territory_count: number;
   last_active: string;
   total_gathered?: number;
+  // Resource breakdown for expanded view
+  gold?: number;
+  wood?: number;
+  food?: number;
+  stone?: number;
+  total_gathered_gold?: number;
+  total_gathered_wood?: number;
+  total_gathered_food?: number;
+  total_gathered_stone?: number;
 }
 
 interface TopGathererEntry {
