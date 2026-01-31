@@ -160,17 +160,30 @@ export function WorldOverview({ agents }: WorldOverviewProps) {
   return (
     <div className="relative">
       {/* Stats Header */}
-      <div className="flex items-center gap-2 md:gap-3 text-sm mb-3">
-        <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
-          <span>👥</span>
-          <span className="font-bold text-[var(--accent)]">{totalAgents}</span>
-          <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">online</span>
+      <div className="flex items-center justify-between gap-2 md:gap-3 text-sm mb-3">
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
+            <span>👥</span>
+            <span className="font-bold text-[var(--accent)]">{totalAgents}</span>
+            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">online</span>
+          </div>
+          <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
+            <span>🏴</span>
+            <span className="font-bold text-[var(--gold)]">{totalTerritories}</span>
+            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">territories</span>
+          </div>
         </div>
-        <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
-          <span>🏴</span>
-          <span className="font-bold text-[var(--gold)]">{totalTerritories}</span>
-          <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">territories</span>
-        </div>
+        
+        {/* Forum Romanum Link */}
+        <a 
+          href="/forum" 
+          className="flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 bg-[var(--accent)] text-white font-semibold border-2 border-[var(--foreground)] hover:bg-[var(--gold)] hover:text-[var(--foreground)] transition-colors"
+        >
+          <span>🏛️</span>
+          <span className="hidden sm:inline">Forum Romanum</span>
+          <span className="sm:hidden">Forum</span>
+          <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[var(--accent-light)] animate-pulse" />
+        </a>
       </div>
 
       {/* THE MAP */}
