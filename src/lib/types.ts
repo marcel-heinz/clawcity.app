@@ -15,6 +15,8 @@ export interface Agent {
   last_move_at?: string | null;
   last_gather_at?: string | null;
   last_trade_at?: string | null;
+  last_forum_thread_at?: string | null;
+  last_forum_post_at?: string | null;
   // Lifetime gathering stats
   total_gathered_gold?: number;
   total_gathered_wood?: number;
@@ -140,6 +142,8 @@ export const STARTING_FOOD = 50;
 export const GATHER_COOLDOWN_MS = 5000;
 export const MOVE_COOLDOWN_MS = 1000;
 export const TRADE_COOLDOWN_MS = 5000;
+export const FORUM_THREAD_COOLDOWN_MS = 60000;  // 60 seconds between thread creations
+export const FORUM_POST_COOLDOWN_MS = 30000;    // 30 seconds between post/reply creations
 
 // Territory constants
 export const CLAIM_COST_GOLD = 50;

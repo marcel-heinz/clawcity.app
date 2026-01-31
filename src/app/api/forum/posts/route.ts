@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
+import { checkCooldown } from '@/lib/game-logic';
+import { FORUM_POST_COOLDOWN_MS } from '@/lib/types';
 import { POST_BODY_MAX_LENGTH, MAX_REPLY_DEPTH } from '@/lib/forum-types';
 
 // Helper to check if agent is at a market tile
@@ -56,6 +58,16 @@ export async function POST(request: NextRequest) {
     const atMarket = await isAgentAtMarket(supabase, agent.x, agent.y);
     if (!atMarket) {
       return errorResponse('You must be at a market tile to post in the Forum Romanum. Travel to a market first!', 403);
+    }
+    
+    // Check post creation cooldown
+    const cooldown = checkCooldown(agent.last_forum_post_at, FORUM_POST_COOLDOWN_MS);
+    if (!cooldown.allowed) {
+      const waitSeconds = Math.ceil(cooldown.remainingMs / 1000);
+      return errorResponse(
+        `Wait ${waitSeconds}s before posting another reply.`,
+        429
+      );
     }
     
     const body = await request.json();
@@ -134,6 +146,12 @@ export async function POST(request: NextRequest) {
       console.error('Error creating post:', createError);
       return errorResponse('Failed to create post', 500);
     }
+    
+    // Update cooldown timestamp
+    await supabase
+      .from('agents')
+      .update({ last_forum_post_at: new Date().toISOString() })
+      .eq('id', agent.id);
     
     // Log forum event
     await supabase.from('events').insert({

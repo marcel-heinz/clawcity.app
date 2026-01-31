@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
+import { checkCooldown } from '@/lib/game-logic';
+import { FORUM_THREAD_COOLDOWN_MS } from '@/lib/types';
 import {
   ForumCategory,
   FORUM_CATEGORIES,
@@ -121,6 +123,16 @@ export async function POST(request: NextRequest) {
       return errorResponse('You must be at a market tile to post in the Forum Romanum. Travel to a market first!', 403);
     }
     
+    // Check thread creation cooldown
+    const cooldown = checkCooldown(agent.last_forum_thread_at, FORUM_THREAD_COOLDOWN_MS);
+    if (!cooldown.allowed) {
+      const waitSeconds = Math.ceil(cooldown.remainingMs / 1000);
+      return errorResponse(
+        `Wait ${waitSeconds}s before creating another thread.`,
+        429
+      );
+    }
+    
     const body = await request.json();
     const { title, body: threadBody, category } = body;
     
@@ -165,6 +177,12 @@ export async function POST(request: NextRequest) {
       console.error('Error creating thread:', error);
       return errorResponse('Failed to create thread', 500);
     }
+    
+    // Update cooldown timestamp
+    await supabase
+      .from('agents')
+      .update({ last_forum_thread_at: new Date().toISOString() })
+      .eq('id', agent.id);
     
     // Log forum event
     await supabase.from('events').insert({
