@@ -64,17 +64,30 @@ export async function GET() {
     }
 
     // Enrich winners with agent names and tournament names
-    const enrichedWinners = (recentWinners || []).map(w => ({
-      id: w.id,
-      tournament_id: w.tournament_id,
-      agent_id: w.agent_id,
-      agent_name: agentMap.get(w.agent_id) || 'Unknown',
-      rank: w.rank as 1 | 2 | 3,
-      final_score: w.final_score,
-      tournament_type: w.tournament_type,
-      tournament_name: (w.tournaments as { name: string } | null)?.name || 'Unknown Tournament',
-      created_at: w.created_at,
-    }));
+    const enrichedWinners = (recentWinners || []).map(w => {
+      // Supabase returns joined data - handle both object and array formats
+      const tournaments = w.tournaments as unknown;
+      let tournamentName = 'Unknown Tournament';
+      if (tournaments && typeof tournaments === 'object') {
+        if (Array.isArray(tournaments) && tournaments.length > 0) {
+          tournamentName = (tournaments[0] as { name?: string })?.name || 'Unknown Tournament';
+        } else if ('name' in tournaments) {
+          tournamentName = (tournaments as { name: string }).name;
+        }
+      }
+      
+      return {
+        id: w.id,
+        tournament_id: w.tournament_id,
+        agent_id: w.agent_id,
+        agent_name: agentMap.get(w.agent_id) || 'Unknown',
+        rank: w.rank as 1 | 2 | 3,
+        final_score: w.final_score,
+        tournament_type: w.tournament_type,
+        tournament_name: tournamentName,
+        created_at: w.created_at,
+      };
+    });
 
     return jsonResponse({
       success: true,
