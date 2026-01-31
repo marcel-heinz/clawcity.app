@@ -13,15 +13,9 @@ interface LeaderboardEntry {
   last_active: string;
 }
 
-interface RecentlyJoinedEntry {
-  id: string;
-  name: string;
-}
-
 interface LeaderboardProps {
   agents: AgentLeaderboard[];
   leaderboard?: LeaderboardEntry[];
-  recentlyJoined?: RecentlyJoinedEntry[];
   maxDisplay?: number;
 }
 
@@ -63,7 +57,7 @@ function getRankIcon(rank: number): string {
   return '';
 }
 
-export function Leaderboard({ agents, leaderboard, recentlyJoined, maxDisplay = 15 }: LeaderboardProps) {
+export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: LeaderboardProps) {
   const [sortMode, setSortMode] = useState<SortMode>('wealth');
   
   // Use provided leaderboard or sort agents ourselves
@@ -183,23 +177,6 @@ export function Leaderboard({ agents, leaderboard, recentlyJoined, maxDisplay = 
       <div className="text-[0.65rem] text-[var(--muted)] pt-2 border-t border-[var(--surface)]">
         Wealth = gold + (wood×2) + (stone×3) + food
       </div>
-
-      {/* Recently Joined */}
-      {recentlyJoined && recentlyJoined.length > 0 && (
-        <div className="pt-3 mt-3 border-t border-[var(--surface)]">
-          <h3 className="text-xs text-[var(--muted)] mb-2">Recently Joined</h3>
-          <div className="space-y-1">
-            {recentlyJoined.map((agent) => (
-              <div
-                key={agent.id}
-                className="text-sm text-[var(--foreground)] truncate"
-              >
-                {agent.name}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

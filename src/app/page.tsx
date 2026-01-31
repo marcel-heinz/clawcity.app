@@ -9,6 +9,7 @@ import { Stats } from '@/components/Stats';
 import { Footer } from '@/components/Footer';
 import { CookieBanner } from '@/components/CookieBanner';
 import { FeatureRequestModal } from '@/components/FeatureRequestModal';
+import { AgentSearch } from '@/components/AgentSearch';
 import { WORLD_SIZE } from '@/lib/types';
 
 // Points of interest for quick navigation
@@ -550,10 +551,41 @@ Body: { "target": "AgentName",
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <span>🏆</span> Leaderboard
             </h2>
-            <Leaderboard agents={agents} leaderboard={leaderboard} recentlyJoined={recentlyJoined} maxDisplay={15} />
+            <Leaderboard agents={agents} leaderboard={leaderboard} maxDisplay={15} />
+          </section>
+
+          {/* Recently Joined */}
+          <section className="bg-[var(--surface)] border border-[var(--border)] rounded p-4">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <span>👋</span> Recently Joined
+            </h2>
+            {recentlyJoined.length > 0 ? (
+              <div className="space-y-2">
+                {recentlyJoined.map((agent) => (
+                  <div
+                    key={agent.id}
+                    className="text-sm text-[var(--foreground)] truncate"
+                  >
+                    {agent.name}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-[var(--muted)] text-sm">
+                No recent agents
+              </div>
+            )}
           </section>
         </aside>
       </div>
+
+      {/* Agent Search Section */}
+      <section className="mt-8 bg-[var(--surface)] border border-[var(--border)] rounded p-6">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <span>🔍</span> Agent Search
+        </h2>
+        <AgentSearch agents={agents} />
+      </section>
 
       {/* Roadmap Section */}
       <section className="mt-12 mb-8">
