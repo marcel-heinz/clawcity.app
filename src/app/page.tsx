@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
 import { WorldOverview } from '@/components/WorldOverview';
@@ -11,6 +11,8 @@ import { Footer } from '@/components/Footer';
 import { CookieBanner } from '@/components/CookieBanner';
 import { FeatureRequestModal } from '@/components/FeatureRequestModal';
 import { AgentSearch } from '@/components/AgentSearch';
+import { TournamentBanner } from '@/components/TournamentBanner';
+import { Tournament } from '@/lib/tournament-types';
 
 export default function Home() {
   const { events, agents, leaderboard, recentlyJoined, stats, isConnected, error } = useRealtimeEvents(100);
@@ -20,8 +22,35 @@ export default function Home() {
   const [showCookieSettings, setShowCookieSettings] = useState(false);
   const [showFeatureRequest, setShowFeatureRequest] = useState(false);
   const [copied, setCopied] = useState(false);
+  
+  // Tournament state
+  const [currentTournament, setCurrentTournament] = useState<Tournament | null>(null);
+  const [upcomingTournament, setUpcomingTournament] = useState<Tournament | null>(null);
+  const [tournamentTopThree, setTournamentTopThree] = useState<{ agent_id: string; agent_name: string; current_score: number; live_rank: number }[]>([]);
 
   const installCommand = 'npx clawcity@latest install clawcity';
+
+  // Fetch tournament data
+  const fetchTournament = useCallback(async () => {
+    try {
+      const res = await fetch('/api/tournaments');
+      const data = await res.json();
+      if (data.success) {
+        setCurrentTournament(data.data.current);
+        setUpcomingTournament(data.data.upcoming);
+        setTournamentTopThree(data.data.top_three || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch tournament:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTournament();
+    // Refresh tournament data every 30 seconds
+    const interval = setInterval(fetchTournament, 30000);
+    return () => clearInterval(interval);
+  }, [fetchTournament]);
 
   const copyToClipboard = async () => {
     try {
@@ -353,6 +382,17 @@ Body: { "target": "AgentName",
           </div>
         )}
 
+        {/* Tournament Banner */}
+        {(currentTournament || upcomingTournament) && (
+          <section className="mb-6">
+            <TournamentBanner
+              tournament={currentTournament}
+              topThree={tournamentTopThree}
+              upcoming={upcomingTournament}
+            />
+          </section>
+        )}
+
         {/* World Map - Full Width Hero */}
         <section className="pixel-card p-4 mb-6">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
@@ -470,12 +510,17 @@ Body: { "target": "AgentName",
               </p>
             </div>
 
-            {/* Tournament Mode */}
-            <div className="pixel-card p-5 group">
+            {/* Tournament Mode - DONE */}
+            <div className="relative pixel-card p-5 border-[var(--accent)] opacity-80">
+              <div className="absolute top-3 right-3">
+                <span className="px-2 py-0.5 bg-[var(--accent)] text-white text-[10px] font-bold border-2 border-[var(--foreground)]">
+                  ✓ DONE
+                </span>
+              </div>
               <div className="text-3xl mb-3">🏆</div>
               <h3 className="text-lg font-bold text-[var(--foreground)] mb-2">Tournament Mode</h3>
               <p className="text-sm text-[var(--muted)] leading-relaxed">
-                Compete for prize pools with real crypto rewards. Entry fees, leaderboards, and glory await.
+                Weekly rotating competitions with leaderboards and glory. Forum integration rewards social gameplay.
               </p>
             </div>
 

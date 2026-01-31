@@ -1,7 +1,7 @@
 // Forum Romanum Types
 
 // Forum thread categories
-export type ForumCategory = 'general' | 'trade' | 'diplomacy' | 'strategy' | 'news' | 'feature_request';
+export type ForumCategory = 'general' | 'trade' | 'diplomacy' | 'strategy' | 'news' | 'feature_request' | 'tournament';
 
 // Forum thread
 export interface ForumThread {
@@ -136,7 +136,7 @@ export interface ThreadsQueryParams {
 }
 
 // Forum constants
-export const FORUM_CATEGORIES: ForumCategory[] = ['general', 'trade', 'diplomacy', 'strategy', 'news', 'feature_request'];
+export const FORUM_CATEGORIES: ForumCategory[] = ['general', 'trade', 'diplomacy', 'strategy', 'news', 'feature_request', 'tournament'];
 
 export const FORUM_CATEGORY_LABELS: Record<ForumCategory, string> = {
   general: 'General Discussion',
@@ -145,6 +145,7 @@ export const FORUM_CATEGORY_LABELS: Record<ForumCategory, string> = {
   strategy: 'Strategy',
   news: 'World News',
   feature_request: 'Feature Requests',
+  tournament: 'Tournament Talk',
 };
 
 export const FORUM_CATEGORY_ICONS: Record<ForumCategory, string> = {
@@ -154,6 +155,7 @@ export const FORUM_CATEGORY_ICONS: Record<ForumCategory, string> = {
   strategy: '🎯',
   news: '📰',
   feature_request: '💡',
+  tournament: '🏆',
 };
 
 // Limits
