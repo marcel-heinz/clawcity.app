@@ -17,48 +17,62 @@ interface ZoneData {
 
 // Determine which zone an agent is in based on coordinates
 function getAgentZone(x: number, y: number): string {
-  // Mountains in corners (within 50 tiles of corner)
   if (x < 50 && y < 50) return 'mountains-nw';
   if (x > 450 && y < 50) return 'mountains-ne';
   if (x < 50 && y > 450) return 'mountains-sw';
   if (x > 450 && y > 450) return 'mountains-se';
   
-  // Central lake area (around 250, 250)
   const distToCenter = Math.sqrt((x - 250) ** 2 + (y - 250) ** 2);
   if (distToCenter < 60) return 'lake';
   
-  // Markets area (center-top region)
   if (x > 100 && x < 400 && y > 100 && y < 200) return 'markets';
   
-  // Forest regions (left and right sides)
   if (x < 150 && y > 50 && y < 450) return 'forest-west';
   if (x > 350 && y > 50 && y < 450) return 'forest-east';
   
-  // Plains regions
-  if (y > 300) return 'plains';
-  
-  // Default to plains for remaining areas
   return 'plains';
 }
 
-// Zone badge component that floats over terrain
+// Compact zone badge
 function ZoneBadge({ 
   zone, 
+  compact = false,
   className = '' 
 }: { 
   zone: ZoneData;
+  compact?: boolean;
   className?: string;
 }) {
   const [isHovered, setIsHovered] = useState(false);
 
+  if (compact) {
+    return (
+      <div 
+        className={`zone-badge rounded-lg px-2 py-1 cursor-pointer transition-all duration-200 ${className}`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        style={{ transform: isHovered ? 'scale(1.1)' : 'scale(1)' }}
+      >
+        <div className="text-[10px] font-bold text-white/80 whitespace-nowrap">{zone.name}</div>
+        <div className="flex items-center gap-1">
+          <span className="text-xs">👥</span>
+          <span className="text-white font-bold">{zone.agentCount}</span>
+        </div>
+        {isHovered && zone.totalTerritories > 0 && (
+          <div className="mt-1 pt-1 border-t border-white/20 text-[9px] text-white/60">
+            🏴 {zone.totalTerritories} claimed
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div 
-      className={`zone-badge absolute rounded-xl px-3 py-2 cursor-pointer transition-all duration-200 ${className}`}
+      className={`zone-badge rounded-xl px-3 py-2 cursor-pointer transition-all duration-200 ${className}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      style={{
-        transform: isHovered ? 'scale(1.05)' : 'scale(1)',
-      }}
+      style={{ transform: isHovered ? 'scale(1.05)' : 'scale(1)' }}
     >
       <div className="text-xs font-bold text-white/90 mb-1">{zone.name}</div>
       <div className="flex items-center gap-1.5">
@@ -66,16 +80,15 @@ function ZoneBadge({
         <span className="text-white font-bold text-lg">{zone.agentCount}</span>
       </div>
       
-      {/* Expanded details on hover */}
       {isHovered && zone.totalTerritories > 0 && (
-        <div className="mt-2 pt-2 border-t border-white/20 animate-fadeIn">
+        <div className="mt-2 pt-2 border-t border-white/20">
           <div className="text-[10px] text-white/60 mb-1">🏴 {zone.totalTerritories} territories</div>
           {zone.topHolders.length > 0 && (
             <div className="space-y-0.5">
               {zone.topHolders.slice(0, 3).map((holder, i) => (
                 <div key={holder.name} className="flex items-center gap-1 text-[10px]">
                   <span className="text-amber-400">{i + 1}.</span>
-                  <span className="text-white truncate">{holder.name}</span>
+                  <span className="text-white truncate max-w-[80px]">{holder.name}</span>
                   <span className="text-white/50">({holder.count})</span>
                 </div>
               ))}
@@ -87,40 +100,10 @@ function ZoneBadge({
   );
 }
 
-// Decorative pixel trees
-function PixelTrees({ count, className = '' }: { count: number; className?: string }) {
-  return (
-    <div className={`flex gap-1 ${className}`}>
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="pixel-tree" style={{ opacity: 0.7 + Math.random() * 0.3 }} />
-      ))}
-    </div>
-  );
-}
-
-// Decorative pixel mountains  
-function PixelMountains({ count, className = '' }: { count: number; className?: string }) {
-  return (
-    <div className={`flex gap-0 ${className}`}>
-      {Array.from({ length: count }).map((_, i) => (
-        <div 
-          key={i} 
-          className="pixel-mountain" 
-          style={{ 
-            transform: `scale(${0.8 + Math.random() * 0.4})`,
-            opacity: 0.8 + Math.random() * 0.2 
-          }} 
-        />
-      ))}
-    </div>
-  );
-}
-
 export function WorldOverview({ agents }: WorldOverviewProps) {
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch tiles for territory data
   useEffect(() => {
     async function fetchTiles() {
       try {
@@ -138,11 +121,9 @@ export function WorldOverview({ agents }: WorldOverviewProps) {
     fetchTiles();
   }, []);
 
-  // Calculate zone statistics
   const zoneStats = useMemo(() => {
     const stats = new Map<string, ZoneData>();
     
-    // Initialize zones
     const zones = [
       { id: 'mountains-nw', name: 'Northern Peaks' },
       { id: 'mountains-ne', name: 'Eastern Cliffs' },
@@ -165,16 +146,12 @@ export function WorldOverview({ agents }: WorldOverviewProps) {
       });
     });
 
-    // Count agents per zone
     agents.forEach(agent => {
       const zoneId = getAgentZone(agent.x, agent.y);
       const zoneStat = stats.get(zoneId);
-      if (zoneStat) {
-        zoneStat.agentCount++;
-      }
+      if (zoneStat) zoneStat.agentCount++;
     });
 
-    // Count territories per zone
     const territoryOwners = new Map<string, Map<string, number>>();
     tiles.forEach(tile => {
       if (tile.owner_id && tile.owner_name) {
@@ -191,7 +168,6 @@ export function WorldOverview({ agents }: WorldOverviewProps) {
       }
     });
 
-    // Calculate top holders
     territoryOwners.forEach((owners, zoneId) => {
       const zoneStat = stats.get(zoneId);
       if (zoneStat) {
@@ -210,7 +186,7 @@ export function WorldOverview({ agents }: WorldOverviewProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[500px] text-[var(--muted)]">
+      <div className="flex items-center justify-center h-[400px] text-[var(--muted)]">
         <div className="text-center">
           <div className="text-4xl mb-2 animate-bounce">🗺️</div>
           <div>Loading world...</div>
@@ -221,188 +197,112 @@ export function WorldOverview({ agents }: WorldOverviewProps) {
 
   return (
     <div className="relative">
-      {/* World Stats Header */}
-      <div className="flex items-center justify-between mb-4">
+      {/* Stats Header */}
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3 text-sm">
-          <div className="flex items-center gap-1.5 bg-[var(--surface)] px-3 py-1.5 rounded-full border border-[var(--border)]">
+          <div className="flex items-center gap-1.5 bg-black/30 px-3 py-1.5 rounded-full border border-white/10">
             <span>👥</span>
             <span className="font-bold text-[var(--accent)]">{totalAgents}</span>
             <span className="text-[var(--muted)] text-xs">online</span>
           </div>
-          <div className="flex items-center gap-1.5 bg-[var(--surface)] px-3 py-1.5 rounded-full border border-[var(--border)]">
+          <div className="flex items-center gap-1.5 bg-black/30 px-3 py-1.5 rounded-full border border-white/10">
             <span>🏴</span>
             <span className="font-bold text-amber-400">{totalTerritories}</span>
             <span className="text-[var(--muted)] text-xs">territories</span>
           </div>
         </div>
-        <div className="text-[10px] text-[var(--muted)]">Hover zones for details</div>
+        <div className="text-[10px] text-[var(--muted)]">Hover for details</div>
       </div>
 
-      {/* THE PIXEL ART MAP */}
-      <div className="relative rounded-2xl overflow-hidden border-4 border-[#2a2a3a] shadow-2xl" style={{ aspectRatio: '16/10' }}>
-        
-        {/* ===== ROW 1: Mountains Top ===== */}
-        <div className="absolute top-0 left-0 right-0 h-[15%] flex">
-          {/* NW Mountains */}
-          <div className="w-[20%] h-full terrain-mountain zone-hover-glow relative">
-            <ZoneBadge 
-              zone={zoneStats.get('mountains-nw')!} 
-              className="top-2 left-2"
-            />
+      {/* THE MAP - Using CSS Grid for precise layout */}
+      <div className="relative rounded-2xl overflow-hidden border-4 border-[#1a1a2e] shadow-2xl bg-[#1a1a2e]">
+        <div className="grid grid-cols-12 grid-rows-6" style={{ aspectRatio: '2/1' }}>
+          
+          {/* Row 1: Top mountains and market */}
+          <div className="col-span-2 row-span-1 terrain-mountain relative flex items-start justify-start p-1">
+            <ZoneBadge zone={zoneStats.get('mountains-nw')!} compact className="scale-90 origin-top-left" />
           </div>
-          
-          {/* Forest strip top */}
-          <div className="w-[25%] h-full terrain-forest" />
-          
-          {/* Market center top */}
-          <div className="w-[30%] h-full terrain-market zone-hover-glow relative">
-            <ZoneBadge 
-              zone={zoneStats.get('markets')!} 
-              className="top-2 left-1/2 -translate-x-1/2"
-            />
+          <div className="col-span-2 row-span-1 terrain-forest" />
+          <div className="col-span-4 row-span-1 terrain-market relative flex items-start justify-center pt-1">
+            <ZoneBadge zone={zoneStats.get('markets')!} compact />
           </div>
-          
-          {/* Forest strip top right */}
-          <div className="w-[25%] h-full terrain-forest" />
-          
-          {/* NE Mountains */}
-          <div className="w-[20%] h-full terrain-mountain zone-hover-glow relative">
-            <ZoneBadge 
-              zone={zoneStats.get('mountains-ne')!} 
-              className="top-2 right-2"
-            />
+          <div className="col-span-2 row-span-1 terrain-forest" />
+          <div className="col-span-2 row-span-1 terrain-mountain relative flex items-start justify-end p-1">
+            <ZoneBadge zone={zoneStats.get('mountains-ne')!} compact className="scale-90 origin-top-right" />
+          </div>
+
+          {/* Row 2: Forest sides, grass middle */}
+          <div className="col-span-2 row-span-2 terrain-forest relative flex items-center justify-start pl-1">
+            <ZoneBadge zone={zoneStats.get('forest-west')!} compact />
+          </div>
+          <div className="col-span-1 row-span-2 terrain-grass" />
+          <div className="col-span-6 row-span-2 terrain-grass relative">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-1/4 h-full terrain-path opacity-50" />
+            </div>
+          </div>
+          <div className="col-span-1 row-span-2 terrain-grass" />
+          <div className="col-span-2 row-span-2 terrain-forest relative flex items-center justify-end pr-1">
+            <ZoneBadge zone={zoneStats.get('forest-east')!} compact />
+          </div>
+
+          {/* Row 3-4: Lake in center, plains around */}
+          <div className="col-span-2 row-span-2 terrain-grass" />
+          <div className="col-span-8 row-span-2 relative flex items-center justify-center">
+            {/* Lake */}
+            <div className="absolute inset-4 terrain-water rounded-[40%] flex items-center justify-center shadow-lg shadow-blue-500/30">
+              <ZoneBadge zone={zoneStats.get('lake')!} />
+            </div>
+            {/* Grass around lake */}
+            <div className="absolute inset-0 terrain-grass -z-10" />
+          </div>
+          <div className="col-span-2 row-span-2 terrain-grass" />
+
+          {/* Row 5: Plains */}
+          <div className="col-span-12 row-span-1 terrain-grass relative flex items-center justify-center">
+            <ZoneBadge zone={zoneStats.get('plains')!} />
+            <span className="absolute left-[15%] text-xl opacity-40">🌾</span>
+            <span className="absolute right-[20%] text-lg opacity-30">🌻</span>
+          </div>
+
+          {/* Row 6: Bottom mountains */}
+          <div className="col-span-3 row-span-1 terrain-mountain relative flex items-end justify-start p-1">
+            <ZoneBadge zone={zoneStats.get('mountains-sw')!} compact className="scale-90 origin-bottom-left" />
+          </div>
+          <div className="col-span-6 row-span-1 terrain-grass" />
+          <div className="col-span-3 row-span-1 terrain-mountain relative flex items-end justify-end p-1">
+            <ZoneBadge zone={zoneStats.get('mountains-se')!} compact className="scale-90 origin-bottom-right" />
           </div>
         </div>
 
-        {/* ===== ROW 2: Forest sides + upper content ===== */}
-        <div className="absolute top-[15%] left-0 right-0 h-[25%] flex">
-          {/* West Forest */}
-          <div className="w-[18%] h-full terrain-forest zone-hover-glow relative">
-            <ZoneBadge 
-              zone={zoneStats.get('forest-west')!} 
-              className="top-4 left-2"
-            />
-          </div>
-          
-          {/* Grass transition */}
-          <div className="w-[12%] h-full terrain-grass" />
-          
-          {/* Center grass/path area */}
-          <div className="w-[40%] h-full terrain-grass relative">
-            {/* Path to market */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[30%] h-full terrain-path opacity-70" />
-          </div>
-          
-          {/* Grass transition */}
-          <div className="w-[12%] h-full terrain-grass" />
-          
-          {/* East Forest */}
-          <div className="w-[18%] h-full terrain-forest zone-hover-glow relative">
-            <ZoneBadge 
-              zone={zoneStats.get('forest-east')!} 
-              className="top-4 right-2"
-            />
-          </div>
-        </div>
+        {/* Subtle grid overlay */}
+        <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{
+          backgroundImage: 'linear-gradient(white 1px, transparent 1px), linear-gradient(90deg, white 1px, transparent 1px)',
+          backgroundSize: '24px 24px'
+        }} />
 
-        {/* ===== ROW 3: Lake Center ===== */}
-        <div className="absolute top-[40%] left-0 right-0 h-[25%] flex">
-          {/* West Forest continues */}
-          <div className="w-[18%] h-full terrain-forest" />
-          
-          {/* Plains west of lake */}
-          <div className="w-[15%] h-full terrain-grass" />
-          
-          {/* THE LAKE */}
-          <div className="w-[34%] h-full terrain-water zone-hover-glow relative rounded-full mx-auto">
-            <ZoneBadge 
-              zone={zoneStats.get('lake')!} 
-              className="top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-            />
-            {/* Lake shore effect */}
-            <div className="absolute inset-2 rounded-full border-4 border-[#3498db]/30" />
-          </div>
-          
-          {/* Plains east of lake */}
-          <div className="w-[15%] h-full terrain-grass" />
-          
-          {/* East Forest continues */}
-          <div className="w-[18%] h-full terrain-forest" />
-        </div>
-
-        {/* ===== ROW 4: Plains ===== */}
-        <div className="absolute top-[65%] left-0 right-0 h-[20%] flex">
-          {/* SW transition */}
-          <div className="w-[15%] h-full terrain-grass" />
-          
-          {/* Main Plains */}
-          <div className="w-[70%] h-full terrain-grass zone-hover-glow relative">
-            <ZoneBadge 
-              zone={zoneStats.get('plains')!} 
-              className="top-2 left-1/2 -translate-x-1/2"
-            />
-            {/* Decorative elements */}
-            <div className="absolute bottom-2 left-[20%] text-2xl opacity-60">🌾</div>
-            <div className="absolute bottom-4 right-[25%] text-xl opacity-50">🌻</div>
-            <div className="absolute top-2 left-[40%] text-lg opacity-40">🌿</div>
-          </div>
-          
-          {/* SE transition */}
-          <div className="w-[15%] h-full terrain-grass" />
-        </div>
-
-        {/* ===== ROW 5: Mountains Bottom ===== */}
-        <div className="absolute bottom-0 left-0 right-0 h-[15%] flex">
-          {/* SW Mountains */}
-          <div className="w-[25%] h-full terrain-mountain zone-hover-glow relative">
-            <ZoneBadge 
-              zone={zoneStats.get('mountains-sw')!} 
-              className="bottom-2 left-2"
-            />
-          </div>
-          
-          {/* Plains bottom */}
-          <div className="w-[50%] h-full terrain-grass" />
-          
-          {/* SE Mountains */}
-          <div className="w-[25%] h-full terrain-mountain zone-hover-glow relative">
-            <ZoneBadge 
-              zone={zoneStats.get('mountains-se')!} 
-              className="bottom-2 right-2"
-            />
-          </div>
-        </div>
-
-        {/* Decorative overlay grid lines */}
-        <div className="absolute inset-0 pointer-events-none opacity-5">
-          <div className="w-full h-full" style={{
-            backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-            backgroundSize: '32px 32px'
-          }} />
-        </div>
-
-        {/* Vignette effect */}
+        {/* Vignette */}
         <div className="absolute inset-0 pointer-events-none" style={{
-          background: 'radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%)'
+          background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.5) 100%)'
         }} />
       </div>
 
       {/* Legend */}
-      <div className="mt-4 flex flex-wrap justify-center gap-4 text-[11px] text-[var(--muted)]">
+      <div className="mt-3 flex flex-wrap justify-center gap-4 text-[11px] text-[var(--muted)]">
         <span className="flex items-center gap-1.5">
-          <span className="w-4 h-4 rounded terrain-grass border border-white/20" /> Plains
+          <span className="w-4 h-4 rounded terrain-grass border border-white/10" /> Plains
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-4 h-4 rounded terrain-forest border border-white/20" /> Forest
+          <span className="w-4 h-4 rounded terrain-forest border border-white/10" /> Forest
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-4 h-4 rounded terrain-mountain border border-white/20" /> Mountain
+          <span className="w-4 h-4 rounded terrain-mountain border border-white/10" /> Mountain
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-4 h-4 rounded terrain-water border border-white/20" /> Water
+          <span className="w-4 h-4 rounded terrain-water border border-white/10" /> Water
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-4 h-4 rounded terrain-market border border-white/20" /> Market
+          <span className="w-4 h-4 rounded terrain-market border border-white/10" /> Market
         </span>
       </div>
     </div>

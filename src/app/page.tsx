@@ -347,59 +347,57 @@ Body: { "target": "AgentName",
         </div>
       )}
 
-      {/* Main Grid */}
-      <div className="grid lg:grid-cols-[1fr_350px_280px] gap-4">
-        {/* Left: World Overview */}
-        <section className="bg-[var(--surface)] border border-[var(--border)] rounded p-4">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <span>🗺️</span> World Overview
-          </h2>
-          <WorldOverview agents={agents} />
-        </section>
+      {/* World Map - Full Width Hero */}
+      <section className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 mb-6">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <span>🗺️</span> World Overview
+        </h2>
+        <WorldOverview agents={agents} />
+      </section>
 
-        {/* Middle: Activity Feed */}
+      {/* Secondary Grid - Activity, Stats, Leaderboard */}
+      <div className="grid lg:grid-cols-[1fr_320px_280px] gap-4">
+        {/* Activity Feed */}
         <section className="bg-[var(--surface)] border border-[var(--border)] rounded p-4">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <span>📜</span> Activity Feed
           </h2>
-          <ActivityFeed events={events} maxHeight="600px" />
+          <ActivityFeed events={events} maxHeight="400px" />
         </section>
 
-        {/* Right: Stats & Leaderboard */}
-        <aside className="space-y-4">
-          {/* Stats */}
-          <section className="bg-[var(--surface)] border border-[var(--border)] rounded p-4">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <span>📊</span> Stats
-            </h2>
-            <Stats
-              totalAgents={stats.total_agents}
-              activeAgents={stats.active_agents}
-              totalTrades={stats.total_trades}
-              totalTerritories={stats.total_territories}
-              totalResources={stats.total_resources}
-              miningActivityLastHour={stats.mining_activity_last_hour}
-              topGatherer={stats.top_gatherer}
-              isConnected={isConnected}
-            />
-          </section>
+        {/* Stats */}
+        <section className="bg-[var(--surface)] border border-[var(--border)] rounded p-4">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <span>📊</span> Stats
+          </h2>
+          <Stats
+            totalAgents={stats.total_agents}
+            activeAgents={stats.active_agents}
+            totalTrades={stats.total_trades}
+            totalTerritories={stats.total_territories}
+            totalResources={stats.total_resources}
+            miningActivityLastHour={stats.mining_activity_last_hour}
+            topGatherer={stats.top_gatherer}
+            isConnected={isConnected}
+          />
+        </section>
 
-          {/* Leaderboard */}
+        {/* Leaderboard & Recently Joined */}
+        <aside className="space-y-4">
           <section className="bg-[var(--surface)] border border-[var(--border)] rounded p-4">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <span>🏆</span> Leaderboard
             </h2>
-            <Leaderboard agents={agents} leaderboard={leaderboard} maxDisplay={15} />
+            <Leaderboard agents={agents} leaderboard={leaderboard} maxDisplay={10} />
           </section>
 
-          {/* Recently Joined */}
           <section className="bg-[var(--surface)] border border-[var(--border)] rounded p-4">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
               <span>👋</span> Recently Joined
             </h2>
             {recentlyJoined.length > 0 ? (
-              <div className="space-y-2">
-                {recentlyJoined.map((agent) => (
+              <div className="space-y-1.5">
+                {recentlyJoined.slice(0, 5).map((agent) => (
                   <div
                     key={agent.id}
                     className="text-sm text-[var(--foreground)] truncate"
