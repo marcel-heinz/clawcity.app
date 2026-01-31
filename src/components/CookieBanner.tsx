@@ -47,8 +47,8 @@ export function CookieBanner({ isSettingsOpen, onCloseSettings }: CookieBannerPr
   // Settings modal
   if (isSettingsOpen) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-6 max-w-md mx-4 shadow-xl">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="pixel-card p-6 max-w-md mx-4 shadow-xl">
           <h2 className="text-lg font-bold mb-4 text-[var(--foreground)]">
             🍪 Cookie Settings
           </h2>
@@ -59,17 +59,17 @@ export function CookieBanner({ isSettingsOpen, onCloseSettings }: CookieBannerPr
           </p>
 
           <div className="space-y-3 mb-6">
-            <div className="flex items-center justify-between p-3 bg-[var(--background)] rounded border border-[var(--border)]">
+            <div className="flex items-center justify-between p-3 bg-[var(--surface-alt)] border-2 border-[var(--border)]">
               <div>
-                <p className="text-sm font-medium">Essential Cookies</p>
+                <p className="text-sm font-medium text-[var(--foreground)]">Essential Cookies</p>
                 <p className="text-xs text-[var(--muted)]">Required for basic functionality</p>
               </div>
-              <span className="text-xs text-[var(--accent)]">Always on</span>
+              <span className="text-xs text-[var(--accent)] font-medium">Always on</span>
             </div>
 
-            <div className="flex items-center justify-between p-3 bg-[var(--background)] rounded border border-[var(--border)]">
+            <div className="flex items-center justify-between p-3 bg-[var(--surface-alt)] border-2 border-[var(--border)]">
               <div>
-                <p className="text-sm font-medium">Analytics</p>
+                <p className="text-sm font-medium text-[var(--foreground)]">Analytics</p>
                 <p className="text-xs text-[var(--muted)]">Helps us improve the experience</p>
               </div>
               <span className="text-xs text-[var(--muted)]">
@@ -80,7 +80,7 @@ export function CookieBanner({ isSettingsOpen, onCloseSettings }: CookieBannerPr
 
           <p className="text-xs text-[var(--muted)] mb-4">
             Current preference:{' '}
-            <span className={consent === 'accepted' ? 'text-[var(--accent)]' : 'text-amber-400'}>
+            <span className={consent === 'accepted' ? 'text-[var(--accent)] font-medium' : 'text-[var(--gold)] font-medium'}>
               {consent === 'accepted' ? 'Accepted' : consent === 'declined' ? 'Declined' : 'Not set'}
             </span>
           </p>
@@ -88,13 +88,13 @@ export function CookieBanner({ isSettingsOpen, onCloseSettings }: CookieBannerPr
           <div className="flex gap-3">
             <button
               onClick={handleDecline}
-              className="flex-1 px-4 py-2 text-sm border border-[var(--border)] rounded hover:border-[var(--muted)] transition-colors"
+              className="flex-1 px-4 py-2 text-sm border-2 border-[var(--border)] hover:border-[var(--muted)] transition-colors"
             >
               Decline
             </button>
             <button
               onClick={handleAccept}
-              className="flex-1 px-4 py-2 text-sm bg-[var(--accent)] text-black font-semibold rounded hover:opacity-90 transition-opacity"
+              className="flex-1 px-4 py-2 text-sm bg-[var(--accent)] text-white font-semibold hover:opacity-90 transition-opacity"
             >
               Accept All
             </button>
@@ -116,7 +116,7 @@ export function CookieBanner({ isSettingsOpen, onCloseSettings }: CookieBannerPr
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 p-4">
-      <div className="max-w-2xl mx-auto bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4 shadow-xl">
+      <div className="max-w-2xl mx-auto pixel-card p-4 shadow-xl">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
           <div className="flex-1">
             <p className="text-sm text-[var(--foreground)]">
@@ -125,7 +125,7 @@ export function CookieBanner({ isSettingsOpen, onCloseSettings }: CookieBannerPr
             </p>
             <p className="text-xs text-[var(--muted)] mt-1">
               See our{' '}
-              <a href="/privacy" className="text-[var(--accent)] hover:underline">
+              <a href="/privacy" className="text-[var(--accent)] hover:underline font-medium">
                 Privacy Policy
               </a>{' '}
               for details.
@@ -134,13 +134,13 @@ export function CookieBanner({ isSettingsOpen, onCloseSettings }: CookieBannerPr
           <div className="flex gap-2 w-full sm:w-auto">
             <button
               onClick={handleDecline}
-              className="flex-1 sm:flex-none px-4 py-2 text-sm border border-[var(--border)] rounded hover:border-[var(--muted)] transition-colors"
+              className="flex-1 sm:flex-none px-4 py-2 text-sm border-2 border-[var(--border)] hover:border-[var(--muted)] transition-colors"
             >
               Decline
             </button>
             <button
               onClick={handleAccept}
-              className="flex-1 sm:flex-none px-4 py-2 text-sm bg-[var(--accent)] text-black font-semibold rounded hover:opacity-90 transition-opacity"
+              className="flex-1 sm:flex-none px-4 py-2 text-sm bg-[var(--accent)] text-white font-semibold hover:opacity-90 transition-opacity"
             >
               Accept
             </button>

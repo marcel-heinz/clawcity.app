@@ -97,18 +97,18 @@ export function FeatureRequestModal({ isOpen, onClose }: FeatureRequestModalProp
       }}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       
       {/* Modal */}
-      <div className="relative w-full max-w-md bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-2xl">
+      <div className="relative w-full max-w-md pixel-card shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[var(--border)]">
-          <h2 className="text-lg font-bold flex items-center gap-2">
+        <div className="flex items-center justify-between p-4 border-b-2 border-[var(--border)]">
+          <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--foreground)]">
             <span>💡</span> Feature Request
           </h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--background)] rounded transition-colors"
+            className="w-8 h-8 flex items-center justify-center text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-alt)] transition-colors"
             aria-label="Close"
           >
             ✕
@@ -126,7 +126,7 @@ export function FeatureRequestModal({ isOpen, onClose }: FeatureRequestModalProp
               </p>
               <button
                 onClick={onClose}
-                className="px-6 py-2 bg-[var(--accent)] text-black font-semibold rounded hover:opacity-90 transition-opacity"
+                className="px-6 py-2 bg-[var(--accent)] text-white font-semibold hover:opacity-90 transition-opacity"
               >
                 Close
               </button>
@@ -135,8 +135,8 @@ export function FeatureRequestModal({ isOpen, onClose }: FeatureRequestModalProp
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Title */}
               <div>
-                <label htmlFor="title" className="block text-sm font-medium mb-1.5">
-                  Title <span className="text-red-400">*</span>
+                <label htmlFor="title" className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">
+                  Title <span className="text-[var(--red)]">*</span>
                 </label>
                 <input
                   type="text"
@@ -145,7 +145,7 @@ export function FeatureRequestModal({ isOpen, onClose }: FeatureRequestModalProp
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="What feature would you like to see?"
                   maxLength={200}
-                  className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded text-sm focus:outline-none focus:border-[var(--accent)] transition-colors"
+                  className="w-full px-3 py-2 bg-[var(--surface-alt)] border-2 border-[var(--border)] text-sm text-[var(--foreground)] focus:outline-none focus:border-[var(--accent)] transition-colors"
                   disabled={status === 'loading'}
                 />
                 <div className="text-xs text-[var(--muted)] mt-1 text-right">
@@ -155,7 +155,7 @@ export function FeatureRequestModal({ isOpen, onClose }: FeatureRequestModalProp
 
               {/* Description */}
               <div>
-                <label htmlFor="description" className="block text-sm font-medium mb-1.5">
+                <label htmlFor="description" className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">
                   Description <span className="text-[var(--muted)]">(optional)</span>
                 </label>
                 <textarea
@@ -165,7 +165,7 @@ export function FeatureRequestModal({ isOpen, onClose }: FeatureRequestModalProp
                   placeholder="Tell us more about your idea..."
                   maxLength={2000}
                   rows={4}
-                  className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded text-sm focus:outline-none focus:border-[var(--accent)] transition-colors resize-none"
+                  className="w-full px-3 py-2 bg-[var(--surface-alt)] border-2 border-[var(--border)] text-sm text-[var(--foreground)] focus:outline-none focus:border-[var(--accent)] transition-colors resize-none"
                   disabled={status === 'loading'}
                 />
                 <div className="text-xs text-[var(--muted)] mt-1 text-right">
@@ -175,7 +175,7 @@ export function FeatureRequestModal({ isOpen, onClose }: FeatureRequestModalProp
 
               {/* Email */}
               <div>
-                <label htmlFor="email" className="block text-sm font-medium mb-1.5">
+                <label htmlFor="email" className="block text-sm font-medium mb-1.5 text-[var(--foreground)]">
                   Email <span className="text-[var(--muted)]">(optional)</span>
                 </label>
                 <input
@@ -184,14 +184,14 @@ export function FeatureRequestModal({ isOpen, onClose }: FeatureRequestModalProp
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Get notified when implemented"
-                  className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded text-sm focus:outline-none focus:border-[var(--accent)] transition-colors"
+                  className="w-full px-3 py-2 bg-[var(--surface-alt)] border-2 border-[var(--border)] text-sm text-[var(--foreground)] focus:outline-none focus:border-[var(--accent)] transition-colors"
                   disabled={status === 'loading'}
                 />
               </div>
 
               {/* Error message */}
               {status === 'error' && errorMessage && (
-                <div className="p-3 bg-red-900/30 border border-red-500/50 rounded text-red-400 text-sm">
+                <div className="p-3 bg-[var(--red-light)] border-2 border-[var(--red)] text-[var(--red)] text-sm">
                   {errorMessage}
                 </div>
               )}
@@ -200,7 +200,7 @@ export function FeatureRequestModal({ isOpen, onClose }: FeatureRequestModalProp
               <button
                 type="submit"
                 disabled={status === 'loading'}
-                className="w-full py-2.5 bg-[var(--accent)] text-black font-semibold rounded hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-[var(--accent)] text-white font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {status === 'loading' ? (
                   <>

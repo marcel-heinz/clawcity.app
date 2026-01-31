@@ -50,7 +50,7 @@ function getStatusColor(timestamp: string): string {
   const diffMin = Math.floor(diffMs / 60000);
 
   if (diffMin < 5) return 'bg-[var(--accent)]';
-  if (diffMin < 30) return 'bg-yellow-500';
+  if (diffMin < 30) return 'bg-[var(--gold)]';
   return 'bg-[var(--muted)]';
 }
 
@@ -135,40 +135,40 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
       <div className="flex flex-wrap gap-1 text-xs">
         <button
           onClick={() => setSortMode('wealth')}
-          className={`px-2 py-1 rounded transition-colors ${
+          className={`px-2 py-1 transition-colors border-2 ${
             sortMode === 'wealth' 
-              ? 'bg-[var(--accent)] text-black' 
-              : 'bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)]'
+              ? 'bg-[var(--accent)] text-white border-[var(--accent-dim)]' 
+              : 'bg-[var(--surface-alt)] text-[var(--muted)] border-[var(--border)] hover:text-[var(--foreground)]'
           }`}
         >
           💰 Wealth
         </button>
         <button
           onClick={() => setSortMode('gatherer')}
-          className={`px-2 py-1 rounded transition-colors ${
+          className={`px-2 py-1 transition-colors border-2 ${
             sortMode === 'gatherer' 
-              ? 'bg-[var(--accent)] text-black' 
-              : 'bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)]'
+              ? 'bg-[var(--accent)] text-white border-[var(--accent-dim)]' 
+              : 'bg-[var(--surface-alt)] text-[var(--muted)] border-[var(--border)] hover:text-[var(--foreground)]'
           }`}
         >
           ⛏️ Gatherer
         </button>
         <button
           onClick={() => setSortMode('territory')}
-          className={`px-2 py-1 rounded transition-colors ${
+          className={`px-2 py-1 transition-colors border-2 ${
             sortMode === 'territory' 
-              ? 'bg-[var(--accent)] text-black' 
-              : 'bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)]'
+              ? 'bg-[var(--accent)] text-white border-[var(--accent-dim)]' 
+              : 'bg-[var(--surface-alt)] text-[var(--muted)] border-[var(--border)] hover:text-[var(--foreground)]'
           }`}
         >
           🏴 Land
         </button>
         <button
           onClick={() => setSortMode('reputation')}
-          className={`px-2 py-1 rounded transition-colors ${
+          className={`px-2 py-1 transition-colors border-2 ${
             sortMode === 'reputation' 
-              ? 'bg-[var(--accent)] text-black' 
-              : 'bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--foreground)]'
+              ? 'bg-[var(--accent)] text-white border-[var(--accent-dim)]' 
+              : 'bg-[var(--surface-alt)] text-[var(--muted)] border-[var(--border)] hover:text-[var(--foreground)]'
           }`}
         >
           ⭐ Rep
@@ -180,14 +180,14 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
         {sortedAgents.map((agent) => (
           <div key={agent.id}>
             <div
-              className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-[var(--surface)] transition-colors cursor-pointer"
+              className="flex items-center gap-2 py-1.5 px-2 hover:bg-[var(--surface-alt)] transition-colors cursor-pointer"
               onClick={() => setExpandedAgent(expandedAgent === agent.id ? null : agent.id)}
             >
               {/* Rank */}
               <span className={`w-6 text-right text-sm ${
-                agent.rank === 1 ? 'text-yellow-400' :
-                agent.rank === 2 ? 'text-gray-300' :
-                agent.rank === 3 ? 'text-orange-400' :
+                agent.rank === 1 ? 'text-[var(--gold)]' :
+                agent.rank === 2 ? 'text-gray-400' :
+                agent.rank === 3 ? 'text-orange-500' :
                 'text-[var(--muted)]'
               }`}>
                 {getRankIcon(agent.rank) || `${agent.rank}.`}
@@ -200,7 +200,7 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
               />
               
               {/* Name */}
-              <span className="flex-1 truncate text-sm" title={agent.name}>
+              <span className="flex-1 truncate text-sm text-[var(--foreground)]" title={agent.name}>
                 {agent.name}
               </span>
               
@@ -225,26 +225,26 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
 
             {/* Expanded resource breakdown */}
             {expandedAgent === agent.id && (
-              <div className="ml-8 mr-2 mb-2 p-2 bg-[var(--background)] rounded border border-[var(--border)] text-xs">
+              <div className="ml-8 mr-2 mb-2 p-2 bg-[var(--surface-alt)] border-2 border-[var(--border)] text-xs">
                 <div className="grid grid-cols-2 gap-2">
                   {/* Current Inventory */}
                   <div>
                     <div className="text-[var(--muted)] mb-1 font-medium">Inventory</div>
                     <div className="space-y-0.5">
                       <div className="flex justify-between">
-                        <span className="text-yellow-400">🪙 Gold</span>
+                        <span className="text-yellow-600">🪙 Gold</span>
                         <span>{formatNumber(agent.gold || 0)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-amber-600">🪵 Wood</span>
+                        <span className="text-amber-700">🪵 Wood</span>
                         <span>{formatNumber(agent.wood || 0)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-400">🪨 Stone</span>
+                        <span className="text-gray-500">🪨 Stone</span>
                         <span>{formatNumber(agent.stone || 0)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-red-400">🍎 Food</span>
+                        <span className="text-red-500">🍎 Food</span>
                         <span>{formatNumber(agent.food || 0)}</span>
                       </div>
                     </div>
@@ -255,19 +255,19 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
                     <div className="text-[var(--muted)] mb-1 font-medium">Lifetime ⛏️</div>
                     <div className="space-y-0.5">
                       <div className="flex justify-between">
-                        <span className="text-yellow-400">🪙</span>
+                        <span className="text-yellow-600">🪙</span>
                         <span>{formatNumber(agent.total_gathered_gold || 0)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-amber-600">🪵</span>
+                        <span className="text-amber-700">🪵</span>
                         <span>{formatNumber(agent.total_gathered_wood || 0)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-400">🪨</span>
+                        <span className="text-gray-500">🪨</span>
                         <span>{formatNumber(agent.total_gathered_stone || 0)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-red-400">🍎</span>
+                        <span className="text-red-500">🍎</span>
                         <span>{formatNumber(agent.total_gathered_food || 0)}</span>
                       </div>
                     </div>
@@ -275,7 +275,7 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
                 </div>
                 
                 {/* Stats row */}
-                <div className="mt-2 pt-2 border-t border-[var(--border)] flex justify-between text-[var(--muted)]">
+                <div className="mt-2 pt-2 border-t-2 border-[var(--border)] flex justify-between text-[var(--muted)]">
                   <span>🏴 {agent.territory_count} tiles</span>
                   <span>⭐ {agent.reputation} rep</span>
                 </div>
@@ -286,7 +286,7 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
       </div>
 
       {/* Legend */}
-      <div className="text-[0.65rem] text-[var(--muted)] pt-2 border-t border-[var(--surface)]">
+      <div className="text-[0.65rem] text-[var(--muted)] pt-2 border-t-2 border-[var(--border)]">
         {sortMode === 'wealth' && 'Wealth = gold + (wood×2) + (stone×3) + food'}
         {sortMode === 'gatherer' && 'Total resources gathered (lifetime)'}
         {sortMode === 'territory' && 'Territories claimed (5 gold/day upkeep each)'}

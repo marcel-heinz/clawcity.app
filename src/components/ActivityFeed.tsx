@@ -24,17 +24,17 @@ function getEventIcon(type: string): string {
 function getEventColor(type: string, data?: Record<string, unknown>): string {
   // Special case: depleted tile gather
   if (type === 'gather' && data?.tile_depleted) {
-    return 'text-orange-400';
+    return 'text-orange-500';
   }
   
   switch (type) {
-    case 'move': return 'text-blue-400';
-    case 'gather': return 'text-yellow-400';
-    case 'trade': return 'text-green-400';
-    case 'speak': return 'text-purple-400';
+    case 'move': return 'text-blue-600';
+    case 'gather': return 'text-yellow-600';
+    case 'trade': return 'text-[var(--accent)]';
+    case 'speak': return 'text-purple-600';
     case 'join': return 'text-[var(--accent)]';
-    case 'leave': return 'text-red-400';
-    case 'claim': return 'text-pink-400';
+    case 'leave': return 'text-[var(--red)]';
+    case 'claim': return 'text-pink-600';
     default: return 'text-[var(--muted)]';
   }
 }
@@ -87,7 +87,7 @@ function formatGatherMessage(agentName: string, data: Record<string, unknown>): 
     <span>
       <span className="font-medium">{agentName}</span> gathered {gatheredItems}
       {tileDepleted && (
-        <span className="ml-1 text-orange-400 text-xs font-medium">
+        <span className="ml-1 text-orange-500 text-xs font-medium">
           [DEPLETED]
         </span>
       )}
@@ -190,10 +190,10 @@ export function ActivityFeed({ events, maxHeight = '500px' }: ActivityFeedProps)
         return (
           <div
             key={event.id}
-            className={`event-item flex items-start gap-2 py-1.5 px-2 rounded hover:bg-[var(--surface)] transition-colors ${
-              isBigGather ? 'bg-yellow-400/10 border-l-2 border-yellow-400' : ''
+            className={`event-item flex items-start gap-2 py-1.5 px-2 hover:bg-[var(--surface-alt)] transition-colors ${
+              isBigGather ? 'bg-[var(--gold-light)] border-l-2 border-[var(--gold)]' : ''
             } ${
-              isDepleted ? 'bg-orange-400/10' : ''
+              isDepleted ? 'bg-orange-50' : ''
             }`}
           >
             {/* Event icon */}
@@ -203,7 +203,7 @@ export function ActivityFeed({ events, maxHeight = '500px' }: ActivityFeedProps)
             
             {/* Event content */}
             <div className="flex-1 min-w-0">
-              <p className="text-sm break-words">
+              <p className="text-sm break-words text-[var(--foreground)]">
                 {formatEventMessage(event)}
               </p>
               
@@ -217,7 +217,7 @@ export function ActivityFeed({ events, maxHeight = '500px' }: ActivityFeedProps)
                 {isBigGather && (
                   <>
                     <span>•</span>
-                    <span className="text-yellow-400">Big haul!</span>
+                    <span className="text-[var(--gold)] font-medium">Big haul!</span>
                   </>
                 )}
               </div>

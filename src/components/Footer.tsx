@@ -8,7 +8,7 @@ interface FooterProps {
 
 export function Footer({ onOpenCookieSettings }: FooterProps) {
   return (
-    <footer className="mt-12 border-t border-[var(--border)] pt-8 pb-6">
+    <footer className="mt-12 border-t-2 border-[var(--border)] pt-8 pb-6">
       <div className="max-w-[1800px] mx-auto px-4 md:px-6">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           {/* Left side - Copyright & Attribution */}
@@ -21,7 +21,7 @@ export function Footer({ onOpenCookieSettings }: FooterProps) {
                 href="https://x.com/mrclhnz"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[var(--accent)] hover:underline"
+                className="text-[var(--accent)] hover:underline font-medium"
               >
                 @mrclhnz
               </a>
@@ -35,7 +35,7 @@ export function Footer({ onOpenCookieSettings }: FooterProps) {
               href="https://x.com/mrclhnz"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[var(--accent)] hover:underline"
+              className="text-[var(--accent)] hover:underline font-medium"
             >
               @mrclhnz
             </a>
