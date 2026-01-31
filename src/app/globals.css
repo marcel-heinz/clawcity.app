@@ -1,13 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #e0e0e0;
-  --accent: #4ade80;
-  --accent-dim: #22c55e;
-  --border: #262626;
-  --surface: #141414;
-  --muted: #737373;
+  /* Light mode - Warm parchment/game aesthetic */
+  --background: #faf7f2;
+  --foreground: #2d2a26;
+  --accent: #2d8f4e;
+  --accent-dim: #236b3d;
+  --accent-light: #e8f5ec;
+  --border: #e5e0d8;
+  --surface: #ffffff;
+  --surface-alt: #f5f2ec;
+  --muted: #7a756d;
+  --gold: #d4a017;
+  --gold-light: #fef3c7;
+  --red: #c94a4a;
+  --red-light: #fee2e2;
+  --pixel-shadow: #2d2a26;
 }
 
 @theme inline {
@@ -19,6 +27,7 @@
   --color-surface: var(--surface);
   --color-muted: var(--muted);
   --font-mono: var(--font-jetbrains-mono);
+  --font-pixel: var(--font-press-start);
 }
 
 body {
@@ -27,26 +36,108 @@ body {
   font-family: var(--font-mono), 'JetBrains Mono', 'Fira Code', monospace;
 }
 
-/* Custom scrollbar */
+/* Pixel font for headings */
+.font-pixel {
+  font-family: var(--font-press-start), 'Press Start 2P', monospace;
+}
+
+/* Custom scrollbar - Light mode */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--background);
+  background: var(--surface-alt);
+  border: 2px solid var(--border);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
+  background: var(--accent);
+  border: 2px solid var(--border);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--muted);
+  background: var(--accent-dim);
 }
 
-/* ASCII Map styles */
+/* ============================================
+   PIXEL UI COMPONENTS
+   ============================================ */
+
+/* Pixel-style box shadow (no blur, offset) */
+.pixel-shadow {
+  box-shadow: 4px 4px 0 var(--pixel-shadow);
+}
+
+.pixel-shadow-sm {
+  box-shadow: 2px 2px 0 var(--pixel-shadow);
+}
+
+.pixel-shadow-accent {
+  box-shadow: 4px 4px 0 var(--accent-dim);
+}
+
+/* Pixel border style */
+.pixel-border {
+  border: 3px solid var(--foreground);
+  image-rendering: pixelated;
+}
+
+.pixel-border-accent {
+  border: 3px solid var(--accent);
+}
+
+/* Pixel button base */
+.pixel-btn {
+  border: 3px solid var(--foreground);
+  box-shadow: 4px 4px 0 var(--foreground);
+  transition: all 0.1s ease;
+  image-rendering: pixelated;
+}
+
+.pixel-btn:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--foreground);
+}
+
+.pixel-btn:active {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
+/* Pixel card/panel */
+.pixel-card {
+  background: var(--surface);
+  border: 3px solid var(--foreground);
+  box-shadow: 6px 6px 0 rgba(45, 42, 38, 0.15);
+}
+
+/* Game-style panel with title bar */
+.game-panel {
+  background: var(--surface);
+  border: 4px solid var(--foreground);
+  border-radius: 0;
+  position: relative;
+}
+
+.game-panel-header {
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-dim) 100%);
+  color: white;
+  padding: 8px 12px;
+  font-weight: bold;
+  border-bottom: 3px solid var(--foreground);
+  margin: -1px -1px 0 -1px;
+}
+
+/* Dotted separator - pixel style */
+.pixel-dots {
+  border-bottom: 4px dotted var(--border);
+}
+
+/* ============================================
+   ASCII Map styles (legacy)
+   ============================================ */
 .map-tile {
   width: 1.2em;
   height: 1.2em;
@@ -56,13 +147,15 @@ body {
   font-size: 0.75rem;
 }
 
-.terrain-plains { color: #a3e635; }
-.terrain-forest { color: #22c55e; }
-.terrain-mountain { color: #94a3b8; }
-.terrain-market { color: #facc15; }
-.terrain-water { color: #38bdf8; }
+.terrain-plains { color: #5a8f29; }
+.terrain-forest { color: #2d6b1e; }
+.terrain-mountain { color: #6b7280; }
+.terrain-market { color: #b8860b; }
+.terrain-water { color: #2563eb; }
 
-/* Activity feed animations */
+/* ============================================
+   Activity feed animations
+   ============================================ */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -72,9 +165,9 @@ body {
   animation: fadeIn 0.3s ease-out;
 }
 
-/* Glow effect for important elements */
+/* Glow effect - adjusted for light mode */
 .glow-green {
-  text-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
+  text-shadow: 0 0 10px rgba(45, 143, 78, 0.4);
 }
 
 /* Hero section animations */
@@ -91,7 +184,223 @@ body {
   animation: bounce-slow 3s ease-in-out infinite;
 }
 
+/* Pixel bounce - more 8-bit style */
+@keyframes pixel-bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(-8px);
+  }
+  50% {
+    transform: translateY(0);
+  }
+  75% {
+    transform: translateY(-4px);
+  }
+}
+
+.animate-pixel-bounce {
+  animation: pixel-bounce 1.5s steps(8) infinite;
+}
+
 /* Radial gradient background */
 .bg-gradient-radial {
   background: radial-gradient(ellipse at center, var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to));
+}
+
+/* ============================================
+   PIXEL ART MAP STYLES - Brighter for light mode
+   ============================================ */
+
+/* Base pixel art rendering */
+.pixel-art {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* Grass/Plains pattern - brighter greens */
+.terrain-grass {
+  background-color: #7cb342;
+  background-image: 
+    radial-gradient(circle at 25% 25%, #8bc34a 2px, transparent 2px),
+    radial-gradient(circle at 75% 75%, #689f38 2px, transparent 2px),
+    radial-gradient(circle at 50% 10%, #9ccc65 1px, transparent 1px),
+    radial-gradient(circle at 20% 80%, #9ccc65 1px, transparent 1px),
+    radial-gradient(circle at 90% 40%, #689f38 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* Forest pattern - vibrant greens */
+.terrain-forest-map {
+  background-color: #43a047;
+  background-image:
+    radial-gradient(ellipse 8px 10px at 50% 30%, #2e7d32 100%, transparent 100%),
+    radial-gradient(ellipse 6px 8px at 30% 60%, #388e3c 100%, transparent 100%),
+    radial-gradient(ellipse 7px 9px at 70% 70%, #2e7d32 100%, transparent 100%),
+    linear-gradient(to bottom, transparent 70%, #6d4c41 70%, #6d4c41 85%, transparent 85%),
+    radial-gradient(circle at 50% 90%, #558b2f 3px, transparent 3px);
+  background-size: 32px 32px;
+}
+
+/* Mountain pattern - lighter stones */
+.terrain-mountain-map {
+  background-color: #78909c;
+  background-image:
+    linear-gradient(135deg, transparent 40%, #ffffff 40%, #ffffff 45%, transparent 45%),
+    linear-gradient(135deg, #90a4ae 25%, transparent 25%),
+    linear-gradient(225deg, #607d8b 25%, transparent 25%),
+    linear-gradient(45deg, #78909c 30%, transparent 30%),
+    radial-gradient(circle at 60% 80%, #607d8b 2px, transparent 2px),
+    radial-gradient(circle at 30% 70%, #90a4ae 2px, transparent 2px);
+  background-size: 24px 24px;
+}
+
+/* Water pattern - brighter blues */
+.terrain-water-map {
+  background-color: #42a5f5;
+  background-image:
+    linear-gradient(90deg, transparent 0%, rgba(144, 202, 249, 0.4) 50%, transparent 100%),
+    linear-gradient(180deg, 
+      #42a5f5 0%, 
+      #64b5f6 20%, 
+      #90caf9 40%, 
+      #64b5f6 60%, 
+      #42a5f5 80%,
+      #64b5f6 100%
+    );
+  background-size: 40px 20px, 100% 100%;
+  animation: waterWave 3s ease-in-out infinite;
+}
+
+@keyframes waterWave {
+  0%, 100% { background-position: 0px 0px, 0px 0px; }
+  50% { background-position: 20px 0px, 0px 0px; }
+}
+
+/* Market/Town pattern - warmer tones */
+.terrain-market-map {
+  background-color: #bcaaa4;
+  background-image:
+    linear-gradient(135deg, #e64a19 0%, #e64a19 50%, transparent 50%),
+    linear-gradient(225deg, #d84315 0%, #d84315 50%, transparent 50%),
+    linear-gradient(to bottom, transparent 50%, #efebe9 50%, #efebe9 90%, #795548 90%),
+    linear-gradient(to right, #d7ccc8 0%, #bcaaa4 50%, #d7ccc8 100%);
+  background-size: 24px 24px, 24px 24px, 24px 24px, 8px 8px;
+  background-position: 0 0, 12px 0, 0 0, 0 0;
+}
+
+/* Zone overlay badge - light mode */
+.zone-badge {
+  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid var(--foreground);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.2);
+  color: var(--foreground);
+}
+
+/* Hover glow effect for zones */
+.zone-hover-glow {
+  transition: all 0.3s ease;
+}
+
+.zone-hover-glow:hover {
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.1);
+}
+
+/* Path/road pattern */
+.terrain-path {
+  background-color: #d7ccc8;
+  background-image:
+    radial-gradient(circle at 20% 50%, #a1887f 3px, transparent 3px),
+    radial-gradient(circle at 80% 30%, #bcaaa4 2px, transparent 2px),
+    radial-gradient(circle at 50% 80%, #a1887f 2px, transparent 2px);
+  background-size: 12px 12px;
+}
+
+/* ============================================
+   HERO BANNER STYLES
+   ============================================ */
+.hero-banner {
+  background-image: url('/banner.jpg');
+  background-size: cover;
+  background-position: center;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.hero-overlay {
+  background: linear-gradient(
+    to bottom,
+    rgba(250, 247, 242, 0) 0%,
+    rgba(250, 247, 242, 0.3) 50%,
+    rgba(250, 247, 242, 0.95) 85%,
+    rgba(250, 247, 242, 1) 100%
+  );
+}
+
+/* ============================================
+   BADGE/TAG STYLES
+   ============================================ */
+.pixel-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  background: var(--gold-light);
+  border: 2px solid var(--gold);
+  font-size: 11px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pixel-badge-accent {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent-dim);
+}
+
+.pixel-badge-red {
+  background: var(--red-light);
+  border-color: var(--red);
+  color: var(--red);
+}
+
+/* ============================================
+   DECORATIVE ELEMENTS
+   ============================================ */
+
+/* Pixel corner decorations */
+.pixel-corners::before,
+.pixel-corners::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 3px solid var(--foreground);
+}
+
+.pixel-corners::before {
+  top: -3px;
+  left: -3px;
+  border-right: none;
+  border-bottom: none;
+}
+
+.pixel-corners::after {
+  bottom: -3px;
+  right: -3px;
+  border-left: none;
+  border-top: none;
+}
+
+/* Checkerboard pattern for decorative backgrounds */
+.checkerboard {
+  background-image: 
+    linear-gradient(45deg, var(--border) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--border) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--border) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--border) 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
 }

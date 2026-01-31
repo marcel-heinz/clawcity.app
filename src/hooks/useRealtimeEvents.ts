@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { GameEvent, AgentLeaderboard } from '@/lib/types';
 
 interface LeaderboardEntry {
@@ -13,6 +12,15 @@ interface LeaderboardEntry {
   territory_count: number;
   last_active: string;
   total_gathered?: number;
+  // Resource breakdown for expanded view
+  gold?: number;
+  wood?: number;
+  food?: number;
+  stone?: number;
+  total_gathered_gold?: number;
+  total_gathered_wood?: number;
+  total_gathered_food?: number;
+  total_gathered_stone?: number;
 }
 
 interface TopGathererEntry {
@@ -67,6 +75,8 @@ const defaultStats: WorldStats = {
   top_gatherer: null,
 };
 
+const POLLING_INTERVAL = 5000; // 5 seconds
+
 export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsReturn {
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [agents, setAgents] = useState<AgentLeaderboard[]>([]);
@@ -76,9 +86,11 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
   const [stats, setStats] = useState<WorldStats>(defaultStats);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isVisibleRef = useRef(true);
 
-  // Fetch initial data
-  const fetchInitialData = useCallback(async () => {
+  // Fetch data from API
+  const fetchData = useCallback(async () => {
     try {
       const response = await fetch('/api/world/status?limit=' + maxEvents);
       const data = await response.json();
@@ -90,116 +102,67 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
         setTopGatherers(data.data.topGatherers || []);
         setRecentlyJoined(data.data.recentlyJoined || []);
         setStats(data.data.stats || defaultStats);
+        setIsConnected(true);
         setError(null);
       } else {
-        setError(data.error || 'Failed to fetch initial data');
+        setError(data.error || 'Failed to fetch data');
+        setIsConnected(false);
       }
     } catch (err) {
-      console.error('Error fetching initial data:', err);
+      console.error('Error fetching data:', err);
       setError('Failed to connect to server');
+      setIsConnected(false);
     }
   }, [maxEvents]);
 
+  // Start polling
+  const startPolling = useCallback(() => {
+    if (intervalRef.current) return; // Already polling
+    
+    intervalRef.current = setInterval(() => {
+      if (isVisibleRef.current) {
+        fetchData();
+      }
+    }, POLLING_INTERVAL);
+  }, [fetchData]);
+
+  // Stop polling
+  const stopPolling = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
-    // Fetch initial data
-    fetchInitialData();
+    // Initial fetch
+    fetchData();
+    
+    // Start polling
+    startPolling();
 
-    // Set up realtime subscription for events (using public realtime table)
-    const eventsChannel = supabase
-      .channel('events-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'events_realtime',
-        },
-        async (payload) => {
-          const newEvent = payload.new as GameEvent;
-          
-          // Fetch agent name for the event
-          const { data: agent } = await supabase
-            .from('agents')
-            .select('name')
-            .eq('id', newEvent.agent_id)
-            .single();
-          
-          const enrichedEvent = {
-            ...newEvent,
-            agent_name: agent?.name || 'Unknown',
-          };
-
-          setEvents((prev) => {
-            const updated = [enrichedEvent, ...prev];
-            return updated.slice(0, maxEvents);
-          });
-
-          // Update stats for join events
-          if (newEvent.type === 'join') {
-            setStats((prev) => ({
-              ...prev,
-              total_agents: prev.total_agents + 1,
-              active_agents: prev.active_agents + 1,
-            }));
-          }
-
-          // Update stats for trade events
-          if (newEvent.type === 'trade') {
-            setStats((prev) => ({
-              ...prev,
-              total_trades: prev.total_trades + 1,
-            }));
-          }
-
-          // Update mining activity for gather events
-          if (newEvent.type === 'gather') {
-            setStats((prev) => ({
-              ...prev,
-              mining_activity_last_hour: prev.mining_activity_last_hour + 1,
-            }));
-          }
-        }
-      )
-      .subscribe((status) => {
-        setIsConnected(status === 'SUBSCRIBED');
-        if (status === 'CHANNEL_ERROR') {
-          setError('Failed to connect to realtime updates');
-        }
-      });
-
-    // Set up realtime subscription for agents (position updates, using public realtime table)
-    const agentsChannel = supabase
-      .channel('agents-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'agents_realtime',
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const newAgent = payload.new as AgentLeaderboard;
-            setAgents((prev) => [...prev, newAgent]);
-          } else if (payload.eventType === 'UPDATE') {
-            const updatedAgent = payload.new as AgentLeaderboard;
-            setAgents((prev) =>
-              prev.map((a) => (a.id === updatedAgent.id ? { ...a, ...updatedAgent } : a))
-            );
-          } else if (payload.eventType === 'DELETE') {
-            const deletedAgent = payload.old as AgentLeaderboard;
-            setAgents((prev) => prev.filter((a) => a.id !== deletedAgent.id));
-          }
-        }
-      )
-      .subscribe();
-
-    // Cleanup subscriptions on unmount
-    return () => {
-      supabase.removeChannel(eventsChannel);
-      supabase.removeChannel(agentsChannel);
+    // Handle visibility change - pause polling when tab is hidden
+    const handleVisibilityChange = () => {
+      isVisibleRef.current = document.visibilityState === 'visible';
+      
+      if (isVisibleRef.current) {
+        // Tab became visible - fetch immediately and resume polling
+        fetchData();
+        startPolling();
+      } else {
+        // Tab hidden - stop polling to save resources
+        stopPolling();
+      }
     };
-  }, [fetchInitialData, maxEvents]);
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Cleanup
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchData, startPolling, stopPolling]);
 
   return { events, agents, leaderboard, topGatherers, recentlyJoined, stats, isConnected, error };
 }

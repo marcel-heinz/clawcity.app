@@ -42,17 +42,17 @@ export function Stats({
       <div className="flex items-center gap-2 text-xs">
         <span
           className={`w-2 h-2 rounded-full ${
-            isConnected ? 'bg-[var(--accent)] animate-pulse' : 'bg-red-500'
+            isConnected ? 'bg-[var(--accent)] animate-pulse' : 'bg-[var(--red)]'
           }`}
         />
-        <span className={isConnected ? 'text-[var(--accent)]' : 'text-red-500'}>
+        <span className={isConnected ? 'text-[var(--accent)] font-medium' : 'text-[var(--red)]'}>
           {isConnected ? 'Live' : 'Disconnected'}
         </span>
       </div>
 
       {/* Stats cards - 2x2 grid */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-[var(--surface)] rounded p-3 border border-[var(--border)]">
+        <div className="bg-[var(--surface-alt)] p-3 border-2 border-[var(--border)]">
           <div className="text-2xl font-bold text-[var(--accent)]">
             {totalAgents}
           </div>
@@ -61,8 +61,8 @@ export function Stats({
           </div>
         </div>
 
-        <div className="bg-[var(--surface)] rounded p-3 border border-[var(--border)]">
-          <div className="text-2xl font-bold text-green-400">
+        <div className="bg-[var(--surface-alt)] p-3 border-2 border-[var(--border)]">
+          <div className="text-2xl font-bold text-[var(--accent)]">
             {activeAgents}
           </div>
           <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider">
@@ -70,8 +70,8 @@ export function Stats({
           </div>
         </div>
 
-        <div className="bg-[var(--surface)] rounded p-3 border border-[var(--border)]">
-          <div className="text-2xl font-bold text-yellow-400">
+        <div className="bg-[var(--surface-alt)] p-3 border-2 border-[var(--border)]">
+          <div className="text-2xl font-bold text-[var(--gold)]">
             {totalTrades}
           </div>
           <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider">
@@ -79,8 +79,8 @@ export function Stats({
           </div>
         </div>
 
-        <div className="bg-[var(--surface)] rounded p-3 border border-[var(--border)]">
-          <div className="text-2xl font-bold text-purple-400">
+        <div className="bg-[var(--surface-alt)] p-3 border-2 border-[var(--border)]">
+          <div className="text-2xl font-bold text-purple-600">
             {totalTerritories}
           </div>
           <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider">
@@ -90,14 +90,14 @@ export function Stats({
       </div>
 
       {/* Resource Economy Section */}
-      <div className="border-t border-[var(--border)] pt-3">
+      <div className="border-t-2 border-[var(--border)] pt-3">
         <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider mb-2">
           World Economy
         </div>
         
         {/* Total Resources */}
-        <div className="bg-[var(--surface)] rounded p-3 border border-[var(--border)] mb-2">
-          <div className="text-lg font-bold text-orange-400">
+        <div className="bg-[var(--surface-alt)] p-3 border-2 border-[var(--border)] mb-2">
+          <div className="text-lg font-bold text-orange-500">
             {formatNumber(totalResourceValue)}
           </div>
           <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider">
@@ -105,18 +105,18 @@ export function Stats({
           </div>
           {totalResources && (
             <div className="flex flex-wrap gap-2 mt-2 text-[10px]">
-              <span className="text-yellow-400">🪙 {formatNumber(totalResources.gold)}</span>
-              <span className="text-amber-600">🪵 {formatNumber(totalResources.wood)}</span>
-              <span className="text-gray-400">🪨 {formatNumber(totalResources.stone)}</span>
-              <span className="text-red-400">🍎 {formatNumber(totalResources.food)}</span>
+              <span className="text-yellow-600" title="Gold">🪙 {formatNumber(totalResources.gold)}</span>
+              <span className="text-amber-700" title="Wood">🪵 {formatNumber(totalResources.wood)}</span>
+              <span className="text-gray-500" title="Stone">🪨 {formatNumber(totalResources.stone)}</span>
+              <span className="text-red-500" title="Food">🍎 {formatNumber(totalResources.food)}</span>
             </div>
           )}
         </div>
 
         {/* Mining Activity */}
         <div className="grid grid-cols-2 gap-2">
-          <div className="bg-[var(--surface)] rounded p-2 border border-[var(--border)]">
-            <div className="text-lg font-bold text-cyan-400">
+          <div className="bg-[var(--surface-alt)] p-2 border-2 border-[var(--border)]">
+            <div className="text-lg font-bold text-cyan-600">
               {miningActivityLastHour}
             </div>
             <div className="text-[9px] text-[var(--muted)] uppercase tracking-wider">
@@ -124,8 +124,8 @@ export function Stats({
             </div>
           </div>
 
-          <div className="bg-[var(--surface)] rounded p-2 border border-[var(--border)]">
-            <div className="text-sm font-bold text-pink-400 truncate" title={topGatherer || 'None'}>
+          <div className="bg-[var(--surface-alt)] p-2 border-2 border-[var(--border)]">
+            <div className="text-sm font-bold text-pink-600 truncate" title={topGatherer || 'None'}>
               {topGatherer || '—'}
             </div>
             <div className="text-[9px] text-[var(--muted)] uppercase tracking-wider">

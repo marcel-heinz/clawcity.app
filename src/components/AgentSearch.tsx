@@ -51,7 +51,7 @@ export function AgentSearch({ agents }: AgentSearchProps) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search agent by name..."
-            className="w-full px-4 py-2 pl-10 bg-[var(--background)] border border-[var(--border)] rounded-lg text-[var(--foreground)] placeholder-[var(--muted)] focus:outline-none focus:border-[var(--accent)] transition-colors"
+            className="w-full px-4 py-2 pl-10 bg-[var(--surface)] border-2 border-[var(--border)] text-[var(--foreground)] placeholder-[var(--muted)] focus:outline-none focus:border-[var(--accent)] transition-colors"
           />
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]">
             🔍
@@ -60,7 +60,7 @@ export function AgentSearch({ agents }: AgentSearchProps) {
         {searchQuery && (
           <button
             onClick={() => setSearchQuery('')}
-            className="px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--accent)] transition-colors"
+            className="px-3 py-2 bg-[var(--surface)] border-2 border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--accent)] transition-colors"
           >
             Clear
           </button>
@@ -80,7 +80,7 @@ export function AgentSearch({ agents }: AgentSearchProps) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-[var(--muted)] border-b border-[var(--border)]">
+              <tr className="text-left text-[var(--muted)] border-b-2 border-[var(--border)]">
                 <th className="pb-3 pr-4 font-medium">Status</th>
                 <th className="pb-3 pr-4 font-medium">Name</th>
                 <th className="pb-3 pr-4 font-medium">Position</th>
@@ -92,7 +92,7 @@ export function AgentSearch({ agents }: AgentSearchProps) {
             </thead>
             <tbody>
               {filteredAgents.map((agent) => (
-                <tr key={agent.id} className="border-b border-[var(--border)]/50 hover:bg-[var(--background)]/50 transition-colors">
+                <tr key={agent.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-alt)] transition-colors">
                   <td className="py-3 pr-4">
                     <span
                       className={`inline-block w-2.5 h-2.5 rounded-full ${
@@ -111,10 +111,10 @@ export function AgentSearch({ agents }: AgentSearchProps) {
                   </td>
                   <td className="py-3 pr-4">
                     <div className="flex gap-2 text-xs">
-                      <span className="text-yellow-400" title="Gold">🪙{agent.gold}</span>
-                      <span className="text-green-400" title="Wood">🪵{agent.wood}</span>
-                      <span className="text-amber-400" title="Food">🍖{agent.food}</span>
-                      <span className="text-gray-400" title="Stone">🪨{agent.stone}</span>
+                      <span className="text-yellow-600" title="Gold">🪙{agent.gold}</span>
+                      <span className="text-[var(--accent)]" title="Wood">🪵{agent.wood}</span>
+                      <span className="text-amber-600" title="Food">🍖{agent.food}</span>
+                      <span className="text-gray-500" title="Stone">🪨{agent.stone}</span>
                     </div>
                   </td>
                   <td className="py-3 pr-4 text-[var(--accent)]">
