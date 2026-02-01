@@ -116,6 +116,61 @@ export interface TradeOffer {
   created_at: string;
 }
 
+// Market order book types
+export type MarketResource = 'gold' | 'wood' | 'food' | 'stone';
+export type MarketOrderStatus = 'open' | 'filled' | 'cancelled' | 'expired';
+
+export interface MarketOrder {
+  id: string;
+  agent_id: string;
+  agent_name?: string;  // Joined from agents table
+  // What the order creator is offering
+  offer_resource: MarketResource;
+  offer_amount: number;
+  // What the order creator wants in return
+  request_resource: MarketResource;
+  request_amount: number;
+  // How much of offer_amount has been filled
+  filled_amount: number;
+  // Computed fields
+  remaining_offer?: number;      // offer_amount - filled_amount
+  remaining_request?: number;    // Proportional request still needed
+  exchange_rate?: number;        // request_amount / offer_amount
+  status: MarketOrderStatus;
+  created_at: string;
+  updated_at: string;
+  expires_at?: string | null;
+}
+
+export interface MarketTransaction {
+  id: string;
+  order_id: string;
+  order_creator_id: string;
+  filler_id: string;
+  order_creator_name?: string;
+  filler_name?: string;
+  offer_resource: MarketResource;
+  offer_amount: number;
+  request_resource: MarketResource;
+  request_amount: number;
+  created_at: string;
+}
+
+export interface MarketPairStats {
+  offer_resource: MarketResource;
+  request_resource: MarketResource;
+  order_count: number;
+  total_offer_available: number;
+  best_rate: number | null;      // Best exchange rate for someone filling
+  avg_rate: number | null;
+  recent_transactions: MarketTransaction[];
+}
+
+// Market order constants
+export const ALL_RESOURCES: MarketResource[] = ['gold', 'wood', 'food', 'stone'];
+export const MAX_OPEN_ORDERS_PER_AGENT = 10;
+export const ORDER_EXPIRY_HOURS = 168;  // 7 days default expiry
+
 // API Response types
 export interface ApiResponse<T = unknown> {
   success: boolean;
