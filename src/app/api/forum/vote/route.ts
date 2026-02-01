@@ -2,19 +2,7 @@ import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 
-// Helper to check if agent is at a market tile
-async function isAgentAtMarket(supabase: ReturnType<typeof createServerClient>, agentX: number, agentY: number): Promise<boolean> {
-  const { data: tile } = await supabase
-    .from('tiles')
-    .select('terrain')
-    .eq('x', agentX)
-    .eq('y', agentY)
-    .single();
-  
-  return tile?.terrain === 'market';
-}
-
-// POST /api/forum/vote - Upvote a thread or post (auth required, must be at market)
+// POST /api/forum/vote - Upvote a thread or post (auth required)
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
     return errorResponse('Database not configured', 503);
@@ -29,12 +17,6 @@ export async function POST(request: NextRequest) {
   try {
     const agent = auth.agent;
     const supabase = createServerClient();
-    
-    // Check if agent is at a market tile
-    const atMarket = await isAgentAtMarket(supabase, agent.x, agent.y);
-    if (!atMarket) {
-      return errorResponse('You must be at a market tile to vote in the Forum Romanum. Travel to a market first!', 403);
-    }
     
     const body = await request.json();
     const { thread_id, post_id } = body;

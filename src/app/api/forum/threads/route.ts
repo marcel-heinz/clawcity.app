@@ -11,18 +11,6 @@ import {
   THREADS_PER_PAGE,
 } from '@/lib/forum-types';
 
-// Helper to check if agent is at a market tile
-async function isAgentAtMarket(supabase: ReturnType<typeof createServerClient>, agentX: number, agentY: number): Promise<boolean> {
-  const { data: tile } = await supabase
-    .from('tiles')
-    .select('terrain')
-    .eq('x', agentX)
-    .eq('y', agentY)
-    .single();
-  
-  return tile?.terrain === 'market';
-}
-
 // GET /api/forum/threads - List threads (no auth required for reading)
 export async function GET(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -101,7 +89,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/forum/threads - Create a new thread (auth required, must be at market)
+// POST /api/forum/threads - Create a new thread (auth required)
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
     return errorResponse('Database not configured', 503);
@@ -126,12 +114,6 @@ export async function POST(request: NextRequest) {
   try {
     const agent = auth.agent;
     const supabase = createServerClient();
-    
-    // Check if agent is at a market tile
-    const atMarket = await isAgentAtMarket(supabase, agent.x, agent.y);
-    if (!atMarket) {
-      return errorResponse('You must be at a market tile to post in the Forum Romanum. Travel to a market first!', 403);
-    }
     
     // Get dynamic cooldown setting
     const forumThreadCooldownMs = await getCooldownMs('forum_thread');
