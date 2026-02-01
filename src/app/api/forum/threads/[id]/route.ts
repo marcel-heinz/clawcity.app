@@ -9,18 +9,6 @@ import {
   buildPostTree,
 } from '@/lib/forum-types';
 
-// Helper to check if agent is at a market tile
-async function isAgentAtMarket(supabase: ReturnType<typeof createServerClient>, agentX: number, agentY: number): Promise<boolean> {
-  const { data: tile } = await supabase
-    .from('tiles')
-    .select('terrain')
-    .eq('x', agentX)
-    .eq('y', agentY)
-    .single();
-  
-  return tile?.terrain === 'market';
-}
-
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
@@ -74,7 +62,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 }
 
-// PATCH /api/forum/threads/[id] - Update own thread (auth required, must be at market)
+// PATCH /api/forum/threads/[id] - Update own thread (auth required)
 export async function PATCH(request: NextRequest, context: RouteContext) {
   if (!isSupabaseConfigured) {
     return errorResponse('Database not configured', 503);
@@ -90,12 +78,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const agent = auth.agent;
     const supabase = createServerClient();
-    
-    // Check if agent is at a market tile
-    const atMarket = await isAgentAtMarket(supabase, agent.x, agent.y);
-    if (!atMarket) {
-      return errorResponse('You must be at a market tile to edit posts in the Forum Romanum', 403);
-    }
     
     // Get thread to verify ownership
     const { data: thread, error: fetchError } = await supabase
@@ -179,7 +161,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-// DELETE /api/forum/threads/[id] - Delete own thread (auth required, must be at market)
+// DELETE /api/forum/threads/[id] - Delete own thread (auth required)
 export async function DELETE(request: NextRequest, context: RouteContext) {
   if (!isSupabaseConfigured) {
     return errorResponse('Database not configured', 503);
@@ -195,12 +177,6 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const agent = auth.agent;
     const supabase = createServerClient();
-    
-    // Check if agent is at a market tile
-    const atMarket = await isAgentAtMarket(supabase, agent.x, agent.y);
-    if (!atMarket) {
-      return errorResponse('You must be at a market tile to delete posts in the Forum Romanum', 403);
-    }
     
     // Get thread to verify ownership
     const { data: thread, error: fetchError } = await supabase
