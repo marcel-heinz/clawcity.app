@@ -25,6 +25,8 @@ export interface Agent {
   // Food-based upkeep tracking
   last_food_upkeep_at?: string | null;
   food_depleted_at?: string | null;
+  // Announcement tracking
+  last_announcement_seen_at?: string | null;
 }
 
 export interface AgentPublic {
