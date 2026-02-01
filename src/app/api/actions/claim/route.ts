@@ -2,86 +2,16 @@ import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { 
-  CLAIM_COST_GOLD, 
+  CLAIM_COST_GOLD,
+  CLAIM_COST_WOOD,
+  CLAIM_COST_STONE,
+  CLAIM_COST_FOOD,
+  STAMINA_COST_CLAIM,
   MAX_TERRITORIES_PER_AGENT,
   TerrainType,
-  TERRITORY_UPKEEP_GOLD,
-  UPKEEP_PERIOD_MS
+  TERRITORY_UPKEEP_FOOD
 } from '@/lib/types';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
-
-// Helper: Process territory upkeep for an agent (same as in gather route)
-async function processUpkeep(
-  supabase: ReturnType<typeof createServerClient>,
-  agentId: string,
-  currentGold: number
-): Promise<{ goldDeducted: number; territoriesLost: number; newGold: number }> {
-  let goldDeducted = 0;
-  let territoriesLost = 0;
-  let newGold = currentGold;
-
-  // Get all tiles owned by this agent
-  const { data: ownedTiles } = await supabase
-    .from('tiles')
-    .select('x, y, last_upkeep_paid, claimed_at')
-    .eq('owner_id', agentId);
-
-  if (!ownedTiles || ownedTiles.length === 0) {
-    return { goldDeducted: 0, territoriesLost: 0, newGold: currentGold };
-  }
-
-  const now = Date.now();
-
-  for (const tile of ownedTiles) {
-    const lastPaid = tile.last_upkeep_paid 
-      ? new Date(tile.last_upkeep_paid).getTime() 
-      : tile.claimed_at 
-        ? new Date(tile.claimed_at).getTime()
-        : now;
-    
-    const msSinceLastPaid = now - lastPaid;
-    const daysOverdue = Math.floor(msSinceLastPaid / UPKEEP_PERIOD_MS);
-
-    if (daysOverdue >= 1) {
-      const upkeepDue = daysOverdue * TERRITORY_UPKEEP_GOLD;
-
-      if (newGold >= upkeepDue) {
-        // Pay upkeep
-        newGold -= upkeepDue;
-        goldDeducted += upkeepDue;
-
-        await supabase
-          .from('tiles')
-          .update({ last_upkeep_paid: new Date().toISOString() })
-          .eq('x', tile.x)
-          .eq('y', tile.y);
-      } else {
-        // Can't afford - release territory
-        await supabase
-          .from('tiles')
-          .update({ 
-            owner_id: null, 
-            claimed_at: null, 
-            last_upkeep_paid: null 
-          })
-          .eq('x', tile.x)
-          .eq('y', tile.y);
-
-        territoriesLost++;
-      }
-    }
-  }
-
-  // Update agent's gold if any was deducted
-  if (goldDeducted > 0) {
-    await supabase
-      .from('agents')
-      .update({ gold: newGold })
-      .eq('id', agentId);
-  }
-
-  return { goldDeducted, territoriesLost, newGold };
-}
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -108,15 +38,29 @@ export async function POST(request: NextRequest) {
     const agent = auth.agent;
     const supabase = createServerClient();
 
-    // Process territory upkeep before claiming
-    const upkeepResult = await processUpkeep(supabase, agent.id, agent.gold);
-    let currentGold = upkeepResult.newGold;
+    // Calculate total food cost (claiming cost + stamina cost)
+    const totalFoodCost = CLAIM_COST_FOOD + STAMINA_COST_CLAIM;
 
-    // Check if agent has enough gold (after upkeep)
-    if (currentGold < CLAIM_COST_GOLD) {
+    // Check if agent has enough resources for ALL costs
+    const missingResources: string[] = [];
+    
+    if (agent.gold < CLAIM_COST_GOLD) {
+      missingResources.push(`gold (need ${CLAIM_COST_GOLD}, have ${agent.gold})`);
+    }
+    if (agent.wood < CLAIM_COST_WOOD) {
+      missingResources.push(`wood (need ${CLAIM_COST_WOOD}, have ${agent.wood})`);
+    }
+    if (agent.stone < CLAIM_COST_STONE) {
+      missingResources.push(`stone (need ${CLAIM_COST_STONE}, have ${agent.stone})`);
+    }
+    if (agent.food < totalFoodCost) {
+      missingResources.push(`food (need ${totalFoodCost} [${CLAIM_COST_FOOD} claim + ${STAMINA_COST_CLAIM} stamina], have ${agent.food})`);
+    }
+
+    if (missingResources.length > 0) {
       return errorResponse(
-        `Not enough gold to claim this tile. Cost: ${CLAIM_COST_GOLD} gold, You have: ${currentGold} gold` +
-        (upkeepResult.goldDeducted > 0 ? ` (${upkeepResult.goldDeducted} gold was deducted for territory upkeep)` : ''),
+        `Not enough resources to claim territory. Missing: ${missingResources.join(', ')}. ` +
+        `Full cost: ${CLAIM_COST_GOLD} gold, ${CLAIM_COST_WOOD} wood, ${CLAIM_COST_STONE} stone, ${totalFoodCost} food.`,
         400
       );
     }
@@ -163,7 +107,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Count agent's current territories (after potential upkeep losses)
+    // Count agent's current territories
     const { count: territoryCount } = await supabase
       .from('tiles')
       .select('*', { count: 'exact', head: true })
@@ -176,36 +120,50 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Deduct gold from agent
-    const newGoldAfterClaim = currentGold - CLAIM_COST_GOLD;
-    const { error: goldError } = await supabase
+    // Calculate new resource amounts
+    const newGold = agent.gold - CLAIM_COST_GOLD;
+    const newWood = agent.wood - CLAIM_COST_WOOD;
+    const newStone = agent.stone - CLAIM_COST_STONE;
+    const newFood = agent.food - totalFoodCost;
+
+    // Deduct all resources from agent atomically
+    const { error: resourceError } = await supabase
       .from('agents')
-      .update({ gold: newGoldAfterClaim })
+      .update({ 
+        gold: newGold,
+        wood: newWood,
+        stone: newStone,
+        food: newFood
+      })
       .eq('id', agent.id);
 
-    if (goldError) {
-      console.error('Error deducting gold:', goldError);
+    if (resourceError) {
+      console.error('Error deducting resources:', resourceError);
       return errorResponse('Failed to process claim payment', 500);
     }
 
-    // Claim the tile with upkeep timestamp
+    // Claim the tile
     const claimTimestamp = new Date().toISOString();
     const { error: claimError } = await supabase
       .from('tiles')
       .update({ 
         owner_id: agent.id,
-        claimed_at: claimTimestamp,
-        last_upkeep_paid: claimTimestamp // Set upkeep paid to now
+        claimed_at: claimTimestamp
       })
       .eq('x', agent.x)
       .eq('y', agent.y);
 
     if (claimError) {
       console.error('Error claiming tile:', claimError);
-      // Refund gold if claim failed
+      // Refund all resources if claim failed
       await supabase
         .from('agents')
-        .update({ gold: currentGold })
+        .update({ 
+          gold: agent.gold,
+          wood: agent.wood,
+          stone: agent.stone,
+          food: agent.food
+        })
         .eq('id', agent.id);
       return errorResponse('Failed to claim tile', 500);
     }
@@ -216,30 +174,51 @@ export async function POST(request: NextRequest) {
       type: 'claim',
       data: { 
         terrain,
-        cost: CLAIM_COST_GOLD,
+        cost: {
+          gold: CLAIM_COST_GOLD,
+          wood: CLAIM_COST_WOOD,
+          stone: CLAIM_COST_STONE,
+          food: totalFoodCost
+        },
         territory_count: (territoryCount || 0) + 1,
-        upkeep_cost_per_day: TERRITORY_UPKEEP_GOLD,
+        upkeep_cost_per_hour: TERRITORY_UPKEEP_FOOD,
       },
       location: { x: agent.x, y: agent.y },
     });
 
+    const newTerritoryCount = (territoryCount || 0) + 1;
+
     return jsonResponse({
       success: true,
       data: {
-        message: `You have claimed this ${terrain} tile for ${CLAIM_COST_GOLD} gold. ` +
-          `You now receive +25% resources when gathering here. ` +
-          `IMPORTANT: This territory requires ${TERRITORY_UPKEEP_GOLD} gold/day upkeep or it will be released.`,
+        message: `You have claimed this ${terrain} tile! ` +
+          `Cost: ${CLAIM_COST_GOLD} gold, ${CLAIM_COST_WOOD} wood, ${CLAIM_COST_STONE} stone, ${totalFoodCost} food. ` +
+          `You now receive +25% resources when gathering here (upgradeable to +75%). ` +
+          `IMPORTANT: Territory upkeep is ${TERRITORY_UPKEEP_FOOD} food/territory/hour (${newTerritoryCount * TERRITORY_UPKEEP_FOOD} food/hour total for your ${newTerritoryCount} territories).`,
         position: { x: agent.x, y: agent.y },
         terrain,
-        cost: CLAIM_COST_GOLD,
-        upkeep_cost_per_day: TERRITORY_UPKEEP_GOLD,
-        gold_remaining: newGoldAfterClaim,
-        territory_count: (territoryCount || 0) + 1,
+        cost: {
+          gold: CLAIM_COST_GOLD,
+          wood: CLAIM_COST_WOOD,
+          stone: CLAIM_COST_STONE,
+          food: totalFoodCost,
+          food_breakdown: {
+            claim_cost: CLAIM_COST_FOOD,
+            stamina_cost: STAMINA_COST_CLAIM
+          }
+        },
+        upkeep: {
+          food_per_territory_per_hour: TERRITORY_UPKEEP_FOOD,
+          total_food_per_hour: newTerritoryCount * TERRITORY_UPKEEP_FOOD
+        },
+        inventory: {
+          gold: newGold,
+          wood: newWood,
+          stone: newStone,
+          food: newFood
+        },
+        territory_count: newTerritoryCount,
         max_territories: MAX_TERRITORIES_PER_AGENT,
-        upkeep: upkeepResult.goldDeducted > 0 || upkeepResult.territoriesLost > 0 ? {
-          gold_deducted: upkeepResult.goldDeducted,
-          territories_lost: upkeepResult.territoriesLost,
-        } : undefined,
       },
     });
   } catch (error) {

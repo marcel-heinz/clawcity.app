@@ -4,11 +4,11 @@ import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { calculateGatheredResources } from '@/lib/game-logic';
 import { 
   TerrainType, 
-  TERRITORY_BONUS_MULTIPLIER, 
   DEPLETION_CHANCE,
   REGENERATION_MS,
-  TERRITORY_UPKEEP_GOLD,
-  UPKEEP_PERIOD_MS
+  STAMINA_COST_GATHER,
+  GATHER_PENALTY_MULTIPLIER,
+  UPGRADE_BONUSES
 } from '@/lib/types';
 import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
@@ -19,79 +19,6 @@ function hasTileRegenerated(depletedAt: string | null): boolean {
   const depletedTime = new Date(depletedAt).getTime();
   const now = Date.now();
   return (now - depletedTime) >= REGENERATION_MS;
-}
-
-// Helper: Process territory upkeep for an agent
-async function processUpkeep(
-  supabase: ReturnType<typeof createServerClient>,
-  agentId: string,
-  currentGold: number
-): Promise<{ goldDeducted: number; territoriesLost: number; newGold: number }> {
-  let goldDeducted = 0;
-  let territoriesLost = 0;
-  let newGold = currentGold;
-
-  // Get all tiles owned by this agent
-  const { data: ownedTiles } = await supabase
-    .from('tiles')
-    .select('x, y, last_upkeep_paid, claimed_at')
-    .eq('owner_id', agentId);
-
-  if (!ownedTiles || ownedTiles.length === 0) {
-    return { goldDeducted: 0, territoriesLost: 0, newGold: currentGold };
-  }
-
-  const now = Date.now();
-
-  for (const tile of ownedTiles) {
-    const lastPaid = tile.last_upkeep_paid 
-      ? new Date(tile.last_upkeep_paid).getTime() 
-      : tile.claimed_at 
-        ? new Date(tile.claimed_at).getTime()
-        : now;
-    
-    const msSinceLastPaid = now - lastPaid;
-    const daysOverdue = Math.floor(msSinceLastPaid / UPKEEP_PERIOD_MS);
-
-    if (daysOverdue >= 1) {
-      const upkeepDue = daysOverdue * TERRITORY_UPKEEP_GOLD;
-
-      if (newGold >= upkeepDue) {
-        // Pay upkeep
-        newGold -= upkeepDue;
-        goldDeducted += upkeepDue;
-
-        await supabase
-          .from('tiles')
-          .update({ last_upkeep_paid: new Date().toISOString() })
-          .eq('x', tile.x)
-          .eq('y', tile.y);
-      } else {
-        // Can't afford - release territory
-        await supabase
-          .from('tiles')
-          .update({ 
-            owner_id: null, 
-            claimed_at: null, 
-            last_upkeep_paid: null 
-          })
-          .eq('x', tile.x)
-          .eq('y', tile.y);
-
-        territoriesLost++;
-      }
-    }
-  }
-
-  // Update agent's gold if any was deducted
-  if (goldDeducted > 0) {
-    await supabase
-      .from('agents')
-      .update({ gold: newGold })
-      .eq('id', agentId);
-  }
-
-  return { goldDeducted, territoriesLost, newGold };
 }
 
 export async function POST(request: NextRequest) {
@@ -148,14 +75,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Process territory upkeep before gathering
-    const upkeepResult = await processUpkeep(supabase, agent.id, agent.gold);
-    let currentGold = upkeepResult.newGold;
+    // Check stamina (food) - determines if we apply penalty
+    const hasStamina = agent.food >= STAMINA_COST_GATHER;
+    const staminaCost = hasStamina ? STAMINA_COST_GATHER : 0; // Don't deduct if already at 0
 
-    // Get current tile with ownership and depletion info
+    // Get current tile with ownership, depletion, and upgrade info
     const { data: tile } = await supabase
       .from('tiles')
-      .select('terrain, owner_id, depleted, depleted_at')
+      .select('terrain, owner_id, depleted, depleted_at, upgrade_level')
       .eq('x', agent.x)
       .eq('y', agent.y)
       .single();
@@ -166,6 +93,7 @@ export async function POST(request: NextRequest) {
 
     const terrain = tile.terrain as TerrainType;
     const isOwnedByAgent = tile.owner_id === agent.id;
+    const upgradeLevel = tile.upgrade_level || 1;
 
     // Markets don't produce resources
     if (terrain === 'market') {
@@ -176,10 +104,11 @@ export async function POST(request: NextRequest) {
           gathered: { gold: 0, wood: 0, food: 0, stone: 0 },
           terrain,
           tile_status: 'market',
-          upkeep: upkeepResult.goldDeducted > 0 ? {
-            gold_deducted: upkeepResult.goldDeducted,
-            territories_lost: upkeepResult.territoriesLost,
-          } : undefined,
+          stamina: {
+            cost: 0,
+            penalty_applied: false,
+            food_remaining: agent.food
+          }
         },
       });
     }
@@ -200,10 +129,11 @@ export async function POST(request: NextRequest) {
           terrain,
           tile_status: 'depleted',
           regenerates_in_minutes: timeUntilRegen,
-          upkeep: upkeepResult.goldDeducted > 0 ? {
-            gold_deducted: upkeepResult.goldDeducted,
-            territories_lost: upkeepResult.territoriesLost,
-          } : undefined,
+          stamina: {
+            cost: 0,
+            penalty_applied: false,
+            food_remaining: agent.food
+          }
         },
       });
     }
@@ -219,12 +149,20 @@ export async function POST(request: NextRequest) {
 
     // Water can be gathered from but less efficiently (and doesn't deplete)
     if (terrain === 'water') {
-      const waterFood = Math.floor(Math.random() * 2) + 1;
+      let waterFood = Math.floor(Math.random() * 2) + 1;
       
-      // Update agent inventory (cooldown already updated by atomic check or update now)
+      // Apply stamina penalty if no food
+      if (!hasStamina) {
+        waterFood = Math.floor(waterFood * GATHER_PENALTY_MULTIPLIER);
+      }
+      
+      // Net food change (gathered - stamina cost)
+      const netFoodChange = waterFood - staminaCost;
+      const newFood = Math.max(0, agent.food + netFoodChange);
+      
+      // Update agent inventory
       const updateData: Record<string, unknown> = {
-        gold: currentGold,
-        food: agent.food + waterFood,
+        food: newFood,
         total_gathered_food: (agent.total_gathered_food || 0) + waterFood,
       };
       
@@ -242,21 +180,35 @@ export async function POST(request: NextRequest) {
       await supabase.from('events').insert({
         agent_id: agent.id,
         type: 'gather',
-        data: { terrain, resources: { gold: 0, wood: 0, food: waterFood, stone: 0 } },
+        data: { 
+          terrain, 
+          resources: { gold: 0, wood: 0, food: waterFood, stone: 0 },
+          stamina_cost: staminaCost,
+          stamina_penalty: !hasStamina
+        },
         location: { x: agent.x, y: agent.y },
       });
+
+      const penaltyText = !hasStamina ? ' (50% penalty - no food stamina!)' : '';
 
       return jsonResponse({
         success: true,
         data: {
-          message: 'You fish in the water and catch some food.',
+          message: `You fish in the water and catch ${waterFood} food${penaltyText}. Stamina cost: ${staminaCost} food.`,
           gathered: { gold: 0, wood: 0, food: waterFood, stone: 0 },
           terrain,
           tile_status: 'available',
-          upkeep: upkeepResult.goldDeducted > 0 ? {
-            gold_deducted: upkeepResult.goldDeducted,
-            territories_lost: upkeepResult.territoriesLost,
-          } : undefined,
+          stamina: {
+            cost: staminaCost,
+            penalty_applied: !hasStamina,
+            food_remaining: newFood
+          },
+          inventory: {
+            gold: agent.gold,
+            wood: agent.wood,
+            food: newFood,
+            stone: agent.stone
+          }
         },
       });
     }
@@ -264,13 +216,25 @@ export async function POST(request: NextRequest) {
     // Calculate resources based on terrain
     let gathered = calculateGatheredResources(terrain);
     
-    // Apply territory bonus if agent owns this tile
+    // Apply territory bonus if agent owns this tile (using upgrade level)
+    let bonusMultiplier = 1.0;
     if (isOwnedByAgent) {
+      bonusMultiplier = UPGRADE_BONUSES[upgradeLevel] || UPGRADE_BONUSES[1];
       gathered = {
-        gold: Math.floor(gathered.gold * TERRITORY_BONUS_MULTIPLIER),
-        wood: Math.floor(gathered.wood * TERRITORY_BONUS_MULTIPLIER),
-        food: Math.floor(gathered.food * TERRITORY_BONUS_MULTIPLIER),
-        stone: Math.floor(gathered.stone * TERRITORY_BONUS_MULTIPLIER),
+        gold: Math.floor(gathered.gold * bonusMultiplier),
+        wood: Math.floor(gathered.wood * bonusMultiplier),
+        food: Math.floor(gathered.food * bonusMultiplier),
+        stone: Math.floor(gathered.stone * bonusMultiplier),
+      };
+    }
+
+    // Apply stamina penalty if no food
+    if (!hasStamina) {
+      gathered = {
+        gold: Math.floor(gathered.gold * GATHER_PENALTY_MULTIPLIER),
+        wood: Math.floor(gathered.wood * GATHER_PENALTY_MULTIPLIER),
+        food: Math.floor(gathered.food * GATHER_PENALTY_MULTIPLIER),
+        stone: Math.floor(gathered.stone * GATHER_PENALTY_MULTIPLIER),
       };
     }
 
@@ -289,12 +253,18 @@ export async function POST(request: NextRequest) {
         .eq('y', agent.y);
     }
 
+    // Calculate new inventory (food includes stamina cost deduction)
+    const newGold = agent.gold + gathered.gold;
+    const newWood = agent.wood + gathered.wood;
+    const newFood = Math.max(0, agent.food + gathered.food - staminaCost);
+    const newStone = agent.stone + gathered.stone;
+
     // Update agent inventory and total gathered stats
     const inventoryUpdate: Record<string, unknown> = {
-      gold: currentGold + gathered.gold,
-      wood: agent.wood + gathered.wood,
-      food: agent.food + gathered.food,
-      stone: agent.stone + gathered.stone,
+      gold: newGold,
+      wood: newWood,
+      food: newFood,
+      stone: newStone,
       // Update lifetime gathering stats
       total_gathered_gold: (agent.total_gathered_gold || 0) + gathered.gold,
       total_gathered_wood: (agent.total_gathered_wood || 0) + gathered.wood,
@@ -325,6 +295,10 @@ export async function POST(request: NextRequest) {
         terrain,
         resources: gathered,
         tile_depleted: tileDepleted,
+        territory_bonus: isOwnedByAgent,
+        upgrade_level: isOwnedByAgent ? upgradeLevel : undefined,
+        stamina_cost: staminaCost,
+        stamina_penalty: !hasStamina
       },
       location: { x: agent.x, y: agent.y },
     });
@@ -335,11 +309,15 @@ export async function POST(request: NextRequest) {
       .map(([resource, amount]) => `${amount} ${resource}`)
       .join(', ');
 
-    const bonusText = isOwnedByAgent ? ' (with +25% territory bonus!)' : '';
+    const bonusPercent = Math.round((bonusMultiplier - 1) * 100);
+    const bonusText = isOwnedByAgent ? ` (with +${bonusPercent}% territory bonus, level ${upgradeLevel})` : '';
+    const penaltyText = !hasStamina ? ' [50% PENALTY - no food stamina!]' : '';
     const depletionText = tileDepleted ? ' WARNING: This tile is now DEPLETED and will regenerate in 1 hour.' : '';
+    const staminaText = ` Stamina cost: ${staminaCost} food.`;
+    
     const message = gatheredItems 
-      ? `You gathered ${gatheredItems} from the ${terrain}${bonusText}.${depletionText}`
-      : `You searched the ${terrain} but found nothing this time.${depletionText}`;
+      ? `You gathered ${gatheredItems} from the ${terrain}${bonusText}${penaltyText}.${staminaText}${depletionText}`
+      : `You searched the ${terrain} but found nothing this time.${penaltyText}${staminaText}${depletionText}`;
 
     return jsonResponse({
       success: true,
@@ -348,18 +326,20 @@ export async function POST(request: NextRequest) {
         gathered,
         terrain,
         territory_bonus: isOwnedByAgent,
+        upgrade_level: isOwnedByAgent ? upgradeLevel : undefined,
         tile_depleted: tileDepleted,
         tile_status: tileDepleted ? 'depleted' : 'available',
-        inventory: {
-          gold: currentGold + gathered.gold,
-          wood: agent.wood + gathered.wood,
-          food: agent.food + gathered.food,
-          stone: agent.stone + gathered.stone,
+        stamina: {
+          cost: staminaCost,
+          penalty_applied: !hasStamina,
+          food_remaining: newFood
         },
-        upkeep: upkeepResult.goldDeducted > 0 || upkeepResult.territoriesLost > 0 ? {
-          gold_deducted: upkeepResult.goldDeducted,
-          territories_lost: upkeepResult.territoriesLost,
-        } : undefined,
+        inventory: {
+          gold: newGold,
+          wood: newWood,
+          food: newFood,
+          stone: newStone,
+        },
       },
     });
   } catch (error) {

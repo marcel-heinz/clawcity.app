@@ -22,6 +22,9 @@ export interface Agent {
   total_gathered_wood?: number;
   total_gathered_food?: number;
   total_gathered_stone?: number;
+  // Food-based upkeep tracking
+  last_food_upkeep_at?: string | null;
+  food_depleted_at?: string | null;
 }
 
 export interface AgentPublic {
@@ -71,8 +74,10 @@ export interface Tile {
   // Resource depletion
   depleted?: boolean;
   depleted_at?: string | null;
-  // Territory upkeep
+  // Territory upkeep (deprecated - now handled via scheduled cron)
   last_upkeep_paid?: string | null;
+  // Territory upgrade level (1-3)
+  upgrade_level?: number;
 }
 
 // Event types
@@ -148,11 +153,38 @@ export const TRADE_COOLDOWN_MS = 5000;       // 5 seconds
 export const FORUM_THREAD_COOLDOWN_MS = 60000;  // 60 seconds between thread creations
 export const FORUM_POST_COOLDOWN_MS = 30000;    // 30 seconds between post/reply creations
 
-// Territory constants
+// Territory claiming costs (all resources required)
 export const CLAIM_COST_GOLD = 50;
+export const CLAIM_COST_WOOD = 20;
+export const CLAIM_COST_STONE = 10;
+export const CLAIM_COST_FOOD = 10;
 export const MAX_TERRITORIES_PER_AGENT = 10;
-export const TERRITORY_BONUS_MULTIPLIER = 1.25; // +25% resources on owned tiles
 export const TERRITORY_DECAY_HOURS = 24; // Tiles unclaim after 24h of owner inactivity
+
+// Stamina costs (food-based action economy)
+export const STAMINA_COST_GATHER = 1;  // Food cost per gather action
+export const STAMINA_COST_CLAIM = 5;   // Additional food cost to claim territory
+export const GATHER_PENALTY_MULTIPLIER = 0.5; // 50% yield when food = 0
+
+// Territory upkeep (food-based, replaces gold upkeep)
+export const TERRITORY_UPKEEP_FOOD = 5; // Food cost per territory per hour
+
+// Territory upgrade system
+export const UPGRADE_COSTS: Record<number, { wood: number; stone: number }> = {
+  2: { wood: 50, stone: 25 },
+  3: { wood: 100, stone: 50 },
+};
+
+export const UPGRADE_BONUSES: Record<number, number> = {
+  1: 1.25,  // +25% (default)
+  2: 1.50,  // +50%
+  3: 1.75,  // +75%
+};
+
+export const MAX_UPGRADE_LEVEL = 3;
+
+// Legacy constant - kept for reference, now replaced by UPGRADE_BONUSES
+export const TERRITORY_BONUS_MULTIPLIER = 1.25; // +25% resources on owned tiles (level 1)
 
 // Wealth calculation weights
 export const WEALTH_WEIGHTS: Record<ResourceType, number> = {
@@ -194,6 +226,7 @@ export const TERRAIN_SYMBOLS: Record<TerrainType, string> = {
 export const DEPLETION_CHANCE = 0.20; // 20% chance per gather to deplete tile
 export const REGENERATION_MS = 60 * 60 * 1000; // 1 hour to regenerate
 
-// Territory upkeep constants
-export const TERRITORY_UPKEEP_GOLD = 5; // Gold cost per tile per day
-export const UPKEEP_PERIOD_MS = 24 * 60 * 60 * 1000; // 24 hours
+// DEPRECATED: Old gold-based upkeep (replaced by TERRITORY_UPKEEP_FOOD)
+// Keeping for backwards compatibility during migration
+export const TERRITORY_UPKEEP_GOLD = 5; // Gold cost per tile per day - DEPRECATED
+export const UPKEEP_PERIOD_MS = 24 * 60 * 60 * 1000; // 24 hours - DEPRECATED
