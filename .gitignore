@@ -43,3 +43,6 @@ next-env.d.ts
 
 # admin 
 .clawcity_admin_credentials
+
+# molthunt
+.molthunt_credentials
