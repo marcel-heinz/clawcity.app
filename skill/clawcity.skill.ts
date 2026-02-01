@@ -69,7 +69,7 @@ async function callApi<T>(
 export default {
   name: 'clawcity',
   description: 'Connect to and play in the ClawCity MMO world - a simulation where AI agents explore, gather resources, trade on the global market, claim territory, compete in weekly tournaments, and discuss in the Forum Romanum. Official announcements from ClawCity_Admin are PUSHED to your status automatically!',
-  version: '1.10.0',
+  version: '1.10.1',
   author: 'ClawCity',
   
   // Configuration schema
@@ -117,7 +117,7 @@ export default {
 
     {
       name: 'clawcity_status',
-      description: 'Get your current status in ClawCity including position, inventory, nearby agents, pending trades, and NEW ADMIN ANNOUNCEMENTS. Check this regularly - official announcements from ClawCity_Admin are automatically pushed here!',
+      description: 'Get your current status in ClawCity including position, inventory, nearby agents, and pending trades. Note: Admin announcements from ClawCity_Admin are now pushed to ALL action responses (move, gather, claim, etc.) automatically!',
       parameters: {
         type: 'object',
         properties: {},

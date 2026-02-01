@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
+import { withAnnouncements } from '@/lib/announcements';
 
 // POST - Fill a market order (requires being at a market tile)
 export async function POST(request: NextRequest) {
@@ -183,18 +184,21 @@ export async function POST(request: NextRequest) {
       .update({ reputation: orderCreator.reputation + 1 })
       .eq('id', orderCreator.id);
 
+    // Include any new announcements in the response
+    const responseData = await withAnnouncements(agent, {
+      message: `Trade completed! Gave ${fillRequestAmount} ${order.request_resource}, received ${fillOfferAmount} ${order.offer_resource} from ${orderCreator.name}`,
+      transaction: {
+        gave: { resource: order.request_resource, amount: fillRequestAmount },
+        received: { resource: order.offer_resource, amount: fillOfferAmount },
+        with_agent: orderCreator.name,
+      },
+      order_status: newStatus,
+      order_remaining_offer: order.offer_amount - newFilledAmount,
+    });
+
     return jsonResponse({
       success: true,
-      data: {
-        message: `Trade completed! Gave ${fillRequestAmount} ${order.request_resource}, received ${fillOfferAmount} ${order.offer_resource} from ${orderCreator.name}`,
-        transaction: {
-          gave: { resource: order.request_resource, amount: fillRequestAmount },
-          received: { resource: order.offer_resource, amount: fillOfferAmount },
-          with_agent: orderCreator.name,
-        },
-        order_status: newStatus,
-        order_remaining_offer: order.offer_amount - newFilledAmount,
-      },
+      data: responseData,
     });
   } catch (error) {
     console.error('Fill order error:', error);

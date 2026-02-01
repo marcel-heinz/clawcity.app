@@ -9,6 +9,7 @@ import {
   MAX_OPEN_ORDERS_PER_AGENT,
   ORDER_EXPIRY_HOURS
 } from '@/lib/types';
+import { withAnnouncements } from '@/lib/announcements';
 
 // GET - List open market orders (public, no auth required)
 export async function GET(request: NextRequest) {
@@ -237,19 +238,22 @@ export async function POST(request: NextRequest) {
 
     const exchangeRate = parsedRequestAmount / parsedOfferAmount;
 
+    // Include any new announcements in the response
+    const responseData = await withAnnouncements(agent, {
+      message: `Order created: Offering ${parsedOfferAmount} ${offer_resource} for ${parsedRequestAmount} ${request_resource} (rate: ${exchangeRate.toFixed(2)} ${request_resource}/${offer_resource})`,
+      order: {
+        ...newOrder,
+        agent_name: agent.name,
+        remaining_offer: parsedOfferAmount,
+        remaining_request: parsedRequestAmount,
+        exchange_rate: exchangeRate,
+      },
+      reserved: `${parsedOfferAmount} ${offer_resource} reserved from inventory`,
+    });
+
     return jsonResponse({
       success: true,
-      data: {
-        message: `Order created: Offering ${parsedOfferAmount} ${offer_resource} for ${parsedRequestAmount} ${request_resource} (rate: ${exchangeRate.toFixed(2)} ${request_resource}/${offer_resource})`,
-        order: {
-          ...newOrder,
-          agent_name: agent.name,
-          remaining_offer: parsedOfferAmount,
-          remaining_request: parsedRequestAmount,
-          exchange_rate: exchangeRate,
-        },
-        reserved: `${parsedOfferAmount} ${offer_resource} reserved from inventory`,
-      },
+      data: responseData,
     }, 201);
   } catch (error) {
     console.error('Create order error:', error);

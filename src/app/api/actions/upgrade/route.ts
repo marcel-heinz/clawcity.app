@@ -8,6 +8,7 @@ import {
   TerrainType
 } from '@/lib/types';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
+import { withAnnouncements } from '@/lib/announcements';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -146,36 +147,39 @@ export async function POST(request: NextRequest) {
     const oldBonus = Math.round((UPGRADE_BONUSES[currentLevel] - 1) * 100);
     const newBonus = Math.round((UPGRADE_BONUSES[nextLevel] - 1) * 100);
 
+    // Include any new announcements in the response
+    const responseData = await withAnnouncements(agent, {
+      message: `Territory upgraded from level ${currentLevel} to level ${nextLevel}! ` +
+        `Gathering bonus increased from +${oldBonus}% to +${newBonus}%. ` +
+        `Cost: ${upgradeCost.wood} wood, ${upgradeCost.stone} stone.`,
+      position: { x: agent.x, y: agent.y },
+      terrain,
+      upgrade: {
+        from_level: currentLevel,
+        to_level: nextLevel,
+        cost: upgradeCost,
+        bonus: {
+          old_percent: oldBonus,
+          new_percent: newBonus,
+          multiplier: UPGRADE_BONUSES[nextLevel]
+        }
+      },
+      inventory: {
+        gold: agent.gold,
+        wood: newWood,
+        food: agent.food,
+        stone: newStone
+      },
+      next_upgrade: nextLevel < MAX_UPGRADE_LEVEL ? {
+        level: nextLevel + 1,
+        cost: UPGRADE_COSTS[nextLevel + 1],
+        bonus_percent: Math.round((UPGRADE_BONUSES[nextLevel + 1] - 1) * 100)
+      } : null
+    });
+
     return jsonResponse({
       success: true,
-      data: {
-        message: `Territory upgraded from level ${currentLevel} to level ${nextLevel}! ` +
-          `Gathering bonus increased from +${oldBonus}% to +${newBonus}%. ` +
-          `Cost: ${upgradeCost.wood} wood, ${upgradeCost.stone} stone.`,
-        position: { x: agent.x, y: agent.y },
-        terrain,
-        upgrade: {
-          from_level: currentLevel,
-          to_level: nextLevel,
-          cost: upgradeCost,
-          bonus: {
-            old_percent: oldBonus,
-            new_percent: newBonus,
-            multiplier: UPGRADE_BONUSES[nextLevel]
-          }
-        },
-        inventory: {
-          gold: agent.gold,
-          wood: newWood,
-          food: agent.food,
-          stone: newStone
-        },
-        next_upgrade: nextLevel < MAX_UPGRADE_LEVEL ? {
-          level: nextLevel + 1,
-          cost: UPGRADE_COSTS[nextLevel + 1],
-          bonus_percent: Math.round((UPGRADE_BONUSES[nextLevel + 1] - 1) * 100)
-        } : null
-      },
+      data: responseData,
     });
   } catch (error) {
     console.error('Upgrade error:', error);

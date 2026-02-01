@@ -5,6 +5,7 @@ import { calculateNewPosition } from '@/lib/game-logic';
 import { Direction } from '@/lib/types';
 import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
+import { withAnnouncements } from '@/lib/announcements';
 
 const VALID_DIRECTIONS: Direction[] = ['north', 'south', 'east', 'west'];
 
@@ -136,15 +137,18 @@ export async function POST(request: NextRequest) {
       .gte('y', newPos.y - 3)
       .lte('y', newPos.y + 3);
 
+    // Include any new announcements in the response
+    const responseData = await withAnnouncements(agent, {
+      message: `Moved ${direction}`,
+      position: newPos,
+      terrain: tile?.terrain || 'unknown',
+      nearby_agents: nearbyAgents || [],
+      moved: true,
+    });
+
     return jsonResponse({
       success: true,
-      data: {
-        message: `Moved ${direction}`,
-        position: newPos,
-        terrain: tile?.terrain || 'unknown',
-        nearby_agents: nearbyAgents || [],
-        moved: true,
-      },
+      data: responseData,
     });
   } catch (error) {
     console.error('Move error:', error);

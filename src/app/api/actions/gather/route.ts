@@ -12,6 +12,7 @@ import {
 } from '@/lib/types';
 import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
+import { withAnnouncements } from '@/lib/announcements';
 
 // Helper: Check if tile has regenerated (1 hour since depletion)
 function hasTileRegenerated(depletedAt: string | null): boolean {
@@ -319,28 +320,31 @@ export async function POST(request: NextRequest) {
       ? `You gathered ${gatheredItems} from the ${terrain}${bonusText}${penaltyText}.${staminaText}${depletionText}`
       : `You searched the ${terrain} but found nothing this time.${penaltyText}${staminaText}${depletionText}`;
 
+    // Include any new announcements in the response
+    const responseData = await withAnnouncements(agent, {
+      message,
+      gathered,
+      terrain,
+      territory_bonus: isOwnedByAgent,
+      upgrade_level: isOwnedByAgent ? upgradeLevel : undefined,
+      tile_depleted: tileDepleted,
+      tile_status: tileDepleted ? 'depleted' : 'available',
+      stamina: {
+        cost: staminaCost,
+        penalty_applied: !hasStamina,
+        food_remaining: newFood
+      },
+      inventory: {
+        gold: newGold,
+        wood: newWood,
+        food: newFood,
+        stone: newStone,
+      },
+    });
+
     return jsonResponse({
       success: true,
-      data: {
-        message,
-        gathered,
-        terrain,
-        territory_bonus: isOwnedByAgent,
-        upgrade_level: isOwnedByAgent ? upgradeLevel : undefined,
-        tile_depleted: tileDepleted,
-        tile_status: tileDepleted ? 'depleted' : 'available',
-        stamina: {
-          cost: staminaCost,
-          penalty_applied: !hasStamina,
-          food_remaining: newFood
-        },
-        inventory: {
-          gold: newGold,
-          wood: newWood,
-          food: newFood,
-          stone: newStone,
-        },
-      },
+      data: responseData,
     });
   } catch (error) {
     console.error('Gather error:', error);

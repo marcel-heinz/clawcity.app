@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
+import { withAnnouncements } from '@/lib/announcements';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -78,13 +79,16 @@ export async function POST(request: NextRequest) {
       ? `You whispered to ${targetAgent.name}: "${message}"`
       : `You said: "${message}"`;
 
+    // Include any new announcements in the response
+    const responseData = await withAnnouncements(agent, {
+      message: responseMessage,
+      type: targetAgent ? 'whisper' : 'speak',
+      position: { x: agent.x, y: agent.y },
+    });
+
     return jsonResponse({
       success: true,
-      data: {
-        message: responseMessage,
-        type: targetAgent ? 'whisper' : 'speak',
-        position: { x: agent.x, y: agent.y },
-      },
+      data: responseData,
     });
   } catch (error) {
     console.error('Speak error:', error);

@@ -12,6 +12,7 @@ import {
   TERRITORY_UPKEEP_FOOD
 } from '@/lib/types';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
+import { withAnnouncements } from '@/lib/announcements';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -188,38 +189,41 @@ export async function POST(request: NextRequest) {
 
     const newTerritoryCount = (territoryCount || 0) + 1;
 
+    // Include any new announcements in the response
+    const responseData = await withAnnouncements(agent, {
+      message: `You have claimed this ${terrain} tile! ` +
+        `Cost: ${CLAIM_COST_GOLD} gold, ${CLAIM_COST_WOOD} wood, ${CLAIM_COST_STONE} stone, ${totalFoodCost} food. ` +
+        `You now receive +25% resources when gathering here (upgradeable to +75%). ` +
+        `IMPORTANT: Territory upkeep is ${TERRITORY_UPKEEP_FOOD} food/territory/hour (${newTerritoryCount * TERRITORY_UPKEEP_FOOD} food/hour total for your ${newTerritoryCount} territories).`,
+      position: { x: agent.x, y: agent.y },
+      terrain,
+      cost: {
+        gold: CLAIM_COST_GOLD,
+        wood: CLAIM_COST_WOOD,
+        stone: CLAIM_COST_STONE,
+        food: totalFoodCost,
+        food_breakdown: {
+          claim_cost: CLAIM_COST_FOOD,
+          stamina_cost: STAMINA_COST_CLAIM
+        }
+      },
+      upkeep: {
+        food_per_territory_per_hour: TERRITORY_UPKEEP_FOOD,
+        total_food_per_hour: newTerritoryCount * TERRITORY_UPKEEP_FOOD
+      },
+      inventory: {
+        gold: newGold,
+        wood: newWood,
+        stone: newStone,
+        food: newFood
+      },
+      territory_count: newTerritoryCount,
+      max_territories: MAX_TERRITORIES_PER_AGENT,
+    });
+
     return jsonResponse({
       success: true,
-      data: {
-        message: `You have claimed this ${terrain} tile! ` +
-          `Cost: ${CLAIM_COST_GOLD} gold, ${CLAIM_COST_WOOD} wood, ${CLAIM_COST_STONE} stone, ${totalFoodCost} food. ` +
-          `You now receive +25% resources when gathering here (upgradeable to +75%). ` +
-          `IMPORTANT: Territory upkeep is ${TERRITORY_UPKEEP_FOOD} food/territory/hour (${newTerritoryCount * TERRITORY_UPKEEP_FOOD} food/hour total for your ${newTerritoryCount} territories).`,
-        position: { x: agent.x, y: agent.y },
-        terrain,
-        cost: {
-          gold: CLAIM_COST_GOLD,
-          wood: CLAIM_COST_WOOD,
-          stone: CLAIM_COST_STONE,
-          food: totalFoodCost,
-          food_breakdown: {
-            claim_cost: CLAIM_COST_FOOD,
-            stamina_cost: STAMINA_COST_CLAIM
-          }
-        },
-        upkeep: {
-          food_per_territory_per_hour: TERRITORY_UPKEEP_FOOD,
-          total_food_per_hour: newTerritoryCount * TERRITORY_UPKEEP_FOOD
-        },
-        inventory: {
-          gold: newGold,
-          wood: newWood,
-          stone: newStone,
-          food: newFood
-        },
-        territory_count: newTerritoryCount,
-        max_territories: MAX_TERRITORIES_PER_AGENT,
-      },
+      data: responseData,
     });
   } catch (error) {
     console.error('Claim error:', error);

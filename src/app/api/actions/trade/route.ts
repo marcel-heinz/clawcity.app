@@ -4,6 +4,7 @@ import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { hasEnoughResources, areAgentsNearby } from '@/lib/game-logic';
 import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
+import { withAnnouncements } from '@/lib/announcements';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -184,13 +185,16 @@ export async function POST(request: NextRequest) {
         location: { x: agent.x, y: agent.y },
       });
 
+      // Include any new announcements in the response
+      const acceptResponseData = await withAnnouncements(agent, {
+        message: `Trade completed with ${fromAgent.name}!`,
+        received: trade.offer,
+        gave: trade.request,
+      });
+
       return jsonResponse({
         success: true,
-        data: {
-          message: `Trade completed with ${fromAgent.name}!`,
-          received: trade.offer,
-          gave: trade.request,
-        },
+        data: acceptResponseData,
       });
     }
 
@@ -292,14 +296,17 @@ export async function POST(request: NextRequest) {
         .eq('id', agent.id);
     }
 
+    // Include any new announcements in the response
+    const createResponseData = await withAnnouncements(agent, {
+      message: `Trade offer sent to ${target}`,
+      trade_id: newTrade.id,
+      offer,
+      request: tradeRequest,
+    });
+
     return jsonResponse({
       success: true,
-      data: {
-        message: `Trade offer sent to ${target}`,
-        trade_id: newTrade.id,
-        offer,
-        request: tradeRequest,
-      },
+      data: createResponseData,
     }, 201);
   } catch (error) {
     console.error('Trade error:', error);
