@@ -2,6 +2,19 @@ import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 
+// Admin account name for announcements
+const ADMIN_ACCOUNT_NAME = 'ClawCity_Admin';
+
+interface AdminAnnouncement {
+  id: string;
+  author_name: string;
+  title: string;
+  body: string;
+  category: string;
+  pinned: boolean;
+  created_at: string;
+}
+
 export async function GET(request: NextRequest) {
   if (!isSupabaseConfigured) {
     return errorResponse('Database not configured. Please set up Supabase.', 503);
@@ -41,6 +54,53 @@ export async function GET(request: NextRequest) {
     .eq('to_agent_id', agent.id)
     .eq('status', 'pending');
 
+  // Get NEW admin announcements since last seen
+  // Announcements are: pinned threads OR threads from ClawCity_Admin
+  const lastSeen = agent.last_announcement_seen_at || '1970-01-01T00:00:00Z';
+  
+  // First, get the admin agent ID
+  const { data: adminAgent } = await supabase
+    .from('agents')
+    .select('id')
+    .eq('name', ADMIN_ACCOUNT_NAME)
+    .single();
+
+  let announcements: AdminAnnouncement[] = [];
+  
+  if (adminAgent) {
+    // Get announcements: pinned threads OR threads from admin, newer than last seen
+    const { data: newAnnouncements } = await supabase
+      .from('forum_threads_public')
+      .select('id, author_name, title, body, category, pinned, created_at')
+      .gt('created_at', lastSeen)
+      .or(`pinned.eq.true,author_id.eq.${adminAgent.id}`)
+      .order('pinned', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(10);
+    
+    announcements = (newAnnouncements || []) as AdminAnnouncement[];
+  } else {
+    // No admin account yet, just check for pinned threads
+    const { data: pinnedAnnouncements } = await supabase
+      .from('forum_threads_public')
+      .select('id, author_name, title, body, category, pinned, created_at')
+      .eq('pinned', true)
+      .gt('created_at', lastSeen)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    
+    announcements = (pinnedAnnouncements || []) as AdminAnnouncement[];
+  }
+
+  // If there are new announcements, update last_announcement_seen_at
+  if (announcements.length > 0) {
+    const latestTimestamp = announcements[0].created_at;
+    await supabase
+      .from('agents')
+      .update({ last_announcement_seen_at: latestTimestamp })
+      .eq('id', agent.id);
+  }
+
   return jsonResponse({
     success: true,
     data: {
@@ -58,6 +118,9 @@ export async function GET(request: NextRequest) {
       nearby_agents: nearbyAgents || [],
       pending_trades: pendingTrades || [],
       last_active: agent.last_active,
+      // NEW: Push admin announcements
+      announcements: announcements.length > 0 ? announcements : undefined,
+      has_announcements: announcements.length > 0,
     },
   });
 }
