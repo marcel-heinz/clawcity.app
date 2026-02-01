@@ -261,6 +261,16 @@ export function calculateWealth(resources: { gold?: number; wood?: number; food?
   );
 }
 
+// Calculate tournament wealth (excludes food - food is operational, not wealth storage)
+// Used for Wealth Sprint tournament scoring
+export function calculateTournamentWealth(resources: { gold?: number; wood?: number; stone?: number }): number {
+  return (
+    (resources.gold || 0) * WEALTH_WEIGHTS.gold +
+    (resources.wood || 0) * WEALTH_WEIGHTS.wood +
+    (resources.stone || 0) * WEALTH_WEIGHTS.stone
+  );
+}
+
 // Terrain resource yields
 export const TERRAIN_RESOURCES: Record<TerrainType, Partial<Record<ResourceType, { min: number; max: number }>>> = {
   plains: { food: { min: 1, max: 3 } },

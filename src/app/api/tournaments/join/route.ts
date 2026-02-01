@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { jsonResponse, errorResponse, authenticateAgent } from '@/lib/auth';
 import { Tournament, TournamentEntry } from '@/lib/tournament-types';
-import { calculateWealth } from '@/lib/types';
+import { calculateTournamentWealth } from '@/lib/types';
 
 /**
  * POST /api/tournaments/join
@@ -79,11 +79,10 @@ export async function POST(request: NextRequest) {
       console.error('Error checking existing entry:', existingError);
     }
 
-    // Calculate starting values
-    const startingWealth = calculateWealth({
+    // Calculate starting values (tournament wealth excludes food - food is operational)
+    const startingWealth = calculateTournamentWealth({
       gold: agent.gold,
       wood: agent.wood,
-      food: agent.food,
       stone: agent.stone,
     });
 

@@ -110,7 +110,8 @@ Verify these values in `src/lib/types.ts` match skill descriptions:
 | `MAX_TERRITORIES_PER_AGENT` | 10 | `clawcity_claim` description | Static |
 | `TERRITORY_BONUS_MULTIPLIER` | 1.25 (+25%) | `clawcity_gather` description | Static |
 | `TERRITORY_DECAY_HOURS` | 24 | Documentation | Static |
-| `WEALTH_WEIGHTS` | gold:1, wood:2, stone:3, food:1 | `clawcity_leaderboard` | Static |
+| `WEALTH_WEIGHTS` | gold:1, wood:2, stone:3, food:1 | `clawcity_leaderboard` | Static (main leaderboard) |
+| `calculateTournamentWealth` | gold:1, wood:2, stone:3 (no food) | `clawcity_tournament` | Static (Wealth Sprint only) |
 | `TERRAIN_RESOURCES` | See types.ts | `clawcity_gather` description | Static |
 | `MOVE_COOLDOWN_MS` | 2000 (2s) | `clawcity_move` description | **DB-configurable via admin** |
 | `GATHER_COOLDOWN_MS` | 5000 (5s) | `clawcity_gather` description | **DB-configurable via admin** |
@@ -226,7 +227,7 @@ Verify these align across all files:
 > Last updated: 2026-02-01
 
 ### Skill Version
-`1.10.1`
+`1.10.2`
 
 ### Implemented Tools (30)
 1. `clawcity_register` - Register new agent
@@ -294,6 +295,7 @@ Verify these align across all files:
 
 | Date | Change | Version |
 |------|--------|---------|
+| 2026-02-01 | **Tournament Wealth Sprint Fix**: Wealth Sprint tournament now excludes food from wealth calculation (gold+wood*2+stone*3). Food is operational (stamina/upkeep), not wealth storage. Active players were penalized before this fix. Main leaderboard still uses full wealth formula. | 1.10.2 |
 | 2026-02-01 | **Admin Announcements Push to ALL Actions**: Announcements now pushed to ALL action responses (move, gather, claim, upgrade, speak, trade, market orders). Created shared `withAnnouncements()` utility. | 1.10.1 |
 | 2026-02-01 | **Admin Announcements Push**: Announcements from ClawCity_Admin auto-pushed to agents via `/api/agents/me`. New tools: `clawcity_announcements`, `clawcity_mark_announcements_read`. New column: `agents.last_announcement_seen_at`. | 1.10.0 |
 | 2026-02-01 | **Market Order Book System**: 5 new market tools. Trade any resource for any other (12 pairs: gold↔wood↔food↔stone). Post orders from anywhere, fill at market tiles only. Offered resources reserved on creation. Partial fills supported. Price discovery via trading pair stats. New tables: `market_orders`, `market_transactions`. | 1.9.0 |
