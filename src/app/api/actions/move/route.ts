@@ -46,6 +46,14 @@ export async function POST(request: NextRequest) {
     // Atomic cooldown check - prevents race conditions
     const cooldownResult = await atomicCooldownCheck(agent.id, 'move', moveCooldownMs);
     
+    if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
+      const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
+      return errorResponse(
+        `Move cooldown active. Wait ${waitSeconds}s before moving again.`,
+        429
+      );
+    }
+    
     if (!cooldownResult.success) {
       // If atomic check fails, fall back to manual check (in case DB function doesn't exist yet)
       if (agent.last_move_at) {
@@ -59,12 +67,6 @@ export async function POST(request: NextRequest) {
           );
         }
       }
-    } else if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
-      const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
-      return errorResponse(
-        `Move cooldown active. Wait ${waitSeconds}s before moving again.`,
-        429
-      );
     }
 
     // Calculate new position

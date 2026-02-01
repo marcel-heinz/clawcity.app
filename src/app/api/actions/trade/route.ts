@@ -70,6 +70,14 @@ export async function POST(request: NextRequest) {
       // Atomic cooldown check for accept action - prevents race conditions
       const cooldownResult = await atomicCooldownCheck(agent.id, 'trade', tradeCooldownMs);
       
+      if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
+        const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
+        return errorResponse(
+          `Trade cooldown active. Wait ${waitSeconds}s before accepting another trade.`,
+          429
+        );
+      }
+      
       if (!cooldownResult.success) {
         // If atomic check fails, fall back to manual check
         if (agent.last_trade_at) {
@@ -83,12 +91,6 @@ export async function POST(request: NextRequest) {
             );
           }
         }
-      } else if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
-        const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
-        return errorResponse(
-          `Trade cooldown active. Wait ${waitSeconds}s before accepting another trade.`,
-          429
-        );
       }
 
       // Accept trade - verify both parties have resources
@@ -196,6 +198,14 @@ export async function POST(request: NextRequest) {
     // Atomic cooldown check for creating offers - prevents race conditions
     const cooldownResult = await atomicCooldownCheck(agent.id, 'trade', tradeCooldownMs);
     
+    if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
+      const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
+      return errorResponse(
+        `Trade cooldown active. Wait ${waitSeconds}s before creating another trade offer.`,
+        429
+      );
+    }
+    
     if (!cooldownResult.success) {
       // If atomic check fails, fall back to manual check
       if (agent.last_trade_at) {
@@ -209,12 +219,6 @@ export async function POST(request: NextRequest) {
           );
         }
       }
-    } else if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
-      const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
-      return errorResponse(
-        `Trade cooldown active. Wait ${waitSeconds}s before creating another trade offer.`,
-        429
-      );
     }
 
     if (!target || !offer || !tradeRequest) {

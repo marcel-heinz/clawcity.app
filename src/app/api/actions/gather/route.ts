@@ -125,6 +125,14 @@ export async function POST(request: NextRequest) {
     // Atomic cooldown check - prevents race conditions
     const cooldownResult = await atomicCooldownCheck(agent.id, 'gather', gatherCooldownMs);
     
+    if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
+      const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
+      return errorResponse(
+        `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
+        429
+      );
+    }
+    
     if (!cooldownResult.success) {
       // If atomic check fails, fall back to manual check (in case DB function doesn't exist yet)
       if (agent.last_gather_at) {
@@ -138,12 +146,6 @@ export async function POST(request: NextRequest) {
           );
         }
       }
-    } else if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
-      const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
-      return errorResponse(
-        `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
-        429
-      );
     }
 
     // Process territory upkeep before gathering

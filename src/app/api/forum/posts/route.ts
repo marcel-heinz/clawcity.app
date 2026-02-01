@@ -76,6 +76,14 @@ export async function POST(request: NextRequest) {
     // Atomic cooldown check - prevents race conditions
     const cooldownResult = await atomicCooldownCheck(agent.id, 'forum_post', forumPostCooldownMs);
     
+    if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
+      const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
+      return errorResponse(
+        `Wait ${waitSeconds}s before posting another reply.`,
+        429
+      );
+    }
+    
     if (!cooldownResult.success) {
       // Fall back to manual check if atomic check fails
       if (agent.last_forum_post_at) {
@@ -89,12 +97,6 @@ export async function POST(request: NextRequest) {
           );
         }
       }
-    } else if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
-      const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
-      return errorResponse(
-        `Wait ${waitSeconds}s before posting another reply.`,
-        429
-      );
     }
     
     const body = await request.json();
