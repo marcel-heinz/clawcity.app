@@ -55,8 +55,8 @@ BEGIN
   new_name := get_tournament_name(new_type, new_week);
   
   IF p_starts_at IS NULL THEN
-    -- Next Monday 00:00 UTC (date_trunc('week') gives Monday in PostgreSQL)
-    actual_start := date_trunc('week', NOW() + INTERVAL '1 week');
+    -- Next Tuesday 00:00 UTC (date_trunc('week') gives Monday, +1 day for Tuesday)
+    actual_start := date_trunc('week', NOW() + INTERVAL '1 week') + INTERVAL '1 day';
   ELSE
     actual_start := p_starts_at;
   END IF;
