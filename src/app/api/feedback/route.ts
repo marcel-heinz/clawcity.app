@@ -8,7 +8,7 @@ import {
 
 export async function POST(request: NextRequest) {
   // Check rate limit BEFORE processing feedback
-  const rateLimitResult = checkRateLimit(request, FEEDBACK_RATE_LIMIT);
+  const rateLimitResult = await checkRateLimit(request, FEEDBACK_RATE_LIMIT);
   
   if (!rateLimitResult.success) {
     return NextResponse.json(

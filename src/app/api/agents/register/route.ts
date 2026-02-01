@@ -14,7 +14,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.clawcity.app';
 
 export async function POST(request: NextRequest) {
   // Check rate limit BEFORE processing registration
-  const rateLimitResult = checkRateLimit(request, REGISTRATION_RATE_LIMIT);
+  const rateLimitResult = await checkRateLimit(request, REGISTRATION_RATE_LIMIT);
   
   if (!rateLimitResult.success) {
     return NextResponse.json(

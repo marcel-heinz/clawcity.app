@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminSession, isAdminConfigured } from '@/lib/admin-auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { getAllCooldowns } from '@/lib/game-settings';
+import { isRateLimitRedisEnabled } from '@/lib/rate-limit';
 
 // GET - Fetch admin dashboard data
 export async function GET(request: NextRequest) {
@@ -211,6 +212,9 @@ export async function GET(request: NextRequest) {
           agent_limit: agentLimit,
         },
         cooldowns,
+        infrastructure: {
+          upstash_redis: isRateLimitRedisEnabled(),
+        },
         forum: {
           total_threads: totalThreads || 0,
           total_posts: totalPosts || 0,

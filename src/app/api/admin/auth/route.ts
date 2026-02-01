@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Check rate limit BEFORE processing login
-  const rateLimitResult = checkRateLimit(request, ADMIN_LOGIN_RATE_LIMIT);
+  const rateLimitResult = await checkRateLimit(request, ADMIN_LOGIN_RATE_LIMIT);
   
   if (!rateLimitResult.success) {
     // Log rate-limited attempt

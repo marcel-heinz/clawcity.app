@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Apply rate limiting (per-IP)
-  const rateLimit = checkRateLimit(request, GAME_ACTION_RATE_LIMIT);
+  const rateLimit = await checkRateLimit(request, GAME_ACTION_RATE_LIMIT);
   if (!rateLimit.success) {
     const retryAfter = Math.ceil((rateLimit.retryAfterMs || 1000) / 1000);
     return errorResponse(

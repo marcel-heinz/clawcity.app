@@ -45,6 +45,10 @@ interface CooldownSettings {
   forum_post: number;
 }
 
+interface InfrastructureStatus {
+  upstash_redis: boolean;
+}
+
 interface AdminData {
   stats: {
     total_agents: number;
@@ -55,6 +59,7 @@ interface AdminData {
     agent_limit: number;
   };
   cooldowns: CooldownSettings;
+  infrastructure?: InfrastructureStatus;
   forum: ForumStats;
   agents: Agent[];
   recent_events: GameEvent[];
@@ -530,6 +535,27 @@ export default function AdminDashboard() {
             <div className="text-xs text-[var(--muted)] uppercase tracking-wider mt-1">
               Territories
             </div>
+          </div>
+          {/* Infrastructure Status */}
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <span className={`inline-block w-3 h-3 rounded-full ${
+                adminData?.infrastructure?.upstash_redis 
+                  ? 'bg-green-400 animate-pulse' 
+                  : 'bg-yellow-400'
+              }`} />
+              <span className="text-lg font-bold">
+                {adminData?.infrastructure?.upstash_redis ? 'Redis' : 'In-Memory'}
+              </span>
+            </div>
+            <div className="text-xs text-[var(--muted)] uppercase tracking-wider mt-1">
+              Rate Limiting
+            </div>
+            {!adminData?.infrastructure?.upstash_redis && (
+              <div className="text-xs text-yellow-400 mt-2">
+                ⚠️ Set UPSTASH_* env vars for production
+              </div>
+            )}
           </div>
         </div>
 
