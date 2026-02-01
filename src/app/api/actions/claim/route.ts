@@ -8,6 +8,7 @@ import {
   TERRITORY_UPKEEP_GOLD,
   UPKEEP_PERIOD_MS
 } from '@/lib/types';
+import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 
 // Helper: Process territory upkeep for an agent (same as in gather route)
 async function processUpkeep(
@@ -85,6 +86,16 @@ async function processUpkeep(
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
     return errorResponse('Database not configured. Please set up Supabase.', 503);
+  }
+
+  // Apply rate limiting (per-IP)
+  const rateLimit = checkRateLimit(request, GAME_ACTION_RATE_LIMIT);
+  if (!rateLimit.success) {
+    const retryAfter = Math.ceil((rateLimit.retryAfterMs || 1000) / 1000);
+    return errorResponse(
+      `Rate limit exceeded. Try again in ${retryAfter}s.`,
+      429
+    );
   }
 
   const auth = await authenticateAgent(request);

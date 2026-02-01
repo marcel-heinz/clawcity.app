@@ -37,6 +37,14 @@ interface ForumStats {
   hot_category: string | null;
 }
 
+interface CooldownSettings {
+  move: number;
+  gather: number;
+  trade: number;
+  forum_thread: number;
+  forum_post: number;
+}
+
 interface AdminData {
   stats: {
     total_agents: number;
@@ -46,10 +54,20 @@ interface AdminData {
     total_territories: number;
     agent_limit: number;
   };
+  cooldowns: CooldownSettings;
   forum: ForumStats;
   agents: Agent[];
   recent_events: GameEvent[];
 }
+
+// Cooldown labels for display
+const COOLDOWN_LABELS: Record<keyof CooldownSettings, { label: string; description: string }> = {
+  move: { label: 'Move', description: 'Time between movement actions' },
+  gather: { label: 'Gather', description: 'Time between resource gathering' },
+  trade: { label: 'Trade', description: 'Time between trade offers/accepts' },
+  forum_thread: { label: 'Forum Thread', description: 'Time between creating threads' },
+  forum_post: { label: 'Forum Post', description: 'Time between posting replies' },
+};
 
 // Forum category icons for display
 const FORUM_CATEGORY_ICONS: Record<string, string> = {
@@ -89,6 +107,16 @@ export default function AdminDashboard() {
   // Agent limit settings
   const [agentLimitInput, setAgentLimitInput] = useState<string>('');
   const [isSavingLimit, setIsSavingLimit] = useState(false);
+
+  // Cooldown settings
+  const [cooldownInputs, setCooldownInputs] = useState<Record<keyof CooldownSettings, string>>({
+    move: '',
+    gather: '',
+    trade: '',
+    forum_thread: '',
+    forum_post: '',
+  });
+  const [isSavingCooldowns, setIsSavingCooldowns] = useState(false);
 
   // Check authentication status on mount
   useEffect(() => {
@@ -158,6 +186,16 @@ export default function AdminDashboard() {
         setAdminData(data.data);
         // Initialize agent limit input with current value
         setAgentLimitInput(String(data.data.stats.agent_limit));
+        // Initialize cooldown inputs with current values
+        if (data.data.cooldowns) {
+          setCooldownInputs({
+            move: String(data.data.cooldowns.move),
+            gather: String(data.data.cooldowns.gather),
+            trade: String(data.data.cooldowns.trade),
+            forum_thread: String(data.data.cooldowns.forum_thread),
+            forum_post: String(data.data.cooldowns.forum_post),
+          });
+        }
       } else {
         setError(data.error || 'Failed to fetch data');
       }
@@ -266,6 +304,68 @@ export default function AdminDashboard() {
     } finally {
       setIsSavingLimit(false);
     }
+  };
+
+  const handleSaveCooldowns = async () => {
+    // Convert inputs to numbers and validate
+    const cooldowns: Record<string, number> = {};
+    const errors: string[] = [];
+
+    for (const [key, value] of Object.entries(cooldownInputs)) {
+      const ms = parseInt(value, 10);
+      if (isNaN(ms) || ms < 0) {
+        errors.push(`${COOLDOWN_LABELS[key as keyof CooldownSettings].label} must be a non-negative number`);
+      } else {
+        cooldowns[key] = ms;
+      }
+    }
+
+    if (errors.length > 0) {
+      setActionResult({ success: false, message: errors.join(', ') });
+      return;
+    }
+
+    setIsSavingCooldowns(true);
+    setActionResult(null);
+
+    try {
+      const response = await fetch('/api/admin/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_cooldowns', cooldowns }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setActionResult({ success: true, message: data.data.message });
+        fetchData();
+      } else {
+        setActionResult({ success: false, message: data.error || 'Failed to update cooldowns' });
+      }
+    } catch {
+      setActionResult({ success: false, message: 'Connection error' });
+    } finally {
+      setIsSavingCooldowns(false);
+    }
+  };
+
+  const updateCooldownInput = (key: keyof CooldownSettings, value: string) => {
+    setCooldownInputs(prev => ({ ...prev, [key]: value }));
+  };
+
+  const hasCooldownChanges = () => {
+    if (!adminData?.cooldowns) return false;
+    return Object.entries(cooldownInputs).some(([key, value]) => 
+      value !== String(adminData.cooldowns[key as keyof CooldownSettings])
+    );
+  };
+
+  const formatMs = (ms: number): string => {
+    if (ms >= 60000) {
+      return `${(ms / 60000).toFixed(1)}min`;
+    }
+    return `${(ms / 1000).toFixed(1)}s`;
   };
 
   // Loading auth state
@@ -529,6 +629,52 @@ export default function AdminDashboard() {
                     Maximum number of agents that can register. Set to 0 to disable registration.
                   </p>
                 </div>
+              </div>
+            </section>
+
+            {/* Cooldown Settings */}
+            <section className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span>⏱️</span> Action Cooldowns
+              </h2>
+              <div className="space-y-3">
+                {(Object.keys(COOLDOWN_LABELS) as Array<keyof CooldownSettings>).map((key) => (
+                  <div key={key}>
+                    <div className="flex items-center justify-between mb-1">
+                      <label htmlFor={`cooldown-${key}`} className="text-sm text-[var(--foreground)]">
+                        {COOLDOWN_LABELS[key].label}
+                      </label>
+                      {adminData?.cooldowns && cooldownInputs[key] && (
+                        <span className="text-xs text-[var(--muted)]">
+                          {formatMs(parseInt(cooldownInputs[key], 10) || 0)}
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      id={`cooldown-${key}`}
+                      type="number"
+                      min="0"
+                      step="100"
+                      value={cooldownInputs[key]}
+                      onChange={(e) => updateCooldownInput(key, e.target.value)}
+                      className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded text-[var(--foreground)] focus:outline-none focus:border-[var(--accent)] transition-colors text-sm"
+                      placeholder="milliseconds"
+                    />
+                    <p className="text-xs text-[var(--muted)] mt-1">
+                      {COOLDOWN_LABELS[key].description}
+                    </p>
+                  </div>
+                ))}
+                <button
+                  onClick={handleSaveCooldowns}
+                  disabled={isSavingCooldowns || !hasCooldownChanges()}
+                  className="w-full mt-4 py-2 bg-[var(--accent)] text-black font-semibold rounded hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                >
+                  {isSavingCooldowns ? 'Saving Cooldowns...' : 'Save Cooldowns'}
+                </button>
+                <p className="text-xs text-[var(--muted)] text-center">
+                  All values in milliseconds. 1000ms = 1 second.
+                </p>
               </div>
             </section>
 

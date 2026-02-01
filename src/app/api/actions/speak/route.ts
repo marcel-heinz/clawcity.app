@@ -1,10 +1,21 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
+import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
     return errorResponse('Database not configured. Please set up Supabase.', 503);
+  }
+
+  // Apply rate limiting (per-IP)
+  const rateLimit = checkRateLimit(request, GAME_ACTION_RATE_LIMIT);
+  if (!rateLimit.success) {
+    const retryAfter = Math.ceil((rateLimit.retryAfterMs || 1000) / 1000);
+    return errorResponse(
+      `Rate limit exceeded. Try again in ${retryAfter}s.`,
+      429
+    );
   }
 
   const auth = await authenticateAgent(request);

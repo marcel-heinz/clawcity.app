@@ -1,14 +1,26 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { calculateNewPosition, checkCooldown } from '@/lib/game-logic';
-import { Direction, MOVE_COOLDOWN_MS } from '@/lib/types';
+import { calculateNewPosition } from '@/lib/game-logic';
+import { Direction } from '@/lib/types';
+import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
+import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 
 const VALID_DIRECTIONS: Direction[] = ['north', 'south', 'east', 'west'];
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
     return errorResponse('Database not configured. Please set up Supabase.', 503);
+  }
+
+  // Apply rate limiting first (per-IP)
+  const rateLimit = checkRateLimit(request, GAME_ACTION_RATE_LIMIT);
+  if (!rateLimit.success) {
+    const retryAfter = Math.ceil((rateLimit.retryAfterMs || 1000) / 1000);
+    return errorResponse(
+      `Rate limit exceeded. Try again in ${retryAfter}s.`,
+      429
+    );
   }
 
   const auth = await authenticateAgent(request);
@@ -28,10 +40,27 @@ export async function POST(request: NextRequest) {
     const agent = auth.agent;
     const supabase = createServerClient();
 
-    // Check move cooldown
-    const cooldown = checkCooldown(agent.last_move_at, MOVE_COOLDOWN_MS);
-    if (!cooldown.allowed) {
-      const waitSeconds = Math.ceil(cooldown.remainingMs / 1000);
+    // Get dynamic cooldown setting
+    const moveCooldownMs = await getCooldownMs('move');
+
+    // Atomic cooldown check - prevents race conditions
+    const cooldownResult = await atomicCooldownCheck(agent.id, 'move', moveCooldownMs);
+    
+    if (!cooldownResult.success) {
+      // If atomic check fails, fall back to manual check (in case DB function doesn't exist yet)
+      if (agent.last_move_at) {
+        const lastMove = new Date(agent.last_move_at).getTime();
+        const elapsed = Date.now() - lastMove;
+        if (elapsed < moveCooldownMs) {
+          const waitSeconds = Math.ceil((moveCooldownMs - elapsed) / 1000);
+          return errorResponse(
+            `Move cooldown active. Wait ${waitSeconds}s before moving again.`,
+            429
+          );
+        }
+      }
+    } else if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
+      const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
       return errorResponse(
         `Move cooldown active. Wait ${waitSeconds}s before moving again.`,
         429
@@ -53,14 +82,20 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Update agent position and cooldown timestamp
+    // Update agent position (cooldown already updated by atomic check, or update now if fallback)
+    const updateData: Record<string, unknown> = { 
+      x: newPos.x, 
+      y: newPos.y,
+    };
+    
+    // Only set cooldown if atomic check didn't do it
+    if (!cooldownResult.success) {
+      updateData.last_move_at = new Date().toISOString();
+    }
+
     const { error: updateError } = await supabase
       .from('agents')
-      .update({ 
-        x: newPos.x, 
-        y: newPos.y,
-        last_move_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', agent.id);
 
     if (updateError) {

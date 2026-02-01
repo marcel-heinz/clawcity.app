@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { checkCooldown } from '@/lib/game-logic';
-import { FORUM_POST_COOLDOWN_MS } from '@/lib/types';
+import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
+import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { POST_BODY_MAX_LENGTH, MAX_REPLY_DEPTH } from '@/lib/forum-types';
 
 // Helper to check if agent is at a market tile
@@ -44,6 +44,16 @@ export async function POST(request: NextRequest) {
     return errorResponse('Database not configured', 503);
   }
 
+  // Apply rate limiting (per-IP)
+  const rateLimit = checkRateLimit(request, GAME_ACTION_RATE_LIMIT);
+  if (!rateLimit.success) {
+    const retryAfter = Math.ceil((rateLimit.retryAfterMs || 1000) / 1000);
+    return errorResponse(
+      `Rate limit exceeded. Try again in ${retryAfter}s.`,
+      429
+    );
+  }
+
   const auth = await authenticateAgent(request);
   
   if (!auth.success || !auth.agent) {
@@ -60,10 +70,27 @@ export async function POST(request: NextRequest) {
       return errorResponse('You must be at a market tile to post in the Forum Romanum. Travel to a market first!', 403);
     }
     
-    // Check post creation cooldown
-    const cooldown = checkCooldown(agent.last_forum_post_at, FORUM_POST_COOLDOWN_MS);
-    if (!cooldown.allowed) {
-      const waitSeconds = Math.ceil(cooldown.remainingMs / 1000);
+    // Get dynamic cooldown setting
+    const forumPostCooldownMs = await getCooldownMs('forum_post');
+    
+    // Atomic cooldown check - prevents race conditions
+    const cooldownResult = await atomicCooldownCheck(agent.id, 'forum_post', forumPostCooldownMs);
+    
+    if (!cooldownResult.success) {
+      // Fall back to manual check if atomic check fails
+      if (agent.last_forum_post_at) {
+        const lastPost = new Date(agent.last_forum_post_at).getTime();
+        const elapsed = Date.now() - lastPost;
+        if (elapsed < forumPostCooldownMs) {
+          const waitSeconds = Math.ceil((forumPostCooldownMs - elapsed) / 1000);
+          return errorResponse(
+            `Wait ${waitSeconds}s before posting another reply.`,
+            429
+          );
+        }
+      }
+    } else if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
+      const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
       return errorResponse(
         `Wait ${waitSeconds}s before posting another reply.`,
         429
@@ -147,11 +174,13 @@ export async function POST(request: NextRequest) {
       return errorResponse('Failed to create post', 500);
     }
     
-    // Update cooldown timestamp
-    await supabase
-      .from('agents')
-      .update({ last_forum_post_at: new Date().toISOString() })
-      .eq('id', agent.id);
+    // Update cooldown timestamp only if atomic check didn't do it
+    if (!cooldownResult.success) {
+      await supabase
+        .from('agents')
+        .update({ last_forum_post_at: new Date().toISOString() })
+        .eq('id', agent.id);
+    }
     
     // Log forum event
     await supabase.from('events').insert({

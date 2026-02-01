@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminSession, isAdminConfigured } from '@/lib/admin-auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
+import { getAllCooldowns } from '@/lib/game-settings';
 
 // GET - Fetch admin dashboard data
 export async function GET(request: NextRequest) {
@@ -29,6 +30,13 @@ export async function GET(request: NextRequest) {
           total_events: 0,
           total_territories: 0,
           agent_limit: 1000,
+        },
+        cooldowns: {
+          move: 2000,
+          gather: 5000,
+          trade: 5000,
+          forum_thread: 60000,
+          forum_post: 30000,
         },
         forum: {
           total_threads: 0,
@@ -107,6 +115,9 @@ export async function GET(request: NextRequest) {
     }
 
     const agentLimit = limitSetting?.value ? Number(limitSetting.value) : 1000;
+
+    // Fetch cooldown settings
+    const cooldowns = await getAllCooldowns();
 
     // Fetch recent events
     const { data: recentEvents, error: eventsDataError } = await supabase
@@ -199,6 +210,7 @@ export async function GET(request: NextRequest) {
           total_territories: territoriesCount || 0,
           agent_limit: agentLimit,
         },
+        cooldowns,
         forum: {
           total_threads: totalThreads || 0,
           total_posts: totalPosts || 0,

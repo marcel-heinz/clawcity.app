@@ -139,9 +139,12 @@ export type ResourceType = 'gold' | 'wood' | 'food' | 'stone';
 export const WORLD_SIZE = 500;
 export const STARTING_GOLD = 100;
 export const STARTING_FOOD = 50;
-export const GATHER_COOLDOWN_MS = 5000;
-export const MOVE_COOLDOWN_MS = 1000;
-export const TRADE_COOLDOWN_MS = 5000;
+
+// Default cooldown values (these are fallbacks - actual values come from game_settings table)
+// Note: These are kept for backwards compatibility but the actual values are now stored in DB
+export const GATHER_COOLDOWN_MS = 5000;      // 5 seconds
+export const MOVE_COOLDOWN_MS = 2000;        // 2 seconds (increased from 1s)
+export const TRADE_COOLDOWN_MS = 5000;       // 5 seconds
 export const FORUM_THREAD_COOLDOWN_MS = 60000;  // 60 seconds between thread creations
 export const FORUM_POST_COOLDOWN_MS = 30000;    // 30 seconds between post/reply creations
 

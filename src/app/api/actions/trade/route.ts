@@ -1,12 +1,23 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { hasEnoughResources, areAgentsNearby, checkCooldown } from '@/lib/game-logic';
-import { TRADE_COOLDOWN_MS } from '@/lib/types';
+import { hasEnoughResources, areAgentsNearby } from '@/lib/game-logic';
+import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
+import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
     return errorResponse('Database not configured. Please set up Supabase.', 503);
+  }
+
+  // Apply rate limiting first (per-IP)
+  const rateLimit = checkRateLimit(request, GAME_ACTION_RATE_LIMIT);
+  if (!rateLimit.success) {
+    const retryAfter = Math.ceil((rateLimit.retryAfterMs || 1000) / 1000);
+    return errorResponse(
+      `Rate limit exceeded. Try again in ${retryAfter}s.`,
+      429
+    );
   }
 
   const auth = await authenticateAgent(request);
@@ -21,6 +32,9 @@ export async function POST(request: NextRequest) {
 
     const agent = auth.agent;
     const supabase = createServerClient();
+
+    // Get dynamic cooldown setting
+    const tradeCooldownMs = await getCooldownMs('trade');
 
     // Accept or reject a trade
     if (action === 'accept' || action === 'reject') {
@@ -53,10 +67,24 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Check trade cooldown for accept action
-      const acceptCooldown = checkCooldown(agent.last_trade_at, TRADE_COOLDOWN_MS);
-      if (!acceptCooldown.allowed) {
-        const waitSeconds = Math.ceil(acceptCooldown.remainingMs / 1000);
+      // Atomic cooldown check for accept action - prevents race conditions
+      const cooldownResult = await atomicCooldownCheck(agent.id, 'trade', tradeCooldownMs);
+      
+      if (!cooldownResult.success) {
+        // If atomic check fails, fall back to manual check
+        if (agent.last_trade_at) {
+          const lastTrade = new Date(agent.last_trade_at).getTime();
+          const elapsed = Date.now() - lastTrade;
+          if (elapsed < tradeCooldownMs) {
+            const waitSeconds = Math.ceil((tradeCooldownMs - elapsed) / 1000);
+            return errorResponse(
+              `Trade cooldown active. Wait ${waitSeconds}s before accepting another trade.`,
+              429
+            );
+          }
+        }
+      } else if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
+        const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
         return errorResponse(
           `Trade cooldown active. Wait ${waitSeconds}s before accepting another trade.`,
           429
@@ -106,16 +134,22 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', fromAgent.id);
 
-      // Deduct from acceptor, add to acceptor, and update cooldown timestamp
+      // Deduct from acceptor, add to acceptor
+      const acceptorUpdate: Record<string, unknown> = {
+        gold: agent.gold - (trade.request.gold || 0) + (trade.offer.gold || 0),
+        wood: agent.wood - (trade.request.wood || 0) + (trade.offer.wood || 0),
+        food: agent.food - (trade.request.food || 0) + (trade.offer.food || 0),
+        stone: agent.stone - (trade.request.stone || 0) + (trade.offer.stone || 0),
+      };
+
+      // Only set cooldown if atomic check didn't do it
+      if (!cooldownResult.success) {
+        acceptorUpdate.last_trade_at = new Date().toISOString();
+      }
+
       await supabase
         .from('agents')
-        .update({
-          gold: agent.gold - (trade.request.gold || 0) + (trade.offer.gold || 0),
-          wood: agent.wood - (trade.request.wood || 0) + (trade.offer.wood || 0),
-          food: agent.food - (trade.request.food || 0) + (trade.offer.food || 0),
-          stone: agent.stone - (trade.request.stone || 0) + (trade.offer.stone || 0),
-          last_trade_at: new Date().toISOString(),
-        })
+        .update(acceptorUpdate)
         .eq('id', agent.id);
 
       // Update trade status
@@ -159,10 +193,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Create a new trade offer
-    // Check trade cooldown for creating offers
-    const createCooldown = checkCooldown(agent.last_trade_at, TRADE_COOLDOWN_MS);
-    if (!createCooldown.allowed) {
-      const waitSeconds = Math.ceil(createCooldown.remainingMs / 1000);
+    // Atomic cooldown check for creating offers - prevents race conditions
+    const cooldownResult = await atomicCooldownCheck(agent.id, 'trade', tradeCooldownMs);
+    
+    if (!cooldownResult.success) {
+      // If atomic check fails, fall back to manual check
+      if (agent.last_trade_at) {
+        const lastTrade = new Date(agent.last_trade_at).getTime();
+        const elapsed = Date.now() - lastTrade;
+        if (elapsed < tradeCooldownMs) {
+          const waitSeconds = Math.ceil((tradeCooldownMs - elapsed) / 1000);
+          return errorResponse(
+            `Trade cooldown active. Wait ${waitSeconds}s before creating another trade offer.`,
+            429
+          );
+        }
+      }
+    } else if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
+      const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
       return errorResponse(
         `Trade cooldown active. Wait ${waitSeconds}s before creating another trade offer.`,
         429
@@ -232,11 +280,13 @@ export async function POST(request: NextRequest) {
       return errorResponse('Failed to create trade', 500);
     }
 
-    // Update cooldown timestamp for trade creation
-    await supabase
-      .from('agents')
-      .update({ last_trade_at: new Date().toISOString() })
-      .eq('id', agent.id);
+    // Update cooldown timestamp if atomic check didn't do it
+    if (!cooldownResult.success) {
+      await supabase
+        .from('agents')
+        .update({ last_trade_at: new Date().toISOString() })
+        .eq('id', agent.id);
+    }
 
     return jsonResponse({
       success: true,

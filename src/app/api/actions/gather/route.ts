@@ -1,16 +1,17 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { calculateGatheredResources, checkCooldown } from '@/lib/game-logic';
+import { calculateGatheredResources } from '@/lib/game-logic';
 import { 
   TerrainType, 
   TERRITORY_BONUS_MULTIPLIER, 
-  GATHER_COOLDOWN_MS,
   DEPLETION_CHANCE,
   REGENERATION_MS,
   TERRITORY_UPKEEP_GOLD,
   UPKEEP_PERIOD_MS
 } from '@/lib/types';
+import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
+import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 
 // Helper: Check if tile has regenerated (1 hour since depletion)
 function hasTileRegenerated(depletedAt: string | null): boolean {
@@ -98,6 +99,16 @@ export async function POST(request: NextRequest) {
     return errorResponse('Database not configured. Please set up Supabase.', 503);
   }
 
+  // Apply rate limiting first (per-IP)
+  const rateLimit = checkRateLimit(request, GAME_ACTION_RATE_LIMIT);
+  if (!rateLimit.success) {
+    const retryAfter = Math.ceil((rateLimit.retryAfterMs || 1000) / 1000);
+    return errorResponse(
+      `Rate limit exceeded. Try again in ${retryAfter}s.`,
+      429
+    );
+  }
+
   const auth = await authenticateAgent(request);
   
   if (!auth.success || !auth.agent) {
@@ -108,10 +119,27 @@ export async function POST(request: NextRequest) {
     const agent = auth.agent;
     const supabase = createServerClient();
 
-    // Check gather cooldown
-    const cooldown = checkCooldown(agent.last_gather_at, GATHER_COOLDOWN_MS);
-    if (!cooldown.allowed) {
-      const waitSeconds = Math.ceil(cooldown.remainingMs / 1000);
+    // Get dynamic cooldown setting
+    const gatherCooldownMs = await getCooldownMs('gather');
+
+    // Atomic cooldown check - prevents race conditions
+    const cooldownResult = await atomicCooldownCheck(agent.id, 'gather', gatherCooldownMs);
+    
+    if (!cooldownResult.success) {
+      // If atomic check fails, fall back to manual check (in case DB function doesn't exist yet)
+      if (agent.last_gather_at) {
+        const lastGather = new Date(agent.last_gather_at).getTime();
+        const elapsed = Date.now() - lastGather;
+        if (elapsed < gatherCooldownMs) {
+          const waitSeconds = Math.ceil((gatherCooldownMs - elapsed) / 1000);
+          return errorResponse(
+            `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
+            429
+          );
+        }
+      }
+    } else if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
+      const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
       return errorResponse(
         `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
         429
@@ -191,15 +219,21 @@ export async function POST(request: NextRequest) {
     if (terrain === 'water') {
       const waterFood = Math.floor(Math.random() * 2) + 1;
       
-      // Update agent inventory
+      // Update agent inventory (cooldown already updated by atomic check or update now)
+      const updateData: Record<string, unknown> = {
+        gold: currentGold,
+        food: agent.food + waterFood,
+        total_gathered_food: (agent.total_gathered_food || 0) + waterFood,
+      };
+      
+      // Only set cooldown if atomic check didn't do it
+      if (!cooldownResult.success) {
+        updateData.last_gather_at = new Date().toISOString();
+      }
+
       await supabase
         .from('agents')
-        .update({
-          gold: currentGold,
-          food: agent.food + waterFood,
-          last_gather_at: new Date().toISOString(),
-          total_gathered_food: (agent.total_gathered_food || 0) + waterFood,
-        })
+        .update(updateData)
         .eq('id', agent.id);
 
       // Log event
@@ -253,21 +287,27 @@ export async function POST(request: NextRequest) {
         .eq('y', agent.y);
     }
 
-    // Update agent inventory, cooldown, and total gathered stats
+    // Update agent inventory and total gathered stats
+    const inventoryUpdate: Record<string, unknown> = {
+      gold: currentGold + gathered.gold,
+      wood: agent.wood + gathered.wood,
+      food: agent.food + gathered.food,
+      stone: agent.stone + gathered.stone,
+      // Update lifetime gathering stats
+      total_gathered_gold: (agent.total_gathered_gold || 0) + gathered.gold,
+      total_gathered_wood: (agent.total_gathered_wood || 0) + gathered.wood,
+      total_gathered_food: (agent.total_gathered_food || 0) + gathered.food,
+      total_gathered_stone: (agent.total_gathered_stone || 0) + gathered.stone,
+    };
+
+    // Only set cooldown if atomic check didn't do it
+    if (!cooldownResult.success) {
+      inventoryUpdate.last_gather_at = new Date().toISOString();
+    }
+
     const { error: updateError } = await supabase
       .from('agents')
-      .update({
-        gold: currentGold + gathered.gold,
-        wood: agent.wood + gathered.wood,
-        food: agent.food + gathered.food,
-        stone: agent.stone + gathered.stone,
-        last_gather_at: new Date().toISOString(),
-        // Update lifetime gathering stats
-        total_gathered_gold: (agent.total_gathered_gold || 0) + gathered.gold,
-        total_gathered_wood: (agent.total_gathered_wood || 0) + gathered.wood,
-        total_gathered_food: (agent.total_gathered_food || 0) + gathered.food,
-        total_gathered_stone: (agent.total_gathered_stone || 0) + gathered.stone,
-      })
+      .update(inventoryUpdate)
       .eq('id', agent.id);
 
     if (updateError) {

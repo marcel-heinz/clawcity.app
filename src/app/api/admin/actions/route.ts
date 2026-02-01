@@ -3,8 +3,9 @@ import { verifyAdminSession, isAdminConfigured } from '@/lib/admin-auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { generateWorldTiles } from '@/lib/game-logic';
 import { getClientIdentifier } from '@/lib/rate-limit';
+import { updateCooldownSetting, CooldownType, DEFAULT_COOLDOWNS } from '@/lib/game-settings';
 
-type AdminAction = 'offboard_all' | 'reset_world' | 'clear_events' | 'clear_trades' | 'update_agent_limit';
+type AdminAction = 'offboard_all' | 'reset_world' | 'clear_events' | 'clear_trades' | 'update_agent_limit' | 'update_cooldowns';
 
 /**
  * Log admin action to audit log
@@ -54,7 +55,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { action, value } = body as { action: AdminAction; value?: number };
+    const { action, value, cooldowns } = body as { 
+      action: AdminAction; 
+      value?: number;
+      cooldowns?: Record<string, number>;
+    };
 
     if (!action) {
       return NextResponse.json(
@@ -253,6 +258,70 @@ export async function POST(request: NextRequest) {
         result = {
           message: `Successfully updated agent limit to ${value}`,
           details: { new_limit: value },
+        };
+        
+        await logAdminAction(action, request, true, result.details);
+        break;
+      }
+
+      case 'update_cooldowns': {
+        // Validate cooldowns object
+        if (!cooldowns || typeof cooldowns !== 'object') {
+          return NextResponse.json(
+            { success: false, error: 'Cooldowns object is required' },
+            { status: 400 }
+          );
+        }
+
+        const validTypes = Object.keys(DEFAULT_COOLDOWNS) as CooldownType[];
+        const updates: { type: CooldownType; value: number }[] = [];
+        const errors: string[] = [];
+
+        // Validate all cooldown values
+        for (const [type, ms] of Object.entries(cooldowns)) {
+          if (!validTypes.includes(type as CooldownType)) {
+            errors.push(`Invalid cooldown type: ${type}`);
+            continue;
+          }
+          if (typeof ms !== 'number' || !Number.isInteger(ms) || ms < 0) {
+            errors.push(`${type} must be a non-negative integer (milliseconds)`);
+            continue;
+          }
+          updates.push({ type: type as CooldownType, value: ms });
+        }
+
+        if (errors.length > 0) {
+          return NextResponse.json(
+            { success: false, error: errors.join(', ') },
+            { status: 400 }
+          );
+        }
+
+        // Apply all updates
+        const results: { type: string; success: boolean }[] = [];
+        for (const update of updates) {
+          const success = await updateCooldownSetting(update.type, update.value);
+          results.push({ type: update.type, success });
+        }
+
+        const allSuccess = results.every(r => r.success);
+        const failedUpdates = results.filter(r => !r.success).map(r => r.type);
+
+        if (!allSuccess) {
+          await logAdminAction(action, request, false, { 
+            error: 'Some updates failed', 
+            failed: failedUpdates,
+            cooldowns 
+          });
+          return NextResponse.json(
+            { success: false, error: `Failed to update: ${failedUpdates.join(', ')}` },
+            { status: 500 }
+          );
+        }
+
+        result = {
+          message: `Successfully updated ${updates.length} cooldown setting(s)`,
+          details: { cooldowns },
         };
         
         await logAdminAction(action, request, true, result.details);
