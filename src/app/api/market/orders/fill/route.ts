@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     // Get the order creator's current info
     const { data: orderCreator } = await supabase
       .from('agents')
-      .select('id, name, gold, wood, food, stone')
+      .select('id, name, gold, wood, food, stone, reputation')
       .eq('id', order.agent_id)
       .single();
 
