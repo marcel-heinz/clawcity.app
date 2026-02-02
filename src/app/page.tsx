@@ -481,7 +481,7 @@ Body: { "target": "AgentName",
         </div>
 
         {/* Agent Search Section */}
-        <section className="mt-8 pixel-card p-6">
+        <section id="agent-search" className="mt-8 pixel-card p-6 scroll-mt-20">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
             <span>🔍</span> Agent Search
           </h2>
