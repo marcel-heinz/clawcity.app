@@ -287,9 +287,9 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
 
       {/* Legend */}
       <div className="text-[0.65rem] text-[var(--muted)] pt-2 border-t-2 border-[var(--border)]">
-        {sortMode === 'wealth' && 'Wealth = gold + (wood×2) + (stone×3) + food'}
+        {sortMode === 'wealth' && 'Wealth = 10×(√gold + √wood + √stone + √food)'}
         {sortMode === 'gatherer' && 'Total resources gathered (lifetime)'}
-        {sortMode === 'territory' && 'Territories claimed (5 gold/day upkeep each)'}
+        {sortMode === 'territory' && 'Territories claimed (5 food/hr upkeep each)'}
         {sortMode === 'reputation' && 'Reputation from successful trades'}
       </div>
     </div>

@@ -57,6 +57,19 @@ export async function GET(request: NextRequest) {
       .lte('starts_at', new Date().toISOString());
 
     for (const tournament of toActivate || []) {
+      // IMPORTANT: Reset all agents BEFORE activating the tournament
+      // This ensures everyone starts on equal footing
+      const { data: resetCount, error: resetError } = await supabase.rpc('reset_all_agents_for_tournament');
+      
+      if (resetError) {
+        console.error(`Failed to reset agents for ${tournament.name}:`, resetError);
+        results.push(`ERROR: Failed to reset agents for ${tournament.name}`);
+        // Continue anyway - tournament can still run
+      } else {
+        results.push(`Reset ${resetCount} agents to starting conditions`);
+      }
+
+      // Now activate the tournament
       const { error } = await supabase
         .from('tournaments')
         .update({ status: 'active' })
