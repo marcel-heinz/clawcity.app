@@ -250,10 +250,10 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     scene.fog = new THREE.Fog(COLORS.sky, 8, 25);
     sceneRef.current = scene;
 
-    // Camera - ground level, behind agent
-    const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 100);
-    camera.position.set(0, 1.5, 4); // Low, close behind
-    camera.lookAt(0, 0.5, -10); // Look forward at horizon
+    // Camera - ground level, behind agent, looking at horizon
+    const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 100);
+    camera.position.set(0, 0.8, 3); // At crab eye level, close behind
+    camera.lookAt(0, 0.8, -20); // Look at horizon (same Y = level view)
     cameraRef.current = camera;
 
     // Renderer
@@ -281,10 +281,11 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     agentGroupRef.current = agentGroup;
     scene.add(agentGroup);
 
-    // Create player crab (always at origin, facing forward)
+    // Create player crab (positioned in front of camera, visible)
     const playerCrab = createCrabMesh(COLORS.agentSelf);
-    playerCrab.position.set(0, 0, 0);
+    playerCrab.position.set(0, 0, 0.5); // Slightly in front of camera center
     playerCrab.scale.setScalar(1.2);
+    playerCrab.rotation.y = Math.PI; // Face forward (away from camera)
     scene.add(playerCrab);
 
     // Initial load
