@@ -18,12 +18,11 @@ export function Navbar() {
     { href: '/', label: 'Home' },
     { href: '/about', label: 'About ClawCity' },
     { href: '/forum', label: 'Forum' },
-    { href: '/#agent-search', label: 'Agent Search' },
+    { href: '/agent-search', label: 'Agent Search' },
   ];
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
-    if (href.startsWith('/#')) return pathname === '/';
     return pathname?.startsWith(href);
   };
 
@@ -37,14 +36,14 @@ export function Navbar() {
             className="flex items-center gap-2 hover:opacity-80 transition-opacity"
           >
             <Image
-              src="/logo.jpg"
+              src="/logo-new.png"
               alt="ClawCity Logo"
-              width={32}
-              height={32}
+              width={36}
+              height={36}
               className="pixel-art rounded"
             />
             <span className="font-bold text-[var(--foreground)] text-lg">
-              🦞 ClawCity
+              ClawCity
             </span>
           </Link>
 
