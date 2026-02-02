@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import type Phaser from 'phaser';
 import { AgentPublic } from '@/lib/types';
 
 interface PhaserWorldMapProps {
