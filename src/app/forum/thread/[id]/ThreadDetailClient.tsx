@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import ReactMarkdown, { Components } from 'react-markdown';
 import { ForumThreadWithPosts, ForumPost, FORUM_CATEGORY_ICONS, FORUM_CATEGORY_LABELS, formatForumTime } from '@/lib/forum-types';
 import { supabase } from '@/lib/supabase';
 
@@ -10,71 +11,83 @@ interface ThreadDetailClientProps {
   threadId: string;
 }
 
-// Simple markdown renderer for forum posts
-function renderMarkdown(text: string): React.ReactNode {
-  // Split by newlines first to preserve line structure
-  const lines = text.split('\n');
+// Styled markdown components for the forum
+const markdownComponents: Components = {
+  // Headings
+  h1: ({ children }) => <h1 className="text-xl font-bold mt-4 mb-2 text-[var(--foreground)]">{children}</h1>,
+  h2: ({ children }) => <h2 className="text-lg font-bold mt-4 mb-2 text-[var(--foreground)]">{children}</h2>,
+  h3: ({ children }) => <h3 className="text-base font-bold mt-3 mb-1 text-[var(--foreground)]">{children}</h3>,
+  h4: ({ children }) => <h4 className="text-sm font-bold mt-2 mb-1 text-[var(--foreground)]">{children}</h4>,
   
-  return lines.map((line, lineIndex) => {
-    // Parse inline formatting
-    const parts: React.ReactNode[] = [];
-    let remaining = line;
-    let keyIndex = 0;
-    
-    while (remaining.length > 0) {
-      // Bold: **text**
-      const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/);
-      if (boldMatch) {
-        parts.push(<strong key={`${lineIndex}-${keyIndex++}`} className="font-bold">{boldMatch[1]}</strong>);
-        remaining = remaining.slice(boldMatch[0].length);
-        continue;
-      }
-      
-      // Italic: *text*
-      const italicMatch = remaining.match(/^\*([^*]+)\*/);
-      if (italicMatch) {
-        parts.push(<em key={`${lineIndex}-${keyIndex++}`} className="italic">{italicMatch[1]}</em>);
-        remaining = remaining.slice(italicMatch[0].length);
-        continue;
-      }
-      
-      // Code: `text`
-      const codeMatch = remaining.match(/^`([^`]+)`/);
-      if (codeMatch) {
-        parts.push(
-          <code key={`${lineIndex}-${keyIndex++}`} className="px-1.5 py-0.5 bg-[var(--surface-alt)] border border-[var(--border)] text-sm font-mono rounded">
-            {codeMatch[1]}
-          </code>
-        );
-        remaining = remaining.slice(codeMatch[0].length);
-        continue;
-      }
-      
-      // Find next special character
-      const nextSpecial = remaining.search(/[\*`]/);
-      if (nextSpecial === -1) {
-        // No more special chars, add rest as text
-        parts.push(<span key={`${lineIndex}-${keyIndex++}`}>{remaining}</span>);
-        break;
-      } else if (nextSpecial === 0) {
-        // Special char at start but didn't match pattern, add it as text
-        parts.push(<span key={`${lineIndex}-${keyIndex++}`}>{remaining[0]}</span>);
-        remaining = remaining.slice(1);
-      } else {
-        // Add text before special char
-        parts.push(<span key={`${lineIndex}-${keyIndex++}`}>{remaining.slice(0, nextSpecial)}</span>);
-        remaining = remaining.slice(nextSpecial);
-      }
+  // Paragraphs
+  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  
+  // Lists
+  ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+  li: ({ children }) => <li className="text-[var(--foreground)]">{children}</li>,
+  
+  // Tables
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-3">
+      <table className="min-w-full border-collapse border-2 border-[var(--border)]">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="bg-[var(--surface-alt)]">{children}</thead>,
+  tbody: ({ children }) => <tbody>{children}</tbody>,
+  tr: ({ children }) => <tr className="border-b border-[var(--border)]">{children}</tr>,
+  th: ({ children }) => <th className="px-3 py-2 text-left font-bold border border-[var(--border)]">{children}</th>,
+  td: ({ children }) => <td className="px-3 py-2 border border-[var(--border)]">{children}</td>,
+  
+  // Inline code
+  code: ({ children, className }) => {
+    const isBlock = className?.includes('language-');
+    if (isBlock) {
+      return (
+        <code className="block p-3 bg-[var(--surface-alt)] border-2 border-[var(--border)] text-sm font-mono overflow-x-auto my-2">
+          {children}
+        </code>
+      );
     }
-    
-    // Return line with linebreak (except for last line)
     return (
-      <span key={lineIndex}>
-        {parts}
-        {lineIndex < lines.length - 1 && <br />}
-      </span>
+      <code className="px-1.5 py-0.5 bg-[var(--surface-alt)] border border-[var(--border)] text-sm font-mono">
+        {children}
+      </code>
     );
-  });
+  },
+  
+  // Block code wrapper
+  pre: ({ children }) => <pre className="my-2">{children}</pre>,
+  
+  // Bold & Italic
+  strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+  em: ({ children }) => <em className="italic">{children}</em>,
+  
+  // Links
+  a: ({ children, href }) => (
+    <a href={href} className="text-[var(--accent)] hover:underline" target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+  
+  // Blockquote
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-[var(--accent)] pl-4 my-2 text-[var(--muted)] italic">
+      {children}
+    </blockquote>
+  ),
+  
+  // Horizontal rule
+  hr: () => <hr className="my-4 border-t-2 border-[var(--border)]" />,
+};
+
+// Forum markdown renderer component
+function ForumMarkdown({ content }: { content: string }) {
+  return (
+    <ReactMarkdown components={markdownComponents}>
+      {content}
+    </ReactMarkdown>
+  );
 }
 
 function PostCard({ post, depth = 0 }: { post: ForumPost; depth?: number }) {
@@ -102,7 +115,7 @@ function PostCard({ post, depth = 0 }: { post: ForumPost; depth?: number }) {
               <span>{formatForumTime(post.created_at)}</span>
             </div>
             <div className="text-sm text-[var(--foreground)] break-words leading-relaxed">
-              {renderMarkdown(post.body)}
+              <ForumMarkdown content={post.body} />
             </div>
           </div>
         </div>
@@ -301,7 +314,7 @@ export default function ThreadDetailClient({ threadId }: ThreadDetailClientProps
               </h1>
 
               <div className="text-[var(--foreground)] mb-4 leading-relaxed">
-                {renderMarkdown(thread.body)}
+                <ForumMarkdown content={thread.body} />
               </div>
 
               <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--muted)]">
