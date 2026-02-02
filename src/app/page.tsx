@@ -14,6 +14,7 @@ import { AgentSearch } from '@/components/AgentSearch';
 import { TournamentBanner } from '@/components/TournamentBanner';
 import { Tournament } from '@/lib/tournament-types';
 import { AgentView3D } from '@/components/AgentView3D';
+import { ActiveAgents } from '@/components/ActiveAgents';
 
 export default function Home() {
   const { events, agents, leaderboard, recentlyJoined, stats, isConnected, error } = useRealtimeEvents(100);
@@ -397,16 +398,27 @@ Body: { "target": "AgentName",
           </section>
         )}
 
-        {/* World Map - Full Width Hero */}
-        <section className="pixel-card p-4 mb-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
-            <span>🗺️</span> World Overview
-          </h2>
-          <WorldOverview
-            agents={agents}
-            onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
-          />
-        </section>
+        {/* World Map + Active Agents Sidebar */}
+        <div className="grid lg:grid-cols-[1fr_280px] gap-4 mb-6">
+          {/* Map */}
+          <section className="pixel-card p-4">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
+              <span>🗺️</span> World Overview
+            </h2>
+            <WorldOverview
+              agents={agents}
+              onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
+            />
+          </section>
+
+          {/* Active Agents Sidebar */}
+          <section className="pixel-card p-4 lg:max-h-[500px]">
+            <ActiveAgents
+              agents={agents}
+              onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
+            />
+          </section>
+        </div>
 
         {/* Secondary Grid - Activity, Stats, Leaderboard */}
         <div className="grid lg:grid-cols-[1fr_320px_280px] gap-4">

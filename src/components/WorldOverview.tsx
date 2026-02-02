@@ -4,6 +4,13 @@ import { useEffect, useState, useMemo } from 'react';
 import { AgentPublic, Tile } from '@/lib/types';
 import { AgentCrab } from './CrabSprite';
 
+// Check if agent was active in the last 5 minutes
+function isActiveAgent(lastActive: string): boolean {
+  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+  const lastActiveTime = new Date(lastActive).getTime();
+  return lastActiveTime >= fiveMinutesAgo;
+}
+
 interface WorldOverviewProps {
   agents: AgentPublic[];
   onAgentClick?: (agentId: string, x: number, y: number) => void;
@@ -138,7 +145,9 @@ export function WorldOverview({ agents, onAgentClick }: WorldOverviewProps) {
       });
     });
 
+    // Only count active agents (last active within 5 minutes)
     agents.forEach(agent => {
+      if (!isActiveAgent(agent.last_active)) return;
       const zoneId = getAgentZone(agent.x, agent.y);
       const zoneStat = stats.get(zoneId);
       if (zoneStat) zoneStat.agentCount++;
@@ -173,19 +182,24 @@ export function WorldOverview({ agents, onAgentClick }: WorldOverviewProps) {
     return stats;
   }, [agents, tiles]);
 
-  const totalAgents = agents.length;
+  // Filter to only active agents (last active within 5 minutes)
+  const activeAgents = useMemo(() => {
+    return agents.filter(agent => isActiveAgent(agent.last_active));
+  }, [agents]);
+
+  const totalAgents = activeAgents.length;
   const totalTerritories = tiles.filter(t => t.owner_id).length;
 
-  // Group agents by zone for crab rendering
+  // Group active agents by zone for crab rendering
   const agentsByZone = useMemo(() => {
     const grouped = new Map<string, AgentPublic[]>();
-    agents.forEach(agent => {
+    activeAgents.forEach(agent => {
       const zoneId = getAgentZone(agent.x, agent.y);
       const existing = grouped.get(zoneId) || [];
       grouped.set(zoneId, [...existing, agent]);
     });
     return grouped;
-  }, [agents]);
+  }, [activeAgents]);
 
   // Pre-calculate crab positions for all zones (memoized to avoid duplicates)
   const zoneCrabs = useMemo(() => {
@@ -239,7 +253,7 @@ export function WorldOverview({ agents, onAgentClick }: WorldOverviewProps) {
           <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
             <span>👥</span>
             <span className="font-bold text-[var(--accent)]">{totalAgents}</span>
-            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">online</span>
+            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">active</span>
           </div>
           <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
             <span>🏴</span>
