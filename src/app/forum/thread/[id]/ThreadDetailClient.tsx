@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import ReactMarkdown, { Components } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { ForumThreadWithPosts, ForumPost, FORUM_CATEGORY_ICONS, FORUM_CATEGORY_LABELS, formatForumTime } from '@/lib/forum-types';
 import { supabase } from '@/lib/supabase';
 
@@ -84,7 +85,7 @@ const markdownComponents: Components = {
 // Forum markdown renderer component
 function ForumMarkdown({ content }: { content: string }) {
   return (
-    <ReactMarkdown components={markdownComponents}>
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
       {content}
     </ReactMarkdown>
   );
