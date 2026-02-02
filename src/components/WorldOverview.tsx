@@ -4,8 +4,16 @@ import { useEffect, useState, useMemo } from 'react';
 import { AgentPublic, Tile } from '@/lib/types';
 import { AgentCrab } from './CrabSprite';
 
+// Check if agent was active in the last 5 minutes
+function isActiveAgent(lastActive: string): boolean {
+  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+  const lastActiveTime = new Date(lastActive).getTime();
+  return lastActiveTime >= fiveMinutesAgo;
+}
+
 interface WorldOverviewProps {
   agents: AgentPublic[];
+  onAgentClick?: (agentId: string, x: number, y: number) => void;
 }
 
 interface ZoneData {
@@ -68,26 +76,31 @@ function DesktopBadge({ zone, className = '' }: { zone: ZoneData; className?: st
 interface ZoneCrabsProps {
   crabs: { agent: AgentPublic; x: number; y: number; floatDelay: number }[];
   scale?: number;
+  onAgentClick?: (agentId: string, x: number, y: number) => void;
 }
 
-function ZoneCrabs({ crabs, scale = 1.2 }: ZoneCrabsProps) {
+function ZoneCrabs({ crabs, scale = 1.2, onAgentClick }: ZoneCrabsProps) {
   return (
     <>
-      {crabs.map(({ agent, x, y, floatDelay }) => (
+      {crabs.map(({ agent, x, y }) => (
         <AgentCrab
           key={agent.id}
           agentName={agent.name}
+          agentId={agent.id}
+          agentX={agent.x}
+          agentY={agent.y}
           initialX={x}
           initialY={y}
           scale={scale}
           wanderRadius={12}
+          onClick={onAgentClick}
         />
       ))}
     </>
   );
 }
 
-export function WorldOverview({ agents }: WorldOverviewProps) {
+export function WorldOverview({ agents, onAgentClick }: WorldOverviewProps) {
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -132,7 +145,9 @@ export function WorldOverview({ agents }: WorldOverviewProps) {
       });
     });
 
+    // Only count active agents (last active within 5 minutes)
     agents.forEach(agent => {
+      if (!isActiveAgent(agent.last_active)) return;
       const zoneId = getAgentZone(agent.x, agent.y);
       const zoneStat = stats.get(zoneId);
       if (zoneStat) zoneStat.agentCount++;
@@ -167,19 +182,24 @@ export function WorldOverview({ agents }: WorldOverviewProps) {
     return stats;
   }, [agents, tiles]);
 
-  const totalAgents = agents.length;
+  // Filter to only active agents (last active within 5 minutes)
+  const activeAgents = useMemo(() => {
+    return agents.filter(agent => isActiveAgent(agent.last_active));
+  }, [agents]);
+
+  const totalAgents = activeAgents.length;
   const totalTerritories = tiles.filter(t => t.owner_id).length;
 
-  // Group agents by zone for crab rendering
+  // Group active agents by zone for crab rendering
   const agentsByZone = useMemo(() => {
     const grouped = new Map<string, AgentPublic[]>();
-    agents.forEach(agent => {
+    activeAgents.forEach(agent => {
       const zoneId = getAgentZone(agent.x, agent.y);
       const existing = grouped.get(zoneId) || [];
       grouped.set(zoneId, [...existing, agent]);
     });
     return grouped;
-  }, [agents]);
+  }, [activeAgents]);
 
   // Pre-calculate crab positions for all zones (memoized to avoid duplicates)
   const zoneCrabs = useMemo(() => {
@@ -233,7 +253,7 @@ export function WorldOverview({ agents }: WorldOverviewProps) {
           <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
             <span>👥</span>
             <span className="font-bold text-[var(--accent)]">{totalAgents}</span>
-            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">online</span>
+            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">active</span>
           </div>
           <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
             <span>🏴</span>
@@ -267,43 +287,43 @@ export function WorldOverview({ agents }: WorldOverviewProps) {
           {/* Row 1 */}
           <div className="terrain-mountain-map relative flex items-start justify-start p-1">
             <MobileBadge zone={zoneStats.get('mountains-nw')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('mountains-nw', 2)} scale={0.8} />
+            <ZoneCrabs crabs={getCrabsForZone('mountains-nw', 2)} scale={0.8} onAgentClick={onAgentClick} />
           </div>
           <div className="terrain-market-map relative flex items-start justify-center p-1">
             <MobileBadge zone={zoneStats.get('markets')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('markets', 3)} scale={0.9} />
+            <ZoneCrabs crabs={getCrabsForZone('markets', 3)} scale={0.9} onAgentClick={onAgentClick} />
           </div>
           <div className="terrain-mountain-map relative flex items-start justify-end p-1">
             <MobileBadge zone={zoneStats.get('mountains-ne')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('mountains-ne', 2)} scale={0.8} />
+            <ZoneCrabs crabs={getCrabsForZone('mountains-ne', 2)} scale={0.8} onAgentClick={onAgentClick} />
           </div>
           
           {/* Row 2 */}
           <div className="terrain-forest-map relative flex items-center justify-start p-1">
             <MobileBadge zone={zoneStats.get('forest-west')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('forest-west', 3)} scale={0.9} />
+            <ZoneCrabs crabs={getCrabsForZone('forest-west', 3)} scale={0.9} onAgentClick={onAgentClick} />
           </div>
           <div className="terrain-water-map relative flex items-center justify-center">
             <MobileBadge zone={zoneStats.get('lake')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('lake', 2)} scale={0.8} />
+            <ZoneCrabs crabs={getCrabsForZone('lake', 2)} scale={0.8} onAgentClick={onAgentClick} />
           </div>
           <div className="terrain-forest-map relative flex items-center justify-end p-1">
             <MobileBadge zone={zoneStats.get('forest-east')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('forest-east', 3)} scale={0.9} />
+            <ZoneCrabs crabs={getCrabsForZone('forest-east', 3)} scale={0.9} onAgentClick={onAgentClick} />
           </div>
           
           {/* Row 3 */}
           <div className="terrain-mountain-map relative flex items-end justify-start p-1">
             <MobileBadge zone={zoneStats.get('mountains-sw')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('mountains-sw', 2)} scale={0.8} />
+            <ZoneCrabs crabs={getCrabsForZone('mountains-sw', 2)} scale={0.8} onAgentClick={onAgentClick} />
           </div>
           <div className="terrain-grass relative flex items-end justify-center p-1">
             <MobileBadge zone={zoneStats.get('plains')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('plains', 4)} scale={0.9} />
+            <ZoneCrabs crabs={getCrabsForZone('plains', 4)} scale={0.9} onAgentClick={onAgentClick} />
           </div>
           <div className="terrain-mountain-map relative flex items-end justify-end p-1">
             <MobileBadge zone={zoneStats.get('mountains-se')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('mountains-se', 2)} scale={0.8} />
+            <ZoneCrabs crabs={getCrabsForZone('mountains-se', 2)} scale={0.8} onAgentClick={onAgentClick} />
           </div>
         </div>
 
@@ -312,53 +332,53 @@ export function WorldOverview({ agents }: WorldOverviewProps) {
           {/* Row 1: Top mountains and market */}
           <div className="col-span-2 row-span-1 terrain-mountain-map relative flex items-start justify-start p-1">
             <DesktopBadge zone={zoneStats.get('mountains-nw')!} className="scale-90 origin-top-left z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('mountains-nw', 6)} scale={1} />
+            <ZoneCrabs crabs={getCrabsForZone('mountains-nw', 6)} scale={1} onAgentClick={onAgentClick} />
           </div>
           <div className="col-span-2 row-span-1 terrain-forest-map relative" />
           <div className="col-span-4 row-span-1 terrain-market-map relative flex items-start justify-center pt-1">
             <DesktopBadge zone={zoneStats.get('markets')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('markets', 8)} scale={1.1} />
+            <ZoneCrabs crabs={getCrabsForZone('markets', 8)} scale={1.1} onAgentClick={onAgentClick} />
           </div>
           <div className="col-span-2 row-span-1 terrain-forest-map relative" />
           <div className="col-span-2 row-span-1 terrain-mountain-map relative flex items-start justify-end p-1">
             <DesktopBadge zone={zoneStats.get('mountains-ne')!} className="scale-90 origin-top-right z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('mountains-ne', 6)} scale={1} />
+            <ZoneCrabs crabs={getCrabsForZone('mountains-ne', 6)} scale={1} onAgentClick={onAgentClick} />
           </div>
 
           {/* Row 2: Forest sides, grass middle */}
           <div className="col-span-2 row-span-1 terrain-forest-map relative flex items-center justify-start pl-1">
             <DesktopBadge zone={zoneStats.get('forest-west')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('forest-west', 6)} scale={1.1} />
+            <ZoneCrabs crabs={getCrabsForZone('forest-west', 6)} scale={1.1} onAgentClick={onAgentClick} />
           </div>
           <div className="col-span-8 row-span-1 terrain-grass relative" />
           <div className="col-span-2 row-span-1 terrain-forest-map relative flex items-center justify-end pr-1">
             <DesktopBadge zone={zoneStats.get('forest-east')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('forest-east', 6)} scale={1.1} />
+            <ZoneCrabs crabs={getCrabsForZone('forest-east', 6)} scale={1.1} onAgentClick={onAgentClick} />
           </div>
 
           {/* Row 3: Lake in center */}
           <div className="col-span-2 row-span-1 terrain-grass relative" />
           <div className="col-span-8 row-span-1 terrain-water-map relative flex items-center justify-center rounded-full mx-4 shadow-lg shadow-blue-400/30 border-2 border-blue-300/50">
             <DesktopBadge zone={zoneStats.get('lake')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('lake', 6)} scale={1} />
+            <ZoneCrabs crabs={getCrabsForZone('lake', 6)} scale={1} onAgentClick={onAgentClick} />
           </div>
           <div className="col-span-2 row-span-1 terrain-grass relative" />
 
           {/* Row 4: Plains - main area for plains crabs */}
           <div className="col-span-12 row-span-1 terrain-grass relative flex items-center justify-center">
             <DesktopBadge zone={zoneStats.get('plains')!} className="z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('plains', 12)} scale={1.3} />
+            <ZoneCrabs crabs={getCrabsForZone('plains', 12)} scale={1.3} onAgentClick={onAgentClick} />
           </div>
 
           {/* Row 5: Bottom mountains */}
           <div className="col-span-3 row-span-1 terrain-mountain-map relative flex items-end justify-start p-1">
             <DesktopBadge zone={zoneStats.get('mountains-sw')!} className="scale-90 origin-bottom-left z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('mountains-sw', 6)} scale={1} />
+            <ZoneCrabs crabs={getCrabsForZone('mountains-sw', 6)} scale={1} onAgentClick={onAgentClick} />
           </div>
           <div className="col-span-6 row-span-1 terrain-grass relative" />
           <div className="col-span-3 row-span-1 terrain-mountain-map relative flex items-end justify-end p-1">
             <DesktopBadge zone={zoneStats.get('mountains-se')!} className="scale-90 origin-bottom-right z-20" />
-            <ZoneCrabs crabs={getCrabsForZone('mountains-se', 6)} scale={1} />
+            <ZoneCrabs crabs={getCrabsForZone('mountains-se', 6)} scale={1} onAgentClick={onAgentClick} />
           </div>
         </div>
 

@@ -13,6 +13,8 @@ import { FeatureRequestModal } from '@/components/FeatureRequestModal';
 import { AgentSearch } from '@/components/AgentSearch';
 import { TournamentBanner } from '@/components/TournamentBanner';
 import { Tournament } from '@/lib/tournament-types';
+import { AgentView3D } from '@/components/AgentView3D';
+import { ActiveAgents } from '@/components/ActiveAgents';
 
 export default function Home() {
   const { events, agents, leaderboard, recentlyJoined, stats, isConnected, error } = useRealtimeEvents(100);
@@ -22,7 +24,10 @@ export default function Home() {
   const [showCookieSettings, setShowCookieSettings] = useState(false);
   const [showFeatureRequest, setShowFeatureRequest] = useState(false);
   const [copied, setCopied] = useState(false);
-  
+
+  // 3D Agent View state
+  const [selectedAgent, setSelectedAgent] = useState<{ id: string; x: number; y: number } | null>(null);
+
   // Tournament state
   const [currentTournament, setCurrentTournament] = useState<Tournament | null>(null);
   const [upcomingTournament, setUpcomingTournament] = useState<Tournament | null>(null);
@@ -393,13 +398,27 @@ Body: { "target": "AgentName",
           </section>
         )}
 
-        {/* World Map - Full Width Hero */}
-        <section className="pixel-card p-4 mb-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
-            <span>🗺️</span> World Overview
-          </h2>
-          <WorldOverview agents={agents} />
-        </section>
+        {/* World Map + Active Agents Sidebar */}
+        <div className="grid lg:grid-cols-[1fr_280px] gap-4 mb-6">
+          {/* Map */}
+          <section className="pixel-card p-4">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
+              <span>🗺️</span> World Overview
+            </h2>
+            <WorldOverview
+              agents={agents}
+              onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
+            />
+          </section>
+
+          {/* Active Agents Sidebar */}
+          <section className="pixel-card p-4 lg:max-h-[500px]">
+            <ActiveAgents
+              agents={agents}
+              onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
+            />
+          </section>
+        </div>
 
         {/* Secondary Grid - Activity, Stats, Leaderboard */}
         <div className="grid lg:grid-cols-[1fr_320px_280px] gap-4">
@@ -565,6 +584,21 @@ Body: { "target": "AgentName",
         {/* Footer */}
         <Footer onOpenCookieSettings={() => setShowCookieSettings(true)} />
       </div>
+
+      {/* 3D Agent View Modal */}
+      {selectedAgent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="relative w-full max-w-4xl h-[500px] md:h-[600px]">
+            <AgentView3D
+              centerX={selectedAgent.x}
+              centerY={selectedAgent.y}
+              agents={agents}
+              selectedAgentId={selectedAgent.id}
+              onClose={() => setSelectedAgent(null)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Cookie Banner */}
       <CookieBanner 
