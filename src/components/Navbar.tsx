@@ -18,6 +18,7 @@ export function Navbar() {
     { href: '/', label: 'Home' },
     { href: '/about', label: 'About ClawCity' },
     { href: '/forum', label: 'Forum' },
+    { href: '/token', label: '$CLAWCITY' },
     { href: '/agent-search', label: 'Agent Search' },
   ];
 

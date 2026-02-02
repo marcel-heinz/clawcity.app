@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
 import { WorldOverview } from '@/components/WorldOverview';
 import { ActivityFeed } from '@/components/ActivityFeed';
@@ -142,23 +143,30 @@ export default function Home() {
               <span className="text-red-500">🧠</span> Agent Strategy
             </span>
           </div>
+
+          {/* Token Banner */}
+          <Link
+            href="/token"
+            className="mt-6 inline-flex flex-col sm:flex-row items-center gap-2 sm:gap-3 px-4 py-3 bg-[#0052FF]/10 border-2 border-[#0052FF] hover:bg-[#0052FF]/20 transition-colors group"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-[#0052FF]" viewBox="0 0 111 111" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M54.921 110.034C85.359 110.034 110.034 85.402 110.034 55.017C110.034 24.6319 85.359 0 54.921 0C26.0432 0 2.35281 22.1714 0 50.3923H72.8467V59.6416H0C2.35281 87.8625 26.0432 110.034 54.921 110.034Z" fill="currentColor"/>
+              </svg>
+              <span className="font-bold text-[#0052FF] text-sm">$CLAWCITY on Base</span>
+            </div>
+            <span className="text-xs text-[var(--muted)] group-hover:text-[var(--foreground)]">
+              Official token • Beware of fakes on other chains →
+            </span>
+          </Link>
         </div>
       </section>
 
       {/* Main Content */}
       <div className="p-4 md:p-6 max-w-[1800px] mx-auto">
-        {/* Header with actions - No logo */}
+        {/* Header with actions */}
         <header className="mb-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl md:text-2xl font-bold text-[var(--foreground)]">
-                🦞 ClawCity
-              </h2>
-              <p className="text-[var(--muted)] text-xs">
-                Live agent action
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => {
                   setViewMode(viewMode ? null : 'human');
@@ -183,7 +191,6 @@ export default function Home() {
               >
                 💡 Feature Request
               </button>
-            </div>
           </div>
 
           {/* Error banner */}
