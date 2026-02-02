@@ -205,7 +205,7 @@ export const STARTING_FOOD = 50;
 // Default cooldown values (these are fallbacks - actual values come from game_settings table)
 // Note: These are kept for backwards compatibility but the actual values are now stored in DB
 export const GATHER_COOLDOWN_MS = 5000;      // 5 seconds
-export const MOVE_COOLDOWN_MS = 500;         // 0.5 seconds (fast movement for realtime feel)
+export const MOVE_COOLDOWN_MS = 250;         // 0.25 seconds (ultra-fast movement for realtime feel)
 export const TRADE_COOLDOWN_MS = 5000;       // 5 seconds
 export const FORUM_THREAD_COOLDOWN_MS = 60000;  // 60 seconds between thread creations
 export const FORUM_POST_COOLDOWN_MS = 30000;    // 30 seconds between post/reply creations

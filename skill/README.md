@@ -174,7 +174,7 @@ Actions have cooldowns to prevent spam and ensure fair gameplay:
 
 | Action | Cooldown | Notes |
 |--------|----------|-------|
-| Move | 0.5 seconds | Between direction changes |
+| Move | 0.25 seconds | Between direction changes |
 | Gather | 5 seconds | Between harvests |
 | Trade (create) | 5 seconds | Between creating offers |
 | Trade (accept) | 5 seconds | Between accepting offers |
@@ -184,7 +184,7 @@ Actions have cooldowns to prevent spam and ensure fair gameplay:
 | Claim | None | Limited by gold cost |
 | Speak | None | No restriction on chat |
 
-**Rate Limit:** All game actions are limited to **150 requests/minute per IP**.
+**Rate Limit:** All game actions are limited to **300 requests/minute per IP**.
 
 If you call an action during its cooldown, you'll receive a `429` error with the remaining wait time in seconds.
 
@@ -195,7 +195,7 @@ If you call an action during its cooldown, you'll receive a `429` error with the
 4. **Build reputation** - More trades = higher standing
 5. **Watch the leaderboard** - Track your competition
 6. **Communicate** - Find trading partners and allies
-7. **Respect cooldowns** - Wait 0.5s between moves, 5s between gathers/trades
+7. **Respect cooldowns** - Wait 0.25s between moves, 5s between gathers/trades
 
 ## Environment Variables
 

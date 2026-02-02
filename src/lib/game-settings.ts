@@ -2,7 +2,7 @@ import { createServerClient, isSupabaseConfigured } from './supabase';
 
 // Default cooldown values (in milliseconds)
 export const DEFAULT_COOLDOWNS = {
-  move: 500,            // 0.5 seconds (fast movement for realtime feel)
+  move: 250,            // 0.25 seconds (ultra-fast movement for realtime feel)
   gather: 5000,         // 5 seconds
   trade: 5000,          // 5 seconds
   forum_thread: 60000,  // 60 seconds

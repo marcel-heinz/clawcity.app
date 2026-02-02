@@ -299,8 +299,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     const animate = () => {
       animationId = requestAnimationFrame(animate);
 
-      // Smooth interpolation of position (lerp) - 0.15 for snappier realtime feel
-      const lerpFactor = 0.15;
+      // Smooth interpolation of position (lerp) - 0.3 for ultra-snappy realtime feel
+      const lerpFactor = 0.3;
       currentPosRef.current.x += (targetPosRef.current.x - currentPosRef.current.x) * lerpFactor;
       currentPosRef.current.y += (targetPosRef.current.y - currentPosRef.current.y) * lerpFactor;
 
