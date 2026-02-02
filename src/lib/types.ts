@@ -226,6 +226,10 @@ export const GATHER_PENALTY_MULTIPLIER = 0.5; // 50% yield when food = 0
 // Territory upkeep (food-based, replaces gold upkeep)
 export const TERRITORY_UPKEEP_FOOD = 5; // Food cost per territory per hour
 
+// Inactivity drain (affects ALL agents)
+export const INACTIVITY_THRESHOLD_HOURS = 8; // Hours of inactivity before drain kicks in
+export const INACTIVITY_DRAIN_PERCENT = 0.10; // 10% resource drain per hour when inactive
+
 // Territory upgrade system
 export const UPGRADE_COSTS: Record<number, { wood: number; stone: number }> = {
   2: { wood: 50, stone: 25 },

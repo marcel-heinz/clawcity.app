@@ -1,15 +1,27 @@
 import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { jsonResponse, errorResponse } from '@/lib/auth';
-import { TERRITORY_UPKEEP_FOOD } from '@/lib/types';
+import { 
+  TERRITORY_UPKEEP_FOOD, 
+  INACTIVITY_THRESHOLD_HOURS, 
+  INACTIVITY_DRAIN_PERCENT,
+  STARTING_GOLD,
+  STARTING_FOOD 
+} from '@/lib/types';
 
 /**
  * GET /api/cron/upkeep
  * 
- * Hourly cron job to process territory food upkeep:
- * 1. For each agent with territories, deduct TERRITORY_UPKEEP_FOOD * territory_count
- * 2. If food < upkeep: set food_depleted_at (triggers accelerated 12hr decay)
- * 3. If food_depleted_at > 12 hours: release oldest territory
+ * Hourly cron job to process:
+ * 
+ * 1. TERRITORY UPKEEP (for agents with territories):
+ *    - Deduct TERRITORY_UPKEEP_FOOD * territory_count
+ *    - If food < upkeep: set food_depleted_at (triggers accelerated 12hr decay)
+ *    - If food_depleted_at > 12 hours: release oldest territory
+ * 
+ * 2. INACTIVITY DRAIN (for ALL agents inactive 8+ hours):
+ *    - Drain 10% of each resource per hour
+ *    - Floor at starting stats: 100 gold, 50 food, 0 wood, 0 stone
  * 
  * Called every hour at minute 0 via Vercel Cron: "0 * * * *"
  */
@@ -32,10 +44,10 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
 
-    // Get all agents with their territory counts
-    const { data: agentsWithTerritories, error: agentsError } = await supabase
+    // Get all agents with resources and activity data
+    const { data: allAgents, error: agentsError } = await supabase
       .from('agents')
-      .select('id, name, food, food_depleted_at')
+      .select('id, name, gold, wood, food, stone, food_depleted_at, last_active')
       .gt('food', -1); // All agents
 
     if (agentsError) {
@@ -66,7 +78,7 @@ export async function GET(request: NextRequest) {
     let agentsDepleted = 0;
     let territoriesReleased = 0;
 
-    for (const agent of agentsWithTerritories || []) {
+    for (const agent of allAgents || []) {
       const territoryCount = territoryCountMap.get(agent.id) || 0;
       
       // Skip agents with no territories
@@ -178,18 +190,76 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ============================================
+    // INACTIVITY DRAIN - 10% per hour for ALL agents inactive 8+ hours
+    // Floor at starting stats: 100 gold, 50 food, 0 wood, 0 stone
+    // ============================================
+    const inactivityThreshold = new Date(now.getTime() - INACTIVITY_THRESHOLD_HOURS * 60 * 60 * 1000);
+    const inactivityResults: string[] = [];
+    let agentsDrained = 0;
+    const drainMultiplier = 1 - INACTIVITY_DRAIN_PERCENT; // 0.9 for 10% drain
+
+    for (const agent of allAgents || []) {
+      const lastActive = new Date(agent.last_active);
+      
+      // Skip if agent has been active within threshold
+      if (lastActive >= inactivityThreshold) {
+        continue;
+      }
+
+      // Calculate new values with 10% drain, floored at starting stats
+      const newGold = Math.max(STARTING_GOLD, Math.floor(agent.gold * drainMultiplier));
+      const newFood = Math.max(STARTING_FOOD, Math.floor(agent.food * drainMultiplier));
+      const newWood = Math.max(0, Math.floor(agent.wood * drainMultiplier));
+      const newStone = Math.max(0, Math.floor(agent.stone * drainMultiplier));
+
+      // Only update if something actually changed (not already at floor)
+      if (newGold !== agent.gold || newFood !== agent.food || 
+          newWood !== agent.wood || newStone !== agent.stone) {
+        
+        await supabase
+          .from('agents')
+          .update({ 
+            gold: newGold, 
+            food: newFood, 
+            wood: newWood, 
+            stone: newStone 
+          })
+          .eq('id', agent.id);
+
+        agentsDrained++;
+        
+        // Calculate what was drained for logging
+        const goldDrained = agent.gold - newGold;
+        const foodDrained = agent.food - newFood;
+        const woodDrained = agent.wood - newWood;
+        const stoneDrained = agent.stone - newStone;
+        
+        inactivityResults.push(
+          `${agent.name}: -${goldDrained}g -${foodDrained}f -${woodDrained}w -${stoneDrained}s (inactive ${Math.round((now.getTime() - lastActive.getTime()) / 3600000)}h)`
+        );
+      }
+    }
+
     return jsonResponse({
       success: true,
       data: {
         timestamp: now.toISOString(),
-        summary: {
+        territory_upkeep: {
           agents_processed: agentsProcessed,
           agents_depleted: agentsDepleted,
           total_food_deducted: totalFoodDeducted,
           territories_released: territoriesReleased,
-          upkeep_rate: `${TERRITORY_UPKEEP_FOOD} food/territory/hour`
+          upkeep_rate: `${TERRITORY_UPKEEP_FOOD} food/territory/hour`,
+          details: results,
         },
-        details: results,
+        inactivity_drain: {
+          agents_drained: agentsDrained,
+          threshold_hours: INACTIVITY_THRESHOLD_HOURS,
+          drain_percent: `${INACTIVITY_DRAIN_PERCENT * 100}%`,
+          floor: `${STARTING_GOLD}g/${STARTING_FOOD}f/0w/0s`,
+          details: inactivityResults,
+        },
       },
     });
   } catch (error) {
