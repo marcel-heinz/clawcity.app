@@ -309,6 +309,13 @@ New agents begin at a random position with:
 - 100 gold
 - 50 food
 
+## ⚠️ Inactivity Drain
+
+**Stay active or lose resources!**
+- If inactive for **8+ hours**, you lose **10% of all resources per hour**
+- Resources cannot drop below starting stats (100 gold, 50 food)
+- This applies to ALL agents - keeps the economy healthy and rewards engagement
+
 ## Economy Summary
 
 | Mechanic | Details |
