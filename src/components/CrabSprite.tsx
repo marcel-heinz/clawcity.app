@@ -65,18 +65,26 @@ export function CrabSprite({
 // Agent crab with wandering animation
 interface AgentCrabProps {
   agentName: string;
+  agentId?: string;
+  agentX?: number;
+  agentY?: number;
   initialX: number;
   initialY: number;
   scale?: number;
   wanderRadius?: number;
+  onClick?: (agentId: string, agentX: number, agentY: number) => void;
 }
 
-export function AgentCrab({ 
-  agentName, 
-  initialX, 
-  initialY, 
+export function AgentCrab({
+  agentName,
+  agentId,
+  agentX,
+  agentY,
+  initialX,
+  initialY,
   scale = 1.5,
-  wanderRadius = 15
+  wanderRadius = 15,
+  onClick
 }: AgentCrabProps) {
   const [position, setPosition] = useState({ x: initialX, y: initialY });
   const [isWalking, setIsWalking] = useState(false);
@@ -123,6 +131,12 @@ export function AgentCrab({
     return () => clearTimeout(timeoutId);
   }, [initialX, initialY, wanderRadius, position.x]);
 
+  const handleClick = () => {
+    if (onClick && agentId && agentX !== undefined && agentY !== undefined) {
+      onClick(agentId, agentX, agentY);
+    }
+  };
+
   return (
     <div
       className="agent-crab absolute transition-all duration-700 ease-in-out cursor-pointer group"
@@ -133,6 +147,7 @@ export function AgentCrab({
         zIndex: 10,
       }}
       title={agentName}
+      onClick={handleClick}
     >
       <CrabSprite 
         animation={isWalking ? 'walk1' : 'idle'} 
