@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { AgentPublic, Tile, TerrainType } from '@/lib/types';
+import { supabase } from '@/lib/supabase';
 
 // Minecraft-style colors
 const COLORS = {
@@ -53,7 +54,6 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
   const [displayPos, setDisplayPos] = useState({ x: centerX, y: centerY });
 
   const VIEW_RADIUS = 12;
-  const POLL_INTERVAL = 500; // 500ms for smoother updates
 
   // Find selected agent's name
   useEffect(() => {
@@ -299,8 +299,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     const animate = () => {
       animationId = requestAnimationFrame(animate);
 
-      // Smooth interpolation of position (lerp)
-      const lerpFactor = 0.08;
+      // Smooth interpolation of position (lerp) - 0.15 for snappier realtime feel
+      const lerpFactor = 0.15;
       currentPosRef.current.x += (targetPosRef.current.x - currentPosRef.current.x) * lerpFactor;
       currentPosRef.current.y += (targetPosRef.current.y - currentPosRef.current.y) * lerpFactor;
 
@@ -336,13 +336,72 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     };
   }, [centerX, centerY, createCrabMesh, fetchTiles, buildTerrain]);
 
-  // Real-time polling
+  // Supabase Realtime subscription for instant position updates
   useEffect(() => {
     let isMounted = true;
 
-    const poll = async () => {
+    // Handler for agent position updates
+    const handleAgentUpdate = async (payload: { new: { id: string; x: number; y: number; name: string } }) => {
       if (!isMounted) return;
+      
+      const updatedAgent = payload.new;
+      
+      // Check if this is our selected agent
+      if (updatedAgent.id === selectedAgentId) {
+        const oldX = targetPosRef.current.x;
+        const oldY = targetPosRef.current.y;
 
+        // Update target position instantly
+        targetPosRef.current.x = updatedAgent.x;
+        targetPosRef.current.y = updatedAgent.y;
+        setDisplayPos({ x: updatedAgent.x, y: updatedAgent.y });
+
+        // If position changed, refetch terrain
+        if (Math.abs(updatedAgent.x - oldX) > 0 || Math.abs(updatedAgent.y - oldY) > 0) {
+          const tiles = await fetchTiles(updatedAgent.x, updatedAgent.y);
+          buildTerrain(tiles, updatedAgent.x, updatedAgent.y);
+        }
+      } else {
+        // Update other agent position
+        const agentGroup = agentGroupRef.current;
+        if (!agentGroup) return;
+
+        const cx = targetPosRef.current.x;
+        const cy = targetPosRef.current.y;
+        const relX = updatedAgent.x - cx;
+        const relZ = updatedAgent.y - cy;
+
+        // Only show nearby agents
+        if (Math.abs(relX) > VIEW_RADIUS || Math.abs(relZ) > VIEW_RADIUS) {
+          // Remove if now out of range
+          const existing = otherAgentsRef.current.get(updatedAgent.id);
+          if (existing) {
+            agentGroup.remove(existing.mesh);
+            otherAgentsRef.current.delete(updatedAgent.id);
+          }
+          return;
+        }
+
+        const existing = otherAgentsRef.current.get(updatedAgent.id);
+        if (existing) {
+          // Update target position for smooth lerp
+          existing.target.set(relX, 0, relZ);
+        } else {
+          // Create new agent mesh
+          const mesh = createCrabMesh(COLORS.agentOther);
+          mesh.position.set(relX, 0, relZ);
+          agentGroup.add(mesh);
+          otherAgentsRef.current.set(updatedAgent.id, {
+            current: new THREE.Vector3(relX, 0, relZ),
+            target: new THREE.Vector3(relX, 0, relZ),
+            mesh
+          });
+        }
+      }
+    };
+
+    // Initial fetch to populate state
+    const initialFetch = async () => {
       try {
         const response = await fetch('/api/world/status');
         const data = await response.json();
@@ -353,50 +412,27 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
           // Find our agent
           const ourAgent = allAgents.find(a => a.id === selectedAgentId);
           if (ourAgent) {
-            const oldX = targetPosRef.current.x;
-            const oldY = targetPosRef.current.y;
-
-            // Update target position
             targetPosRef.current.x = ourAgent.x;
             targetPosRef.current.y = ourAgent.y;
             setDisplayPos({ x: ourAgent.x, y: ourAgent.y });
-
-            // If position changed significantly, refetch terrain
-            if (Math.abs(ourAgent.x - oldX) > 0 || Math.abs(ourAgent.y - oldY) > 0) {
-              const tiles = await fetchTiles(ourAgent.x, ourAgent.y);
-              buildTerrain(tiles, ourAgent.x, ourAgent.y);
-            }
+            
+            const tiles = await fetchTiles(ourAgent.x, ourAgent.y);
+            buildTerrain(tiles, ourAgent.x, ourAgent.y);
           }
 
-          // Update other agents
+          // Populate other agents
           const agentGroup = agentGroupRef.current;
-          const scene = sceneRef.current;
-          if (agentGroup && scene) {
+          if (agentGroup) {
             const cx = targetPosRef.current.x;
             const cy = targetPosRef.current.y;
 
-            // Track which agents we've seen
-            const seenIds = new Set<string>();
-
             allAgents.forEach(agent => {
-              if (agent.id === selectedAgentId) return; // Skip self
+              if (agent.id === selectedAgentId) return;
 
               const relX = agent.x - cx;
               const relZ = agent.y - cy;
 
-              // Only show nearby agents
-              if (Math.abs(relX) > VIEW_RADIUS || Math.abs(relZ) > VIEW_RADIUS) {
-                return;
-              }
-
-              seenIds.add(agent.id);
-
-              const existing = otherAgentsRef.current.get(agent.id);
-              if (existing) {
-                // Update target position
-                existing.target.set(relX, 0, relZ);
-              } else {
-                // Create new agent mesh
+              if (Math.abs(relX) <= VIEW_RADIUS && Math.abs(relZ) <= VIEW_RADIUS) {
                 const mesh = createCrabMesh(COLORS.agentOther);
                 mesh.position.set(relX, 0, relZ);
                 agentGroup.add(mesh);
@@ -407,30 +443,35 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
                 });
               }
             });
-
-            // Remove agents that are no longer visible
-            otherAgentsRef.current.forEach((agentData, id) => {
-              if (!seenIds.has(id)) {
-                agentGroup.remove(agentData.mesh);
-                otherAgentsRef.current.delete(id);
-              }
-            });
           }
         }
       } catch (error) {
-        console.error('Poll error:', error);
+        console.error('Initial fetch error:', error);
       }
     };
 
-    // Initial poll
-    poll();
+    // Do initial fetch
+    initialFetch();
 
-    // Poll interval
-    const interval = setInterval(poll, POLL_INTERVAL);
+    // Subscribe to realtime updates on agents_realtime table
+    const channel = supabase
+      .channel('agent-fpv-' + selectedAgentId)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'agents_realtime',
+        },
+        (payload) => {
+          handleAgentUpdate(payload as { new: { id: string; x: number; y: number; name: string } });
+        }
+      )
+      .subscribe();
 
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      supabase.removeChannel(channel);
     };
   }, [selectedAgentId, fetchTiles, buildTerrain, createCrabMesh]);
 
