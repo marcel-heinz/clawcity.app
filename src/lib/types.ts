@@ -243,31 +243,33 @@ export const MAX_UPGRADE_LEVEL = 3;
 // Legacy constant - kept for reference, now replaced by UPGRADE_BONUSES
 export const TERRITORY_BONUS_MULTIPLIER = 1.25; // +25% resources on owned tiles (level 1)
 
-// Wealth calculation weights
-export const WEALTH_WEIGHTS: Record<ResourceType, number> = {
-  gold: 1,
-  wood: 2,
-  stone: 3,
-  food: 1,
-};
+// Wealth calculation using scaled sqrt formula
+// This creates diminishing returns and rewards diversification over hoarding single resources
+// Formula: 10 * (sqrt(gold) + sqrt(wood) + sqrt(stone) + sqrt(food))
+export const WEALTH_SCALE_FACTOR = 10;
 
-// Calculate total wealth from resources
+// Calculate total wealth from resources using scaled sqrt
+// Rewards balanced resource collection, diminishing returns on hoarding
 export function calculateWealth(resources: { gold?: number; wood?: number; food?: number; stone?: number }): number {
-  return (
-    (resources.gold || 0) * WEALTH_WEIGHTS.gold +
-    (resources.wood || 0) * WEALTH_WEIGHTS.wood +
-    (resources.stone || 0) * WEALTH_WEIGHTS.stone +
-    (resources.food || 0) * WEALTH_WEIGHTS.food
+  return Math.round(
+    WEALTH_SCALE_FACTOR * (
+      Math.sqrt(resources.gold || 0) +
+      Math.sqrt(resources.wood || 0) +
+      Math.sqrt(resources.stone || 0) +
+      Math.sqrt(resources.food || 0)
+    )
   );
 }
 
 // Calculate tournament wealth (excludes food - food is operational, not wealth storage)
 // Used for Wealth Sprint tournament scoring
 export function calculateTournamentWealth(resources: { gold?: number; wood?: number; stone?: number }): number {
-  return (
-    (resources.gold || 0) * WEALTH_WEIGHTS.gold +
-    (resources.wood || 0) * WEALTH_WEIGHTS.wood +
-    (resources.stone || 0) * WEALTH_WEIGHTS.stone
+  return Math.round(
+    WEALTH_SCALE_FACTOR * (
+      Math.sqrt(resources.gold || 0) +
+      Math.sqrt(resources.wood || 0) +
+      Math.sqrt(resources.stone || 0)
+    )
   );
 }
 
