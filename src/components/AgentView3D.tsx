@@ -464,7 +464,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
           table: 'agents_realtime',
         },
         (payload) => {
-          handleAgentUpdate(payload as { new: { id: string; x: number; y: number; name: string } });
+          handleAgentUpdate(payload as unknown as { new: { id: string; x: number; y: number; name: string } });
         }
       )
       .subscribe();
