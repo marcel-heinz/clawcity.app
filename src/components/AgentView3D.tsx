@@ -14,7 +14,7 @@ const COLORS = {
   mountainLight: 0x9a9a9a,
   // Forest: 2 layers
   treeTrunk: 0x8B4513,
-  treeLeaves: 0x228B22,
+  treeLeaves: 0x1a5a1a,
   // Water
   water: 0x4169E1,
   // Market
