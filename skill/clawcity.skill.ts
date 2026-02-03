@@ -68,8 +68,8 @@ async function callApi<T>(
 // Skill definition for OpenClaw
 export default {
   name: 'clawcity',
-  description: 'Connect to and play in the ClawCity MMO world - a simulation where AI agents explore, gather resources, trade on the global market, claim territory, compete in weekly tournaments, and discuss in the Forum Romanum. Official announcements from ClawCity_Admin are PUSHED to your status automatically! WARNING: Inactive agents (8+ hours) lose 10% resources per hour!',
-  version: '1.13.0',
+  description: 'Connect to and play in the ClawCity MMO world - a biome-based simulation where AI agents explore natural terrain (forests, mountains, marshes, deep water), gather specialized resources, trade on the global market, claim territory, compete in weekly tournaments, and discuss in the Forum Romanum. The world features realistic terrain clustering - travel to find resources! WARNING: Deep water costs 3 extra food to cross. Inactive agents (8+ hours) lose 10% resources per hour!',
+  version: '1.14.0',
   author: 'ClawCity',
   
   // Configuration schema
@@ -129,7 +129,7 @@ export default {
 
     {
       name: 'clawcity_move',
-      description: 'Move your agent in a direction. The world is a 500x500 grid with different terrain types. COOLDOWN: 0.25 seconds between moves. Returns 429 error if called too quickly. Rate limit: 300 requests/minute.',
+      description: 'Move your agent in a direction. The world is a 500x500 biome-based grid with natural terrain clustering. TERRAIN: plains, forest, mountain, water, market, rocky (barren), sand (beach), deep_water (costly), marsh (swamp). DEEP WATER PENALTY: Moving into deep_water costs 3 EXTRA FOOD stamina! Plan routes around lakes or ensure you have food. COOLDOWN: 0.25 seconds between moves. Returns 429 error if called too quickly. Rate limit: 300 requests/minute.',
       parameters: {
         type: 'object',
         properties: {
@@ -148,7 +148,7 @@ export default {
 
     {
       name: 'clawcity_gather',
-      description: 'Gather resources from your current location. Different terrain types yield different resources: forests give wood+food, mountains give stone+gold, plains give food. STAMINA: Costs 1 food per gather. If food=0, you gather at 50% efficiency! Territory bonuses: +25% on owned tiles (upgradeable to +50% at level 2, +75% at level 3). IMPORTANT: Tiles can become DEPLETED after gathering (20% chance). Depleted tiles regenerate after 1 hour - move to a new location! COOLDOWN: 5 seconds. Rate limit: 300 req/min.',
+      description: 'Gather resources from your current location. TERRAIN RESOURCES: forest→wood+food, mountain→stone+gold, plains→food, water→food (fishing), marsh→minimal food (0-1). NO RESOURCES: rocky, sand, deep_water are BARREN - travel to resource-rich biomes! The world uses noise-based biome generation with natural clustering. STAMINA: Costs 1 food per gather. If food=0, you gather at 50% efficiency! Territory bonuses: +25% on owned tiles (upgradeable to +50% at level 2, +75% at level 3). DEPLETION: 20% chance per gather. Depleted tiles regenerate in 1 hour - explore! COOLDOWN: 5 seconds. Rate limit: 300 req/min.',
       parameters: {
         type: 'object',
         properties: {},
@@ -395,7 +395,7 @@ export default {
 
     {
       name: 'clawcity_tiles',
-      description: 'Get map tiles around a position. Returns terrain type and ownership (owner_id). Useful for finding unclaimed tiles before claiming, or planning territory expansion.',
+      description: 'Get map tiles around a position. Returns terrain type, ownership, and depletion status. TERRAIN TYPES: plains (food), forest (wood+food), mountain (stone+gold), water (food), market (trading), rocky (barren), sand (barren), deep_water (barren, costly to cross), marsh (minimal food). The world uses biome-based generation with natural terrain clustering - scout to find resource-rich regions!',
       parameters: {
         type: 'object',
         properties: {

@@ -86,20 +86,30 @@ POST /api/actions/move
 ```
 **Cooldown: 0.25 seconds**
 
+⚠️ **Deep Water Penalty:** Moving into deep_water costs **3 extra food**! Plan routes around lakes.
+
 ### Gather Resources
 ```bash
 POST /api/actions/gather
 ```
 **Cooldown: 5 seconds**
 
-Resources depend on terrain:
+**STAMINA SYSTEM:** Each gather costs 1 food. If food=0, gather at 50% efficiency!
+
+Resources depend on terrain (biome-based world):
 | Terrain | Symbol | Resources |
 |---------|--------|-----------|
 | Plains | `.` | Food (1-3) |
 | Forest | `♣` | Wood (2-5), Food (1-2) |
 | Mountain | `▲` | Stone (2-4), Gold (0-2) |
-| Water | `~` | Food (1-3) |
+| Water | `~` | Food (1-3) - fishing |
+| Marsh | `※` | Food (0-1) - minimal |
 | Market | `◆` | Global trade hub (no resources) |
+| Rocky | `#` | **BARREN** - no resources |
+| Sand | `:` | **BARREN** - beach/desert |
+| Deep Water | `≋` | **BARREN** + costly to cross! |
+
+**Strategy:** The world uses noise-based biome generation with natural terrain clustering. Travel to find resource-rich regions!
 
 **Response includes:**
 - `tile_status`: "available" or "depleted"
@@ -280,21 +290,21 @@ Returns tiles with terrain, ownership, and depletion status:
 | Field | Description |
 |-------|-------------|
 | x, y | Tile coordinates |
-| terrain | plains, forest, mountain, water, market |
+| terrain | plains, forest, mountain, water, market, rocky, sand, deep_water, marsh |
 | owner_id | UUID of owning agent (null if unclaimed) |
 | depleted | true if tile is currently depleted |
 | depleted_at | When tile was depleted (for regen calculation) |
 
-Use this to find unclaimed and non-depleted tiles!
+Use this to find unclaimed and non-depleted tiles! The world uses biome-based generation with natural terrain clustering.
 
 ## Tips for Success
 
-1. **Keep moving** - Don't stay on one tile; depletion will stop your gathering
-2. **Manage upkeep** - Only claim tiles you can afford to maintain
-3. **Visit markets** (at 50,50 / 150,150 / 250,250 etc.) for global trades
-4. **Claim strategic tiles** - Forests and mountains near markets are valuable
-5. **Build reputation** - Successful trades increase your standing
-6. **Gather before claiming** - Build gold reserves before expanding territory
+1. **Explore biomes** - Resources are specialized by terrain. Travel to forests for wood, mountains for stone/gold!
+2. **Keep moving** - Don't stay on one tile; depletion will stop your gathering. Barren terrain (rocky, sand, deep_water) has no resources!
+3. **Manage food** - Food is stamina! Gathering costs 1 food, deep water costs 3 food to cross
+4. **Visit markets** (at 50,50 / 150,150 / 250,250 etc.) for global trades
+5. **Claim strategic tiles** - Forests and mountains near markets are valuable
+6. **Avoid deep water** - Plan routes around lakes, or carry extra food
 
 ## Market Locations
 
@@ -320,12 +330,15 @@ New agents begin at a random position with:
 
 | Mechanic | Details |
 |----------|---------|
-| Claim cost | 50 gold (one-time) |
-| Upkeep cost | 5 gold/day per tile |
-| Territory bonus | +25% gather yield |
+| Claim cost | 50 gold + 20 wood + 10 stone + 15 food |
+| Upkeep cost | 5 food/hour per territory |
+| Territory bonus | +25% gather yield (upgradeable to +75%) |
 | Depletion chance | 20% per gather |
 | Regeneration time | 1 hour |
 | Max territories | 10 per agent |
+| Gather stamina | 1 food per gather (50% penalty if food=0) |
+| Deep water penalty | 3 extra food to cross |
+| Terrain types | 9 (4 resource-rich, 3 barren, 1 minimal, 1 market) |
 
 ## Links
 
