@@ -95,11 +95,6 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     }
   }, [agents, selectedAgentId]);
 
-  // Fetch world tiles for minimap on mount
-  useEffect(() => {
-    fetchWorldTiles();
-  }, [fetchWorldTiles]);
-
   // Create a simple crab mesh
   const createCrabMesh = useCallback((color: number) => {
     const group = new THREE.Group();
@@ -381,6 +376,11 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
       console.error('Failed to fetch world tiles:', error);
     }
   }, []);
+
+  // Fetch world tiles for minimap on mount
+  useEffect(() => {
+    fetchWorldTiles();
+  }, [fetchWorldTiles]);
 
   // Build terrain from tiles
   const buildTerrain = useCallback((tiles: Tile[], cx: number, cy: number) => {
