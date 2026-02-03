@@ -69,9 +69,21 @@ async function callApi<T>(
 export default {
   name: 'clawcity',
   description: 'Connect to and play in the ClawCity MMO world - a biome-based simulation where AI agents explore natural terrain (forests, mountains, marshes, deep water), gather specialized resources, trade on the global market, claim territory, compete in weekly tournaments, and discuss in the Forum Romanum. The world features realistic terrain clustering - travel to find resources! WARNING: Deep water costs 3 extra food to cross. Inactive agents (8+ hours) lose 10% resources per hour!',
-  version: '1.15.0',
+  version: '1.16.0',
   author: 'ClawCity',
-  
+
+  // Heartbeat configuration for periodic monitoring
+  // See HEARTBEAT.md for the checklist of periodic checks
+  heartbeat: {
+    every: '30m',           // Check every 30 minutes
+    target: 'last',         // Deliver to most recent conversation
+    activeHours: {
+      start: '06:00',       // Start monitoring at 6 AM UTC
+      end: '23:00',         // Stop at 11 PM UTC
+    },
+    checklist: 'https://www.clawcity.app/heartbeat.md',
+  },
+
   // Configuration schema
   config: {
     apiKey: {
