@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClawCity - Terrain Generation + 3D FPV</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #e8e8e8;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2rem;
+            background: linear-gradient(90deg, #ff6b6b, #ffd93d, #6bcb77);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, #6bcb77, #4ecdc4);
+            color: #1a1a2e;
+            border-color: #6bcb77;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 900px) {
+            .comparison {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .panel h2 {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel h2 .badge {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: normal;
+        }
+
+        .badge-old { background: #ff6b6b33; color: #ff6b6b; }
+        .badge-new { background: #6bcb7733; color: #6bcb77; }
+
+        .map-container {
+            background: #0a0a0a;
+            border-radius: 8px;
+            padding: 10px;
+            overflow: hidden;
+        }
+
+        .map {
+            display: grid;
+            gap: 0;
+            font-size: 8px;
+            line-height: 1;
+            font-family: monospace;
+        }
+
+        .map span {
+            width: 6px;
+            height: 6px;
+            display: inline-block;
+            border-radius: 1px;
+        }
+
+        /* Terrain colors */
+        .t-plains { background: #90a955; }
+        .t-forest { background: #386641; }
+        .t-mountain { background: #6c757d; }
+        .t-market { background: #ffd700; }
+        .t-water { background: #4361ee; }
+        .t-rocky { background: #495057; }
+        .t-sand { background: #e9c46a; }
+        .t-deep_water { background: #1d3557; }
+        .t-marsh { background: #457b9d; }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .controls h3 {
+            font-size: 1rem;
+            margin-bottom: 15px;
+            color: #ffd93d;
+        }
+
+        .control-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .control {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .control label {
+            font-size: 0.8rem;
+            color: #aaa;
+        }
+
+        .control input[type="range"] {
+            width: 100%;
+            accent-color: #6bcb77;
+        }
+
+        .control .value {
+            font-size: 0.75rem;
+            color: #6bcb77;
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.75rem;
+            color: #aaa;
+        }
+
+        .legend-color {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .stats {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .stat {
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .stat strong {
+            color: #e8e8e8;
+        }
+
+        .info-box {
+            background: rgba(107, 203, 119, 0.1);
+            border: 1px solid rgba(107, 203, 119, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+
+        .info-box h4 {
+            color: #6bcb77;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+        }
+
+        .info-box p {
+            font-size: 0.8rem;
+            color: #aaa;
+            line-height: 1.5;
+        }
+
+        .problem-box {
+            background: rgba(255, 107, 107, 0.1);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+
+        .problem-box h4 {
+            color: #ff6b6b;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+        }
+
+        .problem-box p, .problem-box ul {
+            font-size: 0.8rem;
+            color: #aaa;
+            line-height: 1.5;
+        }
+
+        .problem-box ul {
+            margin-left: 20px;
+            margin-top: 5px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #6bcb77, #4ecdc4);
+            color: #1a1a2e;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(107, 203, 119, 0.4);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        /* 3D FPV Styles */
+        #fpv-container {
+            width: 100%;
+            height: 600px;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            background: #000;
+        }
+
+        #fpv-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .fpv-hud {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: white;
+            font-size: 0.85rem;
+            z-index: 10;
+        }
+
+        .fpv-hud .coords {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #6bcb77;
+        }
+
+        .fpv-controls-hint {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            border-radius: 8px;
+            padding: 10px 20px;
+            color: #aaa;
+            font-size: 0.8rem;
+            z-index: 10;
+        }
+
+        .fpv-controls-hint kbd {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin: 0 3px;
+        }
+
+        .fpv-legend {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            border-radius: 8px;
+            padding: 12px 16px;
+            z-index: 10;
+        }
+
+        .fpv-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+            color: #aaa;
+            margin-bottom: 4px;
+        }
+
+        .fpv-legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+        }
+
+        .minimap {
+            position: absolute;
+            bottom: 60px;
+            right: 15px;
+            width: 150px;
+            height: 150px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .minimap canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .biome-matrix {
+            margin-top: 20px;
+            overflow-x: auto;
+        }
+
+        .biome-matrix table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.75rem;
+        }
+
+        .biome-matrix th, .biome-matrix td {
+            padding: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+        }
+
+        .biome-matrix th {
+            background: rgba(255, 255, 255, 0.05);
+            color: #ffd93d;
+        }
+
+        .biome-matrix td {
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🦀 ClawCity Terrain Generation</h1>
+        <p class="subtitle">2D Comparison + 3D First-Person View Demo</p>
+
+        <div class="tabs">
+            <button class="tab active" id="tab-btn-2d" onclick="switchTab('2d')">📊 2D Comparison</button>
+            <button class="tab" id="tab-btn-3d" onclick="switchTab('3d')">🎮 3D FPV Demo</button>
+        </div>
+
+        <!-- 2D Tab Content -->
+        <div id="tab-2d" class="tab-content active">
+            <div class="controls">
+                <h3>⚙️ Generation Parameters</h3>
+                <div class="control-group">
+                    <div class="control">
+                        <label>Map Size: <span id="sizeValue" class="value">100x100</span></label>
+                        <input type="range" id="mapSize" min="50" max="150" value="100" step="10">
+                    </div>
+                    <div class="control">
+                        <label>Elevation Scale: <span id="elevScaleValue" class="value">50</span></label>
+                        <input type="range" id="elevScale" min="20" max="100" value="50" step="5">
+                    </div>
+                    <div class="control">
+                        <label>Moisture Scale: <span id="moistScaleValue" class="value">40</span></label>
+                        <input type="range" id="moistScale" min="20" max="100" value="40" step="5">
+                    </div>
+                    <div class="control">
+                        <label>Seed: <span id="seedValue" class="value">42</span></label>
+                        <input type="range" id="seed" min="1" max="9999" value="42">
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button onclick="regenerate()">🔄 Regenerate Both</button>
+                    <button onclick="randomSeed()">🎲 Random Seed</button>
+                </div>
+            </div>
+
+            <div class="comparison">
+                <div class="panel">
+                    <h2>Current Algorithm <span class="badge badge-old">Random Noise</span></h2>
+                    <div class="map-container">
+                        <div id="currentMap" class="map"></div>
+                    </div>
+                    <div class="stats" id="currentStats"></div>
+                    <div class="problem-box">
+                        <h4>⚠️ Problems</h4>
+                        <ul>
+                            <li>Per-tile randomness creates "salt and pepper" chaos</li>
+                            <li>No natural clustering or biome formation</li>
+                            <li>Looks like TV static in 3D view</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h2>Proposed Algorithm <span class="badge badge-new">Noise-Based Biomes</span></h2>
+                    <div class="map-container">
+                        <div id="newMap" class="map"></div>
+                    </div>
+                    <div class="stats" id="newStats"></div>
+                    <div class="info-box">
+                        <h4>✨ Improvements</h4>
+                        <p>Uses layered Simplex noise for elevation + moisture. Creates natural biome clustering, smooth transitions, and introduces non-resource terrain (rocky, sand) that forces meaningful travel.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3 style="margin-bottom: 10px; font-size: 0.9rem;">🗺️ Terrain Legend</h3>
+                <div class="legend">
+                    <div class="legend-item"><span class="legend-color t-plains"></span> Plains (food)</div>
+                    <div class="legend-item"><span class="legend-color t-forest"></span> Forest (wood, food)</div>
+                    <div class="legend-item"><span class="legend-color t-mountain"></span> Mountain (stone, gold)</div>
+                    <div class="legend-item"><span class="legend-color t-water"></span> Water (food)</div>
+                    <div class="legend-item"><span class="legend-color t-market"></span> Market (trade)</div>
+                    <div class="legend-item"><span class="legend-color t-rocky"></span> Rocky (none) <em style="color:#6bcb77">NEW</em></div>
+                    <div class="legend-item"><span class="legend-color t-sand"></span> Sand (none) <em style="color:#6bcb77">NEW</em></div>
+                    <div class="legend-item"><span class="legend-color t-deep_water"></span> Deep Water (none) <em style="color:#6bcb77">NEW</em></div>
+                    <div class="legend-item"><span class="legend-color t-marsh"></span> Marsh (food) <em style="color:#6bcb77">NEW</em></div>
+                </div>
+            </div>
+
+            <div class="panel biome-matrix">
+                <h3 style="margin-bottom: 10px; font-size: 0.9rem;">📊 Biome Determination Matrix</h3>
+                <table>
+                    <tr>
+                        <th>Elevation \ Moisture</th>
+                        <th>Dry (0-0.3)</th>
+                        <th>Medium (0.3-0.6)</th>
+                        <th>Wet (0.6-1.0)</th>
+                    </tr>
+                    <tr>
+                        <th>High (0.7-1.0)</th>
+                        <td><span class="legend-color t-rocky" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Rocky Peaks</td>
+                        <td><span class="legend-color t-mountain" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Mountain</td>
+                        <td><span class="legend-color t-mountain" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Mountain</td>
+                    </tr>
+                    <tr>
+                        <th>Medium-High (0.5-0.7)</th>
+                        <td><span class="legend-color t-rocky" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Rocky Ground</td>
+                        <td><span class="legend-color t-plains" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Plains</td>
+                        <td><span class="legend-color t-forest" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Forest</td>
+                    </tr>
+                    <tr>
+                        <th>Medium (0.3-0.5)</th>
+                        <td><span class="legend-color t-plains" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Plains</td>
+                        <td><span class="legend-color t-plains" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Plains</td>
+                        <td><span class="legend-color t-forest" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Forest</td>
+                    </tr>
+                    <tr>
+                        <th>Low (0.15-0.3)</th>
+                        <td><span class="legend-color t-sand" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Sand/Beach</td>
+                        <td><span class="legend-color t-plains" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Plains</td>
+                        <td><span class="legend-color t-marsh" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Marsh</td>
+                    </tr>
+                    <tr>
+                        <th>Very Low (0-0.15)</th>
+                        <td><span class="legend-color t-water" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Water</td>
+                        <td><span class="legend-color t-water" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Water</td>
+                        <td><span class="legend-color t-deep_water" style="display:inline-block;vertical-align:middle;margin-right:4px"></span> Deep Water</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- 3D Tab Content -->
+        <div id="tab-3d" class="tab-content">
+            <div class="controls">
+                <h3>🎮 3D FPV Controls</h3>
+                <div class="control-group">
+                    <div class="control">
+                        <label>World Size: <span id="fpvSizeValue" class="value">100</span></label>
+                        <input type="range" id="fpvSize" min="50" max="200" value="100" step="10">
+                    </div>
+                    <div class="control">
+                        <label>View Distance: <span id="fpvViewValue" class="value">20</span></label>
+                        <input type="range" id="fpvView" min="10" max="40" value="20" step="5">
+                    </div>
+                    <div class="control">
+                        <label>Seed: <span id="fpvSeedValue" class="value">42</span></label>
+                        <input type="range" id="fpvSeed" min="1" max="9999" value="42">
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button onclick="regenerate3D()">🔄 Regenerate World</button>
+                    <button onclick="randomSeed3D()">🎲 Random Seed</button>
+                </div>
+            </div>
+
+            <div id="fpv-container">
+                <div class="fpv-hud">
+                    <div>Position: <span class="coords" id="fpv-coords">(50, 50)</span></div>
+                    <div>Terrain: <span id="fpv-terrain">Plains</span></div>
+                </div>
+                <div class="fpv-legend">
+                    <div class="fpv-legend-item"><span class="fpv-legend-color" style="background:#90a955"></span> Plains</div>
+                    <div class="fpv-legend-item"><span class="fpv-legend-color" style="background:#386641"></span> Forest</div>
+                    <div class="fpv-legend-item"><span class="fpv-legend-color" style="background:#6c757d"></span> Mountain</div>
+                    <div class="fpv-legend-item"><span class="fpv-legend-color" style="background:#4361ee"></span> Water</div>
+                    <div class="fpv-legend-item"><span class="fpv-legend-color" style="background:#ffd700"></span> Market</div>
+                    <div class="fpv-legend-item"><span class="fpv-legend-color" style="background:#495057"></span> Rocky</div>
+                    <div class="fpv-legend-item"><span class="fpv-legend-color" style="background:#e9c46a"></span> Sand</div>
+                    <div class="fpv-legend-item"><span class="fpv-legend-color" style="background:#1d3557"></span> Deep Water</div>
+                    <div class="fpv-legend-item"><span class="fpv-legend-color" style="background:#457b9d"></span> Marsh</div>
+                </div>
+                <div class="minimap">
+                    <canvas id="minimap-canvas"></canvas>
+                </div>
+                <div class="fpv-controls-hint">
+                    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move &nbsp;|&nbsp;
+                    <kbd>←</kbd><kbd>→</kbd> Turn &nbsp;|&nbsp;
+                    <kbd>Space</kbd> Jump
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // SIMPLEX NOISE
+        // ============================================
+        class SimplexNoise {
+            constructor(seed = 42) {
+                this.seed = seed;
+                this.perm = new Array(512);
+                this.gradP = new Array(512);
+
+                const grad3 = [
+                    [1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],
+                    [1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],
+                    [0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]
+                ];
+
+                const p = [];
+                for (let i = 0; i < 256; i++) p[i] = i;
+
+                let n = seed;
+                for (let i = 255; i > 0; i--) {
+                    n = (n * 16807) % 2147483647;
+                    const j = n % (i + 1);
+                    [p[i], p[j]] = [p[j], p[i]];
+                }
+
+                for (let i = 0; i < 512; i++) {
+                    this.perm[i] = p[i & 255];
+                    this.gradP[i] = grad3[this.perm[i] % 12];
+                }
+            }
+
+            dot2(g, x, y) { return g[0] * x + g[1] * y; }
+
+            noise2D(x, y) {
+                const F2 = 0.5 * (Math.sqrt(3) - 1);
+                const G2 = (3 - Math.sqrt(3)) / 6;
+
+                let s = (x + y) * F2;
+                let i = Math.floor(x + s);
+                let j = Math.floor(y + s);
+
+                let t = (i + j) * G2;
+                let X0 = i - t, Y0 = j - t;
+                let x0 = x - X0, y0 = y - Y0;
+
+                let i1, j1;
+                if (x0 > y0) { i1 = 1; j1 = 0; } else { i1 = 0; j1 = 1; }
+
+                let x1 = x0 - i1 + G2, y1 = y0 - j1 + G2;
+                let x2 = x0 - 1 + 2 * G2, y2 = y0 - 1 + 2 * G2;
+
+                i &= 255; j &= 255;
+
+                let gi0 = this.gradP[i + this.perm[j]];
+                let gi1 = this.gradP[i + i1 + this.perm[j + j1]];
+                let gi2 = this.gradP[i + 1 + this.perm[j + 1]];
+
+                let n0, n1, n2;
+
+                let t0 = 0.5 - x0*x0 - y0*y0;
+                n0 = t0 < 0 ? 0 : (t0 *= t0, t0 * t0 * this.dot2(gi0, x0, y0));
+
+                let t1 = 0.5 - x1*x1 - y1*y1;
+                n1 = t1 < 0 ? 0 : (t1 *= t1, t1 * t1 * this.dot2(gi1, x1, y1));
+
+                let t2 = 0.5 - x2*x2 - y2*y2;
+                n2 = t2 < 0 ? 0 : (t2 *= t2, t2 * t2 * this.dot2(gi2, x2, y2));
+
+                return 70 * (n0 + n1 + n2);
+            }
+        }
+
+        // ============================================
+        // 2D TERRAIN GENERATION
+        // ============================================
+        function generateCurrentTerrain(size, seed) {
+            const tiles = [];
+            const random = (x, y) => {
+                const n = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
+                return n - Math.floor(n);
+            };
+
+            const scale = size / 500;
+            const marketLocations = new Set();
+            for (let mx = 0; mx < 5; mx++) {
+                for (let my = 0; my < 5; my++) {
+                    marketLocations.add(`${Math.floor((50 + mx * 100) * scale)},${Math.floor((50 + my * 100) * scale)}`);
+                }
+            }
+
+            const isWater = (x, y) => {
+                const lakes = [
+                    { cx: 100 * scale, cy: 100 * scale, r: 30 * scale },
+                    { cx: 400 * scale, cy: 100 * scale, r: 25 * scale },
+                    { cx: 100 * scale, cy: 400 * scale, r: 25 * scale },
+                    { cx: 400 * scale, cy: 400 * scale, r: 30 * scale },
+                    { cx: 250 * scale, cy: 250 * scale, r: 40 * scale },
+                ];
+                for (const lake of lakes) {
+                    if (Math.sqrt((x - lake.cx) ** 2 + (y - lake.cy) ** 2) <= lake.r) return true;
+                }
+                if (Math.abs(y - 200 * scale) <= 5 * scale && x > 50 * scale && x < 450 * scale) return true;
+                if (Math.abs(x - 300 * scale) <= 5 * scale && y > 100 * scale && y < 400 * scale) return true;
+                return false;
+            };
+
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const r = random(x, y);
+                    let terrain;
+                    if (marketLocations.has(`${x},${y}`)) terrain = 'market';
+                    else if (isWater(x, y)) terrain = 'water';
+                    else if (r < 0.08 || (x < 20 * scale && y < 20 * scale) || 
+                             (x > size - 21 * scale && y > size - 21 * scale) ||
+                             (x < 20 * scale && y > size - 21 * scale) ||
+                             (x > size - 21 * scale && y < 20 * scale) ||
+                             (Math.abs(y - x) < 10 * scale && x > 150 * scale && x < 350 * scale)) {
+                        terrain = 'mountain';
+                    } else if (r < 0.4) terrain = 'forest';
+                    else terrain = 'plains';
+                    tiles.push({ x, y, terrain });
+                }
+            }
+            return tiles;
+        }
+
+        function generateNewTerrain(size, seed, elevScale, moistScale) {
+            const tiles = [];
+            const elevNoise = new SimplexNoise(seed);
+            const moistNoise = new SimplexNoise(seed + 1000);
+            const detailNoise = new SimplexNoise(seed + 2000);
+
+            const scale = size / 500;
+            const marketLocations = new Set();
+            for (let mx = 0; mx < 5; mx++) {
+                for (let my = 0; my < 5; my++) {
+                    marketLocations.add(`${Math.floor((50 + mx * 100) * scale)},${Math.floor((50 + my * 100) * scale)}`);
+                }
+            }
+
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    if (marketLocations.has(`${x},${y}`)) {
+                        tiles.push({ x, y, terrain: 'market' });
+                        continue;
+                    }
+
+                    const nx = x / elevScale, ny = y / elevScale;
+                    const mx = x / moistScale, my = y / moistScale;
+
+                    let elevation = elevNoise.noise2D(nx, ny) * 0.6 + elevNoise.noise2D(nx * 2, ny * 2) * 0.3 + detailNoise.noise2D(nx * 4, ny * 4) * 0.1;
+                    elevation = (elevation + 1) / 2;
+
+                    let moisture = moistNoise.noise2D(mx, my) * 0.7 + moistNoise.noise2D(mx * 2, my * 2) * 0.3;
+                    moisture = (moisture + 1) / 2;
+
+                    let terrain;
+                    if (elevation < 0.15) terrain = moisture > 0.6 ? 'deep_water' : 'water';
+                    else if (elevation < 0.3) {
+                        if (moisture < 0.3) terrain = 'sand';
+                        else if (moisture > 0.6) terrain = 'marsh';
+                        else terrain = 'plains';
+                    } else if (elevation < 0.5) terrain = moisture > 0.5 ? 'forest' : 'plains';
+                    else if (elevation < 0.7) {
+                        if (moisture < 0.3) terrain = 'rocky';
+                        else if (moisture > 0.6) terrain = 'forest';
+                        else terrain = 'plains';
+                    } else terrain = moisture < 0.3 ? 'rocky' : 'mountain';
+
+                    tiles.push({ x, y, terrain });
+                }
+            }
+            return tiles;
+        }
+
+        function renderMap(tiles, containerId, size) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            container.style.gridTemplateColumns = `repeat(${size}, 6px)`;
+            const fragment = document.createDocumentFragment();
+            tiles.forEach(tile => {
+                const span = document.createElement('span');
+                span.className = `t-${tile.terrain}`;
+                span.title = `(${tile.x}, ${tile.y}) - ${tile.terrain}`;
+                fragment.appendChild(span);
+            });
+            container.appendChild(fragment);
+        }
+
+        function calculateStats(tiles) {
+            const counts = {};
+            tiles.forEach(t => counts[t.terrain] = (counts[t.terrain] || 0) + 1);
+            return counts;
+        }
+
+        function renderStats(counts, containerId, total) {
+            const container = document.getElementById(containerId);
+            const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+            container.innerHTML = entries.map(([terrain, count]) => 
+                `<span class="stat"><strong>${terrain}</strong>: ${((count / total) * 100).toFixed(1)}%</span>`
+            ).join('');
+        }
+
+        function regenerate() {
+            const size = parseInt(document.getElementById('mapSize').value);
+            const seed = parseInt(document.getElementById('seed').value);
+            const elevScale = parseInt(document.getElementById('elevScale').value);
+            const moistScale = parseInt(document.getElementById('moistScale').value);
+
+            document.getElementById('sizeValue').textContent = `${size}x${size}`;
+            document.getElementById('seedValue').textContent = seed;
+            document.getElementById('elevScaleValue').textContent = elevScale;
+            document.getElementById('moistScaleValue').textContent = moistScale;
+
+            const currentTiles = generateCurrentTerrain(size, seed);
+            renderMap(currentTiles, 'currentMap', size);
+            renderStats(calculateStats(currentTiles), 'currentStats', currentTiles.length);
+
+            const newTiles = generateNewTerrain(size, seed, elevScale, moistScale);
+            renderMap(newTiles, 'newMap', size);
+            renderStats(calculateStats(newTiles), 'newStats', newTiles.length);
+        }
+
+        function randomSeed() {
+            document.getElementById('seed').value = Math.floor(Math.random() * 9999) + 1;
+            regenerate();
+        }
+
+        // ============================================
+        // 3D FPV
+        // ============================================
+        let scene, camera, renderer, playerPos, terrainGroup, worldTiles;
+        let keys = {};
+        let playerAngle = 0;
+        let minimapCtx;
+
+        const COLORS_3D = {
+            sky: 0x87CEEB,
+            ground: 0x5a8f29,
+            plains: 0x90a955,
+            forest: { trunk: 0x8B4513, leaves: 0x386641 },
+            mountain: { dark: 0x4a4a4a, mid: 0x6a6a6a, light: 0x9a9a9a },
+            water: 0x4361ee,
+            market: { base: 0xFFD700, roof: 0xCC0000 },
+            rocky: { dark: 0x374151, mid: 0x4b5563, light: 0x6b7280 },
+            sand: { main: 0xe9c46a, dark: 0xddb84d },
+            deep_water: 0x1d3557,
+            marsh: { water: 0x457b9d, plant: 0x2d6a4f }
+        };
+
+        function init3D() {
+            const container = document.getElementById('fpv-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(COLORS_3D.sky);
+            scene.fog = new THREE.Fog(COLORS_3D.sky, 10, 30);
+
+            camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 100);
+            camera.position.set(0, 1.2, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            // Ground
+            const groundGeo = new THREE.PlaneGeometry(500, 500);
+            const groundMat = new THREE.MeshBasicMaterial({ color: COLORS_3D.ground });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            scene.add(ground);
+
+            terrainGroup = new THREE.Group();
+            scene.add(terrainGroup);
+
+            playerPos = { x: 50, y: 50 };
+
+            // Minimap
+            const minimapCanvas = document.getElementById('minimap-canvas');
+            minimapCanvas.width = 150;
+            minimapCanvas.height = 150;
+            minimapCtx = minimapCanvas.getContext('2d');
+
+            // Controls
+            document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+            document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+            regenerate3D();
+            animate3D();
+
+            window.addEventListener('resize', () => {
+                const w = container.clientWidth;
+                const h = container.clientHeight;
+                camera.aspect = w / h;
+                camera.updateProjectionMatrix();
+                renderer.setSize(w, h);
+            });
+        }
+
+        function createTerrainObject(terrain) {
+            const group = new THREE.Group();
+
+            switch (terrain) {
+                case 'mountain': {
+                    // Realistic mountain with cone shape and snow cap
+                    const height = 2.5 + Math.random() * 0.5;
+                    const baseRadius = 0.8;
+                    
+                    // Main mountain body (cone)
+                    const mountainGeo = new THREE.ConeGeometry(baseRadius, height * 0.85, 6);
+                    const mountainMat = new THREE.MeshBasicMaterial({ color: COLORS_3D.mountain.mid });
+                    const mountain = new THREE.Mesh(mountainGeo, mountainMat);
+                    mountain.position.y = height * 0.425;
+                    group.add(mountain);
+                    
+                    // Snow cap (smaller cone on top)
+                    const snowGeo = new THREE.ConeGeometry(baseRadius * 0.35, height * 0.25, 6);
+                    const snowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                    const snow = new THREE.Mesh(snowGeo, snowMat);
+                    snow.position.y = height * 0.75;
+                    group.add(snow);
+                    
+                    // Rocky base
+                    const baseGeo = new THREE.CylinderGeometry(baseRadius * 1.1, baseRadius * 1.2, 0.3, 8);
+                    const baseMat = new THREE.MeshBasicMaterial({ color: COLORS_3D.mountain.dark });
+                    const base = new THREE.Mesh(baseGeo, baseMat);
+                    base.position.y = 0.15;
+                    group.add(base);
+                    break;
+                }
+                case 'forest': {
+                    // Realistic pine tree with layered foliage
+                    const treeHeight = 1.2 + Math.random() * 0.4;
+                    const trunkHeight = treeHeight * 0.35;
+                    
+                    // Trunk (cylinder)
+                    const trunkGeo = new THREE.CylinderGeometry(0.06, 0.1, trunkHeight, 8);
+                    const trunkMat = new THREE.MeshBasicMaterial({ color: COLORS_3D.forest.trunk });
+                    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                    trunk.position.y = trunkHeight / 2;
+                    group.add(trunk);
+                    
+                    // Foliage layers (cones stacked)
+                    const foliageColor = new THREE.MeshBasicMaterial({ color: COLORS_3D.forest.leaves });
+                    const layers = 3;
+                    for (let i = 0; i < layers; i++) {
+                        const layerRadius = 0.5 - (i * 0.12);
+                        const layerHeight = 0.5 - (i * 0.1);
+                        const foliageGeo = new THREE.ConeGeometry(layerRadius, layerHeight, 8);
+                        const foliage = new THREE.Mesh(foliageGeo, foliageColor);
+                        foliage.position.y = trunkHeight + (i * 0.25) + 0.2;
+                        group.add(foliage);
+                    }
+                    break;
+                }
+                case 'market': {
+                    // Realistic market building with peaked roof, door, windows
+                    const wallColor = 0xf5deb3; // Wheat/tan color
+                    const roofColor = COLORS_3D.market.roof;
+                    const doorColor = 0x8B4513;
+                    const windowColor = 0x87CEEB;
+                    
+                    // Main building walls
+                    const wallGeo = new THREE.BoxGeometry(0.9, 0.8, 0.7);
+                    const wallMat = new THREE.MeshBasicMaterial({ color: wallColor });
+                    const walls = new THREE.Mesh(wallGeo, wallMat);
+                    walls.position.y = 0.4;
+                    group.add(walls);
+                    
+                    // Peaked roof (using a prism shape via custom geometry)
+                    const roofHeight = 0.4;
+                    const roofGeo = new THREE.ConeGeometry(0.7, roofHeight, 4);
+                    roofGeo.rotateY(Math.PI / 4);
+                    const roofMat = new THREE.MeshBasicMaterial({ color: roofColor });
+                    const roof = new THREE.Mesh(roofGeo, roofMat);
+                    roof.position.y = 0.8 + roofHeight / 2;
+                    roof.scale.set(1, 1, 0.8);
+                    group.add(roof);
+                    
+                    // Door
+                    const doorGeo = new THREE.BoxGeometry(0.2, 0.4, 0.05);
+                    const doorMat = new THREE.MeshBasicMaterial({ color: doorColor });
+                    const door = new THREE.Mesh(doorGeo, doorMat);
+                    door.position.set(0, 0.2, 0.36);
+                    group.add(door);
+                    
+                    // Windows (2 on front)
+                    const winGeo = new THREE.BoxGeometry(0.15, 0.15, 0.05);
+                    const winMat = new THREE.MeshBasicMaterial({ color: windowColor });
+                    const win1 = new THREE.Mesh(winGeo, winMat);
+                    win1.position.set(-0.25, 0.5, 0.36);
+                    const win2 = new THREE.Mesh(winGeo, winMat);
+                    win2.position.set(0.25, 0.5, 0.36);
+                    group.add(win1, win2);
+                    
+                    // Market sign/awning
+                    const awningGeo = new THREE.BoxGeometry(1.0, 0.05, 0.3);
+                    const awningMat = new THREE.MeshBasicMaterial({ color: COLORS_3D.market.base });
+                    const awning = new THREE.Mesh(awningGeo, awningMat);
+                    awning.position.set(0, 0.7, 0.5);
+                    awning.rotation.x = -0.2;
+                    group.add(awning);
+                    break;
+                }
+                case 'water': {
+                    // Animated-looking water with slight wave effect
+                    const water = new THREE.Mesh(
+                        new THREE.PlaneGeometry(1, 1, 4, 4),
+                        new THREE.MeshBasicMaterial({ color: COLORS_3D.water, transparent: true, opacity: 0.85 })
+                    );
+                    water.rotation.x = -Math.PI / 2;
+                    water.position.y = 0.02;
+                    group.add(water);
+                    break;
+                }
+                case 'rocky': {
+                    // Cluster of varied rocks using dodecahedrons for organic look
+                    const rockColors = [COLORS_3D.rocky.dark, COLORS_3D.rocky.mid, COLORS_3D.rocky.light];
+                    const numRocks = 4 + Math.floor(Math.random() * 3);
+                    
+                    for (let i = 0; i < numRocks; i++) {
+                        const size = 0.1 + Math.random() * 0.2;
+                        const rockGeo = new THREE.DodecahedronGeometry(size, 0);
+                        const rockMat = new THREE.MeshBasicMaterial({ color: rockColors[Math.floor(Math.random() * 3)] });
+                        const rock = new THREE.Mesh(rockGeo, rockMat);
+                        rock.position.set(
+                            (Math.random() - 0.5) * 0.6,
+                            size * 0.7,
+                            (Math.random() - 0.5) * 0.6
+                        );
+                        rock.rotation.set(Math.random(), Math.random(), Math.random());
+                        group.add(rock);
+                    }
+                    break;
+                }
+                case 'sand': {
+                    // Sand dunes with gentle mounds
+                    const sandBase = new THREE.Mesh(
+                        new THREE.PlaneGeometry(1, 1),
+                        new THREE.MeshBasicMaterial({ color: COLORS_3D.sand.main })
+                    );
+                    sandBase.rotation.x = -Math.PI / 2;
+                    sandBase.position.y = 0.01;
+                    group.add(sandBase);
+                    
+                    // Small dune
+                    const duneGeo = new THREE.SphereGeometry(0.2, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+                    const duneMat = new THREE.MeshBasicMaterial({ color: COLORS_3D.sand.dark });
+                    const dune = new THREE.Mesh(duneGeo, duneMat);
+                    dune.position.set(0.2, 0, 0.1);
+                    dune.scale.set(1.5, 0.5, 1);
+                    group.add(dune);
+                    break;
+                }
+                case 'deep_water': {
+                    const dw = new THREE.Mesh(
+                        new THREE.PlaneGeometry(1, 1),
+                        new THREE.MeshBasicMaterial({ color: COLORS_3D.deep_water, transparent: true, opacity: 0.9 })
+                    );
+                    dw.rotation.x = -Math.PI / 2;
+                    dw.position.y = -0.05;
+                    group.add(dw);
+                    break;
+                }
+                case 'marsh': {
+                    // Marsh with water and cattails/reeds
+                    const mw = new THREE.Mesh(
+                        new THREE.PlaneGeometry(1, 1),
+                        new THREE.MeshBasicMaterial({ color: COLORS_3D.marsh.water, transparent: true, opacity: 0.75 })
+                    );
+                    mw.rotation.x = -Math.PI / 2;
+                    mw.position.y = 0.02;
+                    group.add(mw);
+                    
+                    // Cattails/reeds (cylinder stalks with oval tops)
+                    const numReeds = 3 + Math.floor(Math.random() * 3);
+                    for (let i = 0; i < numReeds; i++) {
+                        const reedGroup = new THREE.Group();
+                        
+                        // Stalk
+                        const stalkGeo = new THREE.CylinderGeometry(0.015, 0.02, 0.5, 6);
+                        const stalkMat = new THREE.MeshBasicMaterial({ color: 0x556b2f });
+                        const stalk = new THREE.Mesh(stalkGeo, stalkMat);
+                        stalk.position.y = 0.25;
+                        reedGroup.add(stalk);
+                        
+                        // Cattail top
+                        const topGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.12, 8);
+                        const topMat = new THREE.MeshBasicMaterial({ color: 0x654321 });
+                        const top = new THREE.Mesh(topGeo, topMat);
+                        top.position.y = 0.45;
+                        reedGroup.add(top);
+                        
+                        reedGroup.position.set(
+                            (Math.random() - 0.5) * 0.6,
+                            0,
+                            (Math.random() - 0.5) * 0.6
+                        );
+                        reedGroup.rotation.z = (Math.random() - 0.5) * 0.2;
+                        group.add(reedGroup);
+                    }
+                    break;
+                }
+            }
+            return group;
+        }
+
+        function buildTerrain3D(centerX, centerY) {
+            while (terrainGroup.children.length > 0) {
+                terrainGroup.remove(terrainGroup.children[0]);
+            }
+
+            const viewDist = parseInt(document.getElementById('fpvView').value);
+            const worldSize = parseInt(document.getElementById('fpvSize').value);
+
+            for (let dy = -viewDist; dy <= viewDist; dy++) {
+                for (let dx = -viewDist; dx <= viewDist; dx++) {
+                    const wx = centerX + dx;
+                    const wy = centerY + dy;
+                    if (wx < 0 || wx >= worldSize || wy < 0 || wy >= worldSize) continue;
+
+                    const tile = worldTiles.find(t => t.x === wx && t.y === wy);
+                    if (!tile || tile.terrain === 'plains') continue;
+
+                    const obj = createTerrainObject(tile.terrain);
+                    obj.position.set(dx, 0, dy);
+                    terrainGroup.add(obj);
+                }
+            }
+        }
+
+        function updateMinimap() {
+            const size = parseInt(document.getElementById('fpvSize').value);
+            const scale = 150 / size;
+
+            minimapCtx.fillStyle = '#0a0a0a';
+            minimapCtx.fillRect(0, 0, 150, 150);
+
+            const terrainColors = {
+                plains: '#90a955', forest: '#386641', mountain: '#6c757d',
+                water: '#4361ee', market: '#ffd700', rocky: '#495057',
+                sand: '#e9c46a', deep_water: '#1d3557', marsh: '#457b9d'
+            };
+
+            worldTiles.forEach(tile => {
+                minimapCtx.fillStyle = terrainColors[tile.terrain] || '#555';
+                minimapCtx.fillRect(tile.x * scale, tile.y * scale, Math.ceil(scale), Math.ceil(scale));
+            });
+
+            // Player marker
+            minimapCtx.fillStyle = '#ff4444';
+            minimapCtx.beginPath();
+            minimapCtx.arc(playerPos.x * scale, playerPos.y * scale, 4, 0, Math.PI * 2);
+            minimapCtx.fill();
+
+            // Direction indicator
+            minimapCtx.strokeStyle = '#ff4444';
+            minimapCtx.lineWidth = 2;
+            minimapCtx.beginPath();
+            minimapCtx.moveTo(playerPos.x * scale, playerPos.y * scale);
+            minimapCtx.lineTo(
+                playerPos.x * scale + Math.sin(playerAngle) * 8,
+                playerPos.y * scale - Math.cos(playerAngle) * 8
+            );
+            minimapCtx.stroke();
+        }
+
+        function animate3D() {
+            requestAnimationFrame(animate3D);
+
+            const speed = 0.15;
+            const turnSpeed = 0.05;
+            const worldSize = parseInt(document.getElementById('fpvSize').value);
+
+            if (keys['arrowleft'] || keys['q']) playerAngle -= turnSpeed;
+            if (keys['arrowright'] || keys['e']) playerAngle += turnSpeed;
+
+            let moved = false;
+            if (keys['w'] || keys['arrowup']) {
+                playerPos.x += Math.sin(playerAngle) * speed;
+                playerPos.y -= Math.cos(playerAngle) * speed;
+                moved = true;
+            }
+            if (keys['s'] || keys['arrowdown']) {
+                playerPos.x -= Math.sin(playerAngle) * speed;
+                playerPos.y += Math.cos(playerAngle) * speed;
+                moved = true;
+            }
+            if (keys['a']) {
+                playerPos.x -= Math.cos(playerAngle) * speed;
+                playerPos.y -= Math.sin(playerAngle) * speed;
+                moved = true;
+            }
+            if (keys['d']) {
+                playerPos.x += Math.cos(playerAngle) * speed;
+                playerPos.y += Math.sin(playerAngle) * speed;
+                moved = true;
+            }
+
+            playerPos.x = Math.max(0, Math.min(worldSize - 1, playerPos.x));
+            playerPos.y = Math.max(0, Math.min(worldSize - 1, playerPos.y));
+
+            camera.rotation.y = -playerAngle;
+
+            if (moved) {
+                buildTerrain3D(Math.floor(playerPos.x), Math.floor(playerPos.y));
+            }
+
+            document.getElementById('fpv-coords').textContent = `(${Math.floor(playerPos.x)}, ${Math.floor(playerPos.y)})`;
+            
+            const currentTile = worldTiles.find(t => t.x === Math.floor(playerPos.x) && t.y === Math.floor(playerPos.y));
+            document.getElementById('fpv-terrain').textContent = currentTile ? currentTile.terrain : 'unknown';
+
+            updateMinimap();
+            renderer.render(scene, camera);
+        }
+
+        function regenerate3D() {
+            const size = parseInt(document.getElementById('fpvSize').value);
+            const seed = parseInt(document.getElementById('fpvSeed').value);
+
+            document.getElementById('fpvSizeValue').textContent = size;
+            document.getElementById('fpvSeedValue').textContent = seed;
+            document.getElementById('fpvViewValue').textContent = document.getElementById('fpvView').value;
+
+            worldTiles = generateNewTerrain(size, seed, 50, 40);
+            playerPos = { x: size / 2, y: size / 2 };
+            playerAngle = 0;
+            buildTerrain3D(Math.floor(playerPos.x), Math.floor(playerPos.y));
+        }
+
+        function randomSeed3D() {
+            document.getElementById('fpvSeed').value = Math.floor(Math.random() * 9999) + 1;
+            regenerate3D();
+        }
+
+        // Tab switching
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+
+            if (tab === '2d') {
+                document.getElementById('tab-btn-2d').classList.add('active');
+                document.getElementById('tab-2d').classList.add('active');
+            } else {
+                document.getElementById('tab-btn-3d').classList.add('active');
+                document.getElementById('tab-3d').classList.add('active');
+                if (!scene) init3D();
+            }
+        }
+
+        // Event listeners
+        ['mapSize', 'elevScale', 'moistScale', 'seed'].forEach(id => {
+            document.getElementById(id).addEventListener('input', regenerate);
+        });
+
+        ['fpvSize', 'fpvView', 'fpvSeed'].forEach(id => {
+            document.getElementById(id).addEventListener('input', regenerate3D);
+        });
+
+        // Initial load
+        regenerate();
+    </script>
+</body>
+</html>

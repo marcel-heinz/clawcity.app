@@ -10,6 +10,111 @@ import {
 } from './types';
 import { randomBytes, createHash } from 'crypto';
 
+// ============================================================================
+// SIMPLEX NOISE IMPLEMENTATION
+// ============================================================================
+
+/**
+ * Simplex noise generator for natural terrain generation
+ * Creates smooth, natural-looking noise that clusters similar values together
+ */
+class SimplexNoise {
+  private perm: number[];
+  private gradP: number[][];
+
+  constructor(seed: number = 42) {
+    this.perm = new Array(512);
+    this.gradP = new Array(512);
+
+    const grad3 = [
+      [1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],
+      [1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],
+      [0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]
+    ];
+
+    const p: number[] = [];
+    for (let i = 0; i < 256; i++) p[i] = i;
+
+    // Shuffle based on seed using LCG
+    let n = seed;
+    for (let i = 255; i > 0; i--) {
+      n = (n * 16807) % 2147483647;
+      const j = n % (i + 1);
+      [p[i], p[j]] = [p[j], p[i]];
+    }
+
+    for (let i = 0; i < 512; i++) {
+      this.perm[i] = p[i & 255];
+      this.gradP[i] = grad3[this.perm[i] % 12];
+    }
+  }
+
+  private dot2(g: number[], x: number, y: number): number {
+    return g[0] * x + g[1] * y;
+  }
+
+  /**
+   * 2D Simplex noise
+   * @returns Value between -1 and 1
+   */
+  noise2D(x: number, y: number): number {
+    const F2 = 0.5 * (Math.sqrt(3) - 1);
+    const G2 = (3 - Math.sqrt(3)) / 6;
+
+    const s = (x + y) * F2;
+    let i = Math.floor(x + s);
+    let j = Math.floor(y + s);
+
+    const t = (i + j) * G2;
+    const X0 = i - t;
+    const Y0 = j - t;
+    const x0 = x - X0;
+    const y0 = y - Y0;
+
+    let i1: number, j1: number;
+    if (x0 > y0) { i1 = 1; j1 = 0; }
+    else { i1 = 0; j1 = 1; }
+
+    const x1 = x0 - i1 + G2;
+    const y1 = y0 - j1 + G2;
+    const x2 = x0 - 1 + 2 * G2;
+    const y2 = y0 - 1 + 2 * G2;
+
+    i &= 255;
+    j &= 255;
+
+    const gi0 = this.gradP[i + this.perm[j]];
+    const gi1 = this.gradP[i + i1 + this.perm[j + j1]];
+    const gi2 = this.gradP[i + 1 + this.perm[j + 1]];
+
+    let n0: number, n1: number, n2: number;
+
+    let t0 = 0.5 - x0 * x0 - y0 * y0;
+    if (t0 < 0) n0 = 0;
+    else {
+      t0 *= t0;
+      n0 = t0 * t0 * this.dot2(gi0, x0, y0);
+    }
+
+    let t1 = 0.5 - x1 * x1 - y1 * y1;
+    if (t1 < 0) n1 = 0;
+    else {
+      t1 *= t1;
+      n1 = t1 * t1 * this.dot2(gi1, x1, y1);
+    }
+
+    let t2 = 0.5 - x2 * x2 - y2 * y2;
+    if (t2 < 0) n2 = 0;
+    else {
+      t2 *= t2;
+      n2 = t2 * t2 * this.dot2(gi2, x2, y2);
+    }
+
+    // Returns value in range [-1, 1]
+    return 70 * (n0 + n1 + n2);
+  }
+}
+
 // Generate a cryptographically secure random API key
 export function generateApiKey(): string {
   // Use 24 bytes = 32 base64 chars (after removing padding)
@@ -84,16 +189,69 @@ export function calculateGatheredResources(terrain: TerrainType): Record<Resourc
   return result;
 }
 
-// Generate world tiles
+// ============================================================================
+// WORLD GENERATION WITH NOISE-BASED BIOMES
+// ============================================================================
+
+/**
+ * Generation parameters for world terrain
+ */
+const WORLD_GEN_CONFIG = {
+  seed: 42,
+  elevationScale: 50,   // Higher = larger terrain features
+  moistureScale: 40,    // Higher = larger moisture zones
+  detailScale: 100,     // Fine detail noise
+};
+
+/**
+ * Determine biome/terrain type based on elevation and moisture
+ * This creates natural clustering of similar terrain types
+ * 
+ * Biome Matrix:
+ * | Elevation / Moisture | Dry (0-0.3) | Medium (0.3-0.6) | Wet (0.6-1.0) |
+ * |---------------------|-------------|------------------|---------------|
+ * | High (0.7-1.0)      | Rocky Peaks | Mountain         | Mountain      |
+ * | Medium-High (0.5-0.7)| Rocky Ground| Plains           | Forest        |
+ * | Medium (0.3-0.5)    | Plains      | Plains           | Forest        |
+ * | Low (0.15-0.3)      | Sand/Beach  | Plains           | Marsh         |
+ * | Very Low (0-0.15)   | Water       | Water            | Deep Water    |
+ */
+function getBiomeTerrain(elevation: number, moisture: number): TerrainType {
+  if (elevation < 0.15) {
+    // Very low - water zones
+    return moisture > 0.6 ? 'deep_water' : 'water';
+  } else if (elevation < 0.3) {
+    // Low elevation
+    if (moisture < 0.3) return 'sand';
+    if (moisture > 0.6) return 'marsh';
+    return 'plains';
+  } else if (elevation < 0.5) {
+    // Medium elevation
+    return moisture > 0.5 ? 'forest' : 'plains';
+  } else if (elevation < 0.7) {
+    // Medium-high elevation
+    if (moisture < 0.3) return 'rocky';
+    if (moisture > 0.6) return 'forest';
+    return 'plains';
+  } else {
+    // High elevation
+    return moisture < 0.3 ? 'rocky' : 'mountain';
+  }
+}
+
+/**
+ * Generate world tiles using noise-based biome system
+ * Creates natural terrain clustering with smooth transitions
+ */
 export function generateWorldTiles(): Array<{ x: number; y: number; terrain: TerrainType; resources: Record<string, number> }> {
   const tiles: Array<{ x: number; y: number; terrain: TerrainType; resources: Record<string, number> }> = [];
   
-  // Seed for deterministic generation
-  const seed = 42;
-  const random = (x: number, y: number) => {
-    const n = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
-    return n - Math.floor(n);
-  };
+  const { seed, elevationScale, moistureScale, detailScale } = WORLD_GEN_CONFIG;
+  
+  // Create noise generators with different seeds for each layer
+  const elevNoise = new SimplexNoise(seed);
+  const moistNoise = new SimplexNoise(seed + 1000);
+  const detailNoise = new SimplexNoise(seed + 2000);
 
   // Market locations spread across the 500x500 world (25 markets in a 5x5 grid pattern)
   const marketLocations = new Set<string>();
@@ -105,61 +263,38 @@ export function generateWorldTiles(): Array<{ x: number; y: number; terrain: Ter
     }
   }
 
-  // Helper to check if position is in a water body
-  const isWater = (x: number, y: number): boolean => {
-    // Large lakes scattered across the map
-    const lakes = [
-      { cx: 100, cy: 100, r: 30 },
-      { cx: 400, cy: 100, r: 25 },
-      { cx: 100, cy: 400, r: 25 },
-      { cx: 400, cy: 400, r: 30 },
-      { cx: 250, cy: 250, r: 40 }, // Central lake
-    ];
-    
-    for (const lake of lakes) {
-      const dist = Math.sqrt((x - lake.cx) ** 2 + (y - lake.cy) ** 2);
-      if (dist <= lake.r) return true;
-    }
-    
-    // Rivers
-    if (Math.abs(y - 200) <= 5 && x > 50 && x < 450) return true; // Horizontal river
-    if (Math.abs(x - 300) <= 5 && y > 100 && y < 400) return true; // Vertical river
-    
-    return false;
-  };
-
   for (let y = 0; y < WORLD_SIZE; y++) {
     for (let x = 0; x < WORLD_SIZE; x++) {
-      const r = random(x, y);
+      const key = `${x},${y}`;
       let terrain: TerrainType;
 
-      // Markets at specific locations (trade hubs)
-      if (marketLocations.has(`${x},${y}`)) {
+      // Check for market first
+      if (marketLocations.has(key)) {
         terrain = 'market';
       }
-      // Water bodies
-      else if (isWater(x, y)) {
-        terrain = 'water';
-      }
-      // Mountains in corners and mountain ranges
-      else if (
-        r < 0.08 || 
-        (x < 20 && y < 20) || 
-        (x > WORLD_SIZE - 21 && y > WORLD_SIZE - 21) ||
-        (x < 20 && y > WORLD_SIZE - 21) ||
-        (x > WORLD_SIZE - 21 && y < 20) ||
-        // Mountain ranges
-        (Math.abs(y - x) < 10 && x > 150 && x < 350) // Diagonal range
-      ) {
-        terrain = 'mountain';
-      }
-      // Forests
-      else if (r < 0.4) {
-        terrain = 'forest';
-      }
-      // Plains (default)
       else {
-        terrain = 'plains';
+        // Calculate noise coordinates
+        const nx = x / elevationScale;
+        const ny = y / elevationScale;
+        const mx = x / moistureScale;
+        const my = y / moistureScale;
+        const dx = x / detailScale;
+        const dy = y / detailScale;
+
+        // Multi-octave elevation (fractal noise)
+        // Combines large-scale features with fine detail
+        let elevation = elevNoise.noise2D(nx, ny) * 0.6;
+        elevation += elevNoise.noise2D(nx * 2, ny * 2) * 0.3;
+        elevation += detailNoise.noise2D(dx * 4, dy * 4) * 0.1;
+        elevation = (elevation + 1) / 2; // Normalize to 0-1
+
+        // Multi-octave moisture
+        let moisture = moistNoise.noise2D(mx, my) * 0.7;
+        moisture += moistNoise.noise2D(mx * 2, my * 2) * 0.3;
+        moisture = (moisture + 1) / 2; // Normalize to 0-1
+
+        // Determine terrain from biome matrix
+        terrain = getBiomeTerrain(elevation, moisture);
       }
 
       tiles.push({
@@ -242,6 +377,11 @@ export function getTerrainColorClass(terrain: TerrainType): string {
     mountain: 'terrain-mountain',
     market: 'terrain-market',
     water: 'terrain-water',
+    // New terrain types
+    rocky: 'terrain-rocky',
+    sand: 'terrain-sand',
+    deep_water: 'terrain-deep-water',
+    marsh: 'terrain-marsh',
   };
   return colors[terrain];
 }

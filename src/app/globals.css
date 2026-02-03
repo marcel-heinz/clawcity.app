@@ -152,6 +152,11 @@ body {
 .terrain-mountain { color: #6b7280; }
 .terrain-market { color: #b8860b; }
 .terrain-water { color: #2563eb; }
+/* New terrain types */
+.terrain-rocky { color: #495057; }
+.terrain-sand { color: #d4a017; }
+.terrain-deep-water { color: #1e3a5f; }
+.terrain-marsh { color: #3d7a6b; }
 
 /* ============================================
    Activity feed animations
@@ -308,7 +313,7 @@ body {
   box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.1);
 }
 
-/* Path/road pattern */
+/* Path pattern */
 .terrain-path {
   background-color: #d7ccc8;
   background-image:
@@ -316,6 +321,59 @@ body {
     radial-gradient(circle at 80% 30%, #bcaaa4 2px, transparent 2px),
     radial-gradient(circle at 50% 80%, #a1887f 2px, transparent 2px);
   background-size: 12px 12px;
+}
+
+/* Rocky/barren ground pattern - NEW */
+.terrain-rocky-map {
+  background-color: #6b7280;
+  background-image:
+    radial-gradient(ellipse 6px 4px at 30% 30%, #4b5563 100%, transparent 100%),
+    radial-gradient(ellipse 8px 5px at 70% 60%, #374151 100%, transparent 100%),
+    radial-gradient(circle at 50% 80%, #9ca3af 3px, transparent 3px),
+    radial-gradient(circle at 20% 70%, #4b5563 2px, transparent 2px),
+    radial-gradient(circle at 85% 25%, #9ca3af 2px, transparent 2px);
+  background-size: 20px 20px;
+}
+
+/* Sand/beach pattern - NEW */
+.terrain-sand-map {
+  background-color: #e9c46a;
+  background-image:
+    radial-gradient(circle at 25% 35%, #f4d58d 2px, transparent 2px),
+    radial-gradient(circle at 75% 65%, #ddb84d 2px, transparent 2px),
+    radial-gradient(circle at 50% 15%, #f4d58d 1px, transparent 1px),
+    radial-gradient(circle at 15% 85%, #ddb84d 1px, transparent 1px),
+    radial-gradient(circle at 90% 45%, #e9c46a 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* Deep water pattern - NEW */
+.terrain-deep-water-map {
+  background-color: #1e3a5f;
+  background-image:
+    linear-gradient(90deg, transparent 0%, rgba(30, 58, 95, 0.4) 50%, transparent 100%),
+    linear-gradient(180deg, 
+      #1e3a5f 0%, 
+      #1d4e89 20%, 
+      #2d5f9a 40%, 
+      #1d4e89 60%, 
+      #1e3a5f 80%,
+      #1d4e89 100%
+    );
+  background-size: 40px 20px, 100% 100%;
+  animation: waterWave 4s ease-in-out infinite;
+}
+
+/* Marsh/swamp pattern - NEW */
+.terrain-marsh-map {
+  background-color: #457b9d;
+  background-image:
+    radial-gradient(circle at 30% 40%, #1d3557 4px, transparent 4px),
+    radial-gradient(circle at 70% 70%, #1d3557 3px, transparent 3px),
+    linear-gradient(90deg, transparent 0%, rgba(168, 218, 220, 0.3) 50%, transparent 100%),
+    radial-gradient(ellipse 4px 8px at 50% 60%, #2d6a4f 100%, transparent 100%),
+    radial-gradient(ellipse 3px 6px at 80% 30%, #2d6a4f 100%, transparent 100%);
+  background-size: 24px 24px;
 }
 
 /* ============================================
