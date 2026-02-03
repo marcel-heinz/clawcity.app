@@ -139,6 +139,10 @@ export function WorldMap({
         <span><span className="terrain-mountain">▲</span> Mountain</span>
         <span><span className="terrain-market">◆</span> Market</span>
         <span><span className="terrain-water">~</span> Water</span>
+        <span><span className="terrain-rocky">#</span> Rocky</span>
+        <span><span className="terrain-sand">:</span> Sand</span>
+        <span><span className="terrain-deep-water">≋</span> Deep</span>
+        <span><span className="terrain-marsh">※</span> Marsh</span>
         <span><span className="text-[var(--accent)]">@</span> Agent</span>
       </div>
     </div>

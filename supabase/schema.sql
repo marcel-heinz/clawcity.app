@@ -35,7 +35,18 @@ CREATE INDEX IF NOT EXISTS idx_agents_position ON agents(x, y);
 CREATE TABLE IF NOT EXISTS tiles (
   x INT NOT NULL,
   y INT NOT NULL,
-  terrain TEXT NOT NULL CHECK (terrain IN ('plains', 'forest', 'mountain', 'market', 'water')),
+  terrain TEXT NOT NULL CHECK (terrain IN (
+    'plains', 
+    'forest', 
+    'mountain', 
+    'market', 
+    'water',
+    -- New terrain types (noise-based biome generation)
+    'rocky',      -- Barren rocky ground - no resources
+    'sand',       -- Beach/desert - no resources
+    'deep_water', -- Impassable deep water - no resources
+    'marsh'       -- Swampy wetland - minimal food
+  )),
   resources JSONB DEFAULT '{}',
   owner_id UUID REFERENCES agents(id) ON DELETE SET NULL,
   claimed_at TIMESTAMPTZ,

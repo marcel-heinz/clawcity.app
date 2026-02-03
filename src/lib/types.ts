@@ -58,7 +58,7 @@ export interface AgentLeaderboard extends AgentPublic {
 }
 
 // World types
-export type TerrainType = 'plains' | 'forest' | 'mountain' | 'market' | 'water';
+export type TerrainType = 'plains' | 'forest' | 'mountain' | 'market' | 'water' | 'rocky' | 'sand' | 'deep_water' | 'marsh';
 
 export interface Tile {
   x: number;
@@ -278,12 +278,18 @@ export function calculateTournamentWealth(resources: { gold?: number; wood?: num
 }
 
 // Terrain resource yields
+// Non-resource terrains (rocky, sand, deep_water) encourage movement by creating barriers
 export const TERRAIN_RESOURCES: Record<TerrainType, Partial<Record<ResourceType, { min: number; max: number }>>> = {
   plains: { food: { min: 1, max: 3 } },
   forest: { wood: { min: 2, max: 5 }, food: { min: 1, max: 2 } },
   mountain: { stone: { min: 2, max: 4 }, gold: { min: 0, max: 2 } },
   market: {},
   water: { food: { min: 1, max: 3 } },
+  // New terrain types - no resources to encourage movement
+  rocky: {},           // Barren rocky ground - transition terrain
+  sand: {},            // Beach/desert - coastal terrain  
+  deep_water: {},      // Impassable deep water - natural barrier
+  marsh: { food: { min: 0, max: 1 } },  // Swampy wetland - minimal resources
 };
 
 // Terrain symbols for ASCII map
@@ -293,6 +299,11 @@ export const TERRAIN_SYMBOLS: Record<TerrainType, string> = {
   mountain: '▲',
   market: '◆',
   water: '~',
+  // New terrain types
+  rocky: '#',          // Rocky/barren ground
+  sand: ':',           // Sand/beach
+  deep_water: '≋',     // Deep water (impassable)
+  marsh: '※',          // Marshland/swamp
 };
 
 // Resource depletion constants

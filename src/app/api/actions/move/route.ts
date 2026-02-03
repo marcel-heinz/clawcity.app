@@ -85,11 +85,36 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Check destination tile for terrain penalties BEFORE moving
+    const { data: destTile } = await supabase
+      .from('tiles')
+      .select('terrain')
+      .eq('x', newPos.x)
+      .eq('y', newPos.y)
+      .single();
+
+    // Deep water movement penalty (extra stamina cost)
+    const DEEP_WATER_STAMINA_COST = 3;
+    let deepWaterPenalty = 0;
+    let deepWaterWarning = '';
+    
+    if (destTile?.terrain === 'deep_water') {
+      deepWaterPenalty = DEEP_WATER_STAMINA_COST;
+      if (agent.food < DEEP_WATER_STAMINA_COST) {
+        deepWaterWarning = ' WARNING: Low stamina for deep water travel!';
+      }
+    }
+
     // Update agent position (cooldown already updated by atomic check, or update now if fallback)
     const updateData: Record<string, unknown> = { 
       x: newPos.x, 
       y: newPos.y,
     };
+
+    // Apply deep water stamina penalty
+    if (deepWaterPenalty > 0) {
+      updateData.food = Math.max(0, agent.food - deepWaterPenalty);
+    }
     
     // Only set cooldown if atomic check didn't do it
     if (!cooldownResult.success) {
@@ -106,14 +131,6 @@ export async function POST(request: NextRequest) {
       return errorResponse('Failed to move', 500);
     }
 
-    // Get new tile info
-    const { data: tile } = await supabase
-      .from('tiles')
-      .select('terrain')
-      .eq('x', newPos.x)
-      .eq('y', newPos.y)
-      .single();
-
     // Log move event
     await supabase.from('events').insert({
       agent_id: agent.id,
@@ -122,7 +139,8 @@ export async function POST(request: NextRequest) {
         direction, 
         from: { x: agent.x, y: agent.y },
         to: newPos,
-        terrain: tile?.terrain,
+        terrain: destTile?.terrain,
+        deep_water_penalty: deepWaterPenalty > 0 ? deepWaterPenalty : undefined,
       },
       location: newPos,
     });
@@ -137,13 +155,23 @@ export async function POST(request: NextRequest) {
       .gte('y', newPos.y - 3)
       .lte('y', newPos.y + 3);
 
+    // Build response message
+    let message = `Moved ${direction}`;
+    if (deepWaterPenalty > 0) {
+      message += ` (deep water: -${deepWaterPenalty} food stamina)${deepWaterWarning}`;
+    }
+
     // Include any new announcements in the response
     const responseData = await withAnnouncements(agent, {
-      message: `Moved ${direction}`,
+      message,
       position: newPos,
-      terrain: tile?.terrain || 'unknown',
+      terrain: destTile?.terrain || 'unknown',
       nearby_agents: nearbyAgents || [],
       moved: true,
+      deep_water_penalty: deepWaterPenalty > 0 ? {
+        stamina_cost: deepWaterPenalty,
+        food_remaining: Math.max(0, agent.food - deepWaterPenalty),
+      } : undefined,
     });
 
     return jsonResponse({
