@@ -195,12 +195,17 @@ export function calculateGatheredResources(terrain: TerrainType): Record<Resourc
 
 /**
  * Generation parameters for world terrain
+ * 
+ * Note: Demo uses 100x100, ClawCity uses 500x500.
+ * Scale parameters 5x to maintain same visual biome density.
+ * Demo defaults: elevScale=50, moistScale=40
+ * Scaled for 500x500: 50*5=250, 40*5=200
  */
 const WORLD_GEN_CONFIG = {
   seed: 42,
-  elevationScale: 50,   // Higher = larger terrain features
-  moistureScale: 40,    // Higher = larger moisture zones
-  detailScale: 100,     // Fine detail noise
+  elevationScale: 250,  // Higher = larger terrain features (scaled 5x from demo)
+  moistureScale: 200,   // Higher = larger moisture zones (scaled 5x from demo)
+  detailScale: 500,     // Fine detail noise (scaled 5x from demo)
 };
 
 /**
