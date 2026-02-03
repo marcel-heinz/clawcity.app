@@ -765,8 +765,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
       </div>
 
       {/* Bottom center - Crab indicator */}
-      <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 z-10 pointer-events-none">
-        <CrabSprite animation="idle" scale={2} />
+      <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 translate-y-1/4 z-10 pointer-events-none">
+        <CrabSprite animation="idle" scale={2.5} />
       </div>
     </div>
   );
