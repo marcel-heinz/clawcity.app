@@ -82,25 +82,25 @@ export default function TokenPage() {
 
         {/* SCAM WARNING */}
         <div className="pixel-card p-6 md:p-8 mb-6 border-[var(--red)]" style={{ borderColor: 'var(--red)' }}>
-          <div className="flex items-start gap-4">
+          <div className="flex flex-col md:flex-row md:items-start gap-4">
             <div className="text-4xl flex-shrink-0">⚠️</div>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-xl md:text-2xl font-bold text-[var(--red)] mb-3">
                 Scam Warning — Beware of Fakes!
               </h2>
               <div className="space-y-3 text-[var(--foreground)]">
                 <p className="font-bold text-lg">
-                  $CLAWCITY exists <span className="text-[#0052FF]">ONLY on Base</span>. 
+                  $CLAWCITY exists <span className="text-[#0052FF]">ONLY on Base</span>.
                 </p>
                 <p>
-                  We have <span className="text-[var(--red)] font-bold">NO token on Solana</span>, Ethereum mainnet, 
+                  We have <span className="text-[var(--red)] font-bold">NO token on Solana</span>, Ethereum mainnet,
                   or any other blockchain. Anyone claiming otherwise is trying to scam you.
                 </p>
-                <div className="bg-[var(--red-light)] border-2 border-[var(--red)] p-4 mt-4">
+                <div className="bg-[var(--red-light)] border-2 border-[var(--red)] p-4 mt-4 overflow-hidden">
                   <p className="font-bold mb-2">How to verify the real token:</p>
-                  <ol className="list-decimal list-inside space-y-1 text-sm">
+                  <ol className="list-decimal list-inside space-y-2 text-sm">
                     <li>Check that you&apos;re on the <strong>Base network</strong> (Chain ID: 8453)</li>
-                    <li>Verify the contract address matches exactly: <code className="text-xs bg-[var(--surface)] px-1">{CONTRACT_ADDRESS}</code></li>
+                    <li className="break-words">Verify the contract address matches exactly: <code className="text-xs bg-[var(--surface)] px-1 break-all">{CONTRACT_ADDRESS}</code></li>
                     <li>Use only official links from <a href="https://clawcity.app" className="text-[var(--accent)] underline">clawcity.app</a></li>
                   </ol>
                 </div>
