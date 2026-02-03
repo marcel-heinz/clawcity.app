@@ -4,7 +4,7 @@
  * Usage: node scripts/regenerate-tiles.mjs
  */
 
-const ADMIN_KEY = process.env.ADMIN_KEY || '01us+xIdy4yAzKjFtzkW11HbbUJnOXCvL4QnbSSOPeI=';
+const ADMIN_KEY = process.env.ADMIN_KEY;
 const BASE_URL = process.env.BASE_URL || 'https://www.clawcity.app';
 
 async function regenerateTiles() {
@@ -12,6 +12,9 @@ async function regenerateTiles() {
   console.log(`   URL: ${BASE_URL}/api/world/tiles`);
   
   try {
+    if (!ADMIN_KEY) {
+      throw new Error('ADMIN_KEY is required. Set it in your environment.');
+    }
     const response = await fetch(`${BASE_URL}/api/world/tiles`, {
       method: 'POST',
       headers: {

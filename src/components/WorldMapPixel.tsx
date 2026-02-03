@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { AgentPublic, TerrainType, WORLD_SIZE } from '@/lib/types';
+import { CrabSprite } from '@/components/CrabSprite';
 
 // Terrain colors matching terrain-demo.html
 const TERRAIN_COLORS: Record<TerrainType, string> = {
@@ -110,30 +111,7 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
         ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
       }
     }
-
-    // Draw agent markers
-    activeAgents.forEach((agent) => {
-      const gridX = Math.floor(agent.x / DOWNSAMPLE);
-      const gridY = Math.floor(agent.y / DOWNSAMPLE);
-      
-      // Draw a bright marker for agents
-      ctx.fillStyle = '#ff4444';
-      ctx.beginPath();
-      ctx.arc(
-        gridX * PIXEL_SIZE + PIXEL_SIZE / 2,
-        gridY * PIXEL_SIZE + PIXEL_SIZE / 2,
-        PIXEL_SIZE * 0.8,
-        0,
-        Math.PI * 2
-      );
-      ctx.fill();
-      
-      // White border for visibility
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    });
-  }, [tileMap, activeAgents, loading]);
+  }, [tileMap, loading]);
 
   // Handle mouse interactions
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -249,6 +227,60 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
           onClick={handleClick}
         />
 
+        {/* Sprite Overlay - Animated Crab Sprites */}
+        <div 
+          className="absolute inset-0 pointer-events-none"
+          style={{ aspectRatio: '1/1' }}
+        >
+          {activeAgents.map((agent) => {
+            const gridX = Math.floor(agent.x / DOWNSAMPLE);
+            const gridY = Math.floor(agent.y / DOWNSAMPLE);
+            const isHovered = hoveredAgent?.id === agent.id;
+            
+            // Position sprite at center of grid cell using percentage
+            // Each grid cell is 1% of the canvas (100 cells = 100%)
+            const leftPercent = (gridX / GRID_SIZE) * 100 + (0.5 / GRID_SIZE) * 100;
+            const topPercent = (gridY / GRID_SIZE) * 100 + (0.5 / GRID_SIZE) * 100;
+            
+            return (
+              <div
+                key={agent.id}
+                className="absolute pointer-events-auto cursor-pointer group"
+                style={{
+                  left: `${leftPercent}%`,
+                  top: `${topPercent}%`,
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: isHovered ? 20 : 10,
+                }}
+                onMouseEnter={(e) => {
+                  setHoveredAgent(agent);
+                  setMousePos({ x: e.clientX, y: e.clientY });
+                }}
+                onMouseMove={(e) => {
+                  setMousePos({ x: e.clientX, y: e.clientY });
+                }}
+                onMouseLeave={() => setHoveredAgent(null)}
+                onClick={() => {
+                  if (onAgentClick) {
+                    onAgentClick(agent.id, agent.x, agent.y);
+                  }
+                }}
+                title={agent.name}
+              >
+                <CrabSprite 
+                  animation="idle"
+                  scale={0.6}
+                  className={isHovered ? 'brightness-125' : ''}
+                />
+                {/* Tooltip on hover */}
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-0.5 bg-[var(--foreground)] text-[var(--background)] text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                  {agent.name}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
         {/* Hover Tooltip */}
         {hoveredAgent && (
           <div
@@ -296,7 +328,7 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.marsh }} /> Marsh
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-[#ff4444] border border-white" /> Agent
+          <CrabSprite animation="idle" scale={0.3} className="inline-block" /> Agent
         </span>
       </div>
     </div>
