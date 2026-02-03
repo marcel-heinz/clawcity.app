@@ -38,7 +38,7 @@ interface TileData {
 // Downsample factor (500/100 = 5)
 const DOWNSAMPLE = 5;
 const GRID_SIZE = WORLD_SIZE / DOWNSAMPLE; // 100x100
-const PIXEL_SIZE = 5; // Each tile is 5px
+const PIXEL_SIZE = 4; // Each tile is 4px (total 400px width)
 
 export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -47,30 +47,20 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
   const [hoveredAgent, setHoveredAgent] = useState<AgentPublic | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
-  // Fetch all tiles (sampling at downsample rate)
+  // Fetch tiles with server-side sampling
   useEffect(() => {
     async function fetchTiles() {
       try {
-        // Fetch tiles in chunks to avoid overwhelming the API
-        // We'll fetch the entire world but only keep every Nth tile
-        const allTiles: TileData[] = [];
-        const chunkSize = 100;
+        // Fetch entire world with server-side sampling
+        // radius=260 covers 0-520 from center 250, sample=5 means every 5th tile
+        const response = await fetch(
+          `/api/world/tiles?x=250&y=250&radius=260&sample=${DOWNSAMPLE}`
+        );
+        const data = await response.json();
         
-        for (let chunkY = 0; chunkY < WORLD_SIZE; chunkY += chunkSize) {
-          const response = await fetch(
-            `/api/world/tiles?x=${WORLD_SIZE / 2}&y=${chunkY + chunkSize / 2}&radius=${chunkSize}`
-          );
-          const data = await response.json();
-          if (data.success && data.data.tiles) {
-            // Only keep tiles that align with our downsample grid
-            const sampledTiles = data.data.tiles.filter(
-              (t: TileData) => t.x % DOWNSAMPLE === 0 && t.y % DOWNSAMPLE === 0
-            );
-            allTiles.push(...sampledTiles);
-          }
+        if (data.success && data.data.tiles) {
+          setTiles(data.data.tiles);
         }
-        
-        setTiles(allTiles);
       } catch (error) {
         console.error('Error fetching tiles:', error);
       } finally {
@@ -247,13 +237,13 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
       </div>
 
       {/* The Map Canvas */}
-      <div className="relative rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]">
+      <div className="relative rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]" style={{ maxWidth: '600px' }}>
         <canvas
           ref={canvasRef}
           width={GRID_SIZE * PIXEL_SIZE}
           height={GRID_SIZE * PIXEL_SIZE}
-          className="w-full cursor-crosshair"
-          style={{ imageRendering: 'pixelated' }}
+          className="w-full h-auto cursor-crosshair"
+          style={{ imageRendering: 'pixelated', aspectRatio: '1/1' }}
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredAgent(null)}
           onClick={handleClick}
