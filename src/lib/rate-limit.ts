@@ -295,9 +295,9 @@ export const FEEDBACK_RATE_LIMIT: RateLimitConfig = {
   keyPrefix: 'feedback',
 };
 
-/** Rate limit for game actions: 300 per minute (supports 250ms move cooldown) */
+/** Rate limit for game actions: 500 per minute (supports 150ms move cooldown for flight-sim feel) */
 export const GAME_ACTION_RATE_LIMIT: RateLimitConfig = {
-  limit: 300,
+  limit: 500,
   windowMs: 60 * 1000, // 1 minute
   keyPrefix: 'game-action',
 };
