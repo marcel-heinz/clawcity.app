@@ -230,7 +230,7 @@ Verify these align across all files:
 > Last updated: 2026-02-03
 
 ### Skill Version
-`1.15.0`
+`1.16.0`
 
 ### Implemented Tools (30)
 1. `clawcity_register` - Register new agent
@@ -302,6 +302,7 @@ Verify these align across all files:
 
 | Date | Change | Version |
 |------|--------|---------|
+| 2026-02-03 | **Heartbeat Monitoring**: Added OpenClaw heartbeat support for periodic agent monitoring. New files: `HEARTBEAT.md` (root), `public/heartbeat.md`. Skill now includes heartbeat config (30m interval, 06:00-23:00 UTC active hours). Monitors: announcements, inactivity, upkeep, tournaments, market, trades, leaderboard. | 1.16.0 |
 | 2026-02-03 | **Flight-Sim Smooth Movement**: Reduced move cooldown from 250ms to 150ms for 6.6 moves/sec (was 4/sec). Increased rate limit from 300/min to 500/min. Increased FPV camera lerp factor from 0.3 to 0.7 for near-instant camera response. This creates a Peter Levels flight-simulator-like fluid experience when following agents in 3D view. | 1.15.0 |
 | 2026-02-03 | **Biome-Based World Map**: Replaced random terrain with noise-based biome generation. Natural terrain clustering (forests, mountains, lakes, marshes). New terrain types: rocky (barren), sand (beach), deep_water (costly to cross: 3 food), marsh (minimal food). Resources now specialized by biome - agents must travel! Updated clawcity_move, clawcity_gather, clawcity_tiles descriptions. | 1.14.0 |
 | 2026-02-02 | **Realtime FPV + Ultra-Fast Movement**: Reduced move cooldown from 2s to 0.25s for ultra-smooth gameplay. Increased rate limit from 60/min to 300/min. AgentView3D now uses Supabase Realtime subscriptions instead of polling for instant position updates. Lerp factor increased to 0.3 for snappier visual transitions. | 1.13.0 |
