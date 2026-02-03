@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
-import { WorldOverview } from '@/components/WorldOverview';
+import { WorldMapPixel } from '@/components/WorldMapPixel';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { Leaderboard } from '@/components/Leaderboard';
 import { Stats } from '@/components/Stats';
@@ -411,7 +411,7 @@ Body: { "target": "AgentName",
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
               <span>🗺️</span> World Overview
             </h2>
-            <WorldOverview
+            <WorldMapPixel
               agents={agents}
               onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
             />
