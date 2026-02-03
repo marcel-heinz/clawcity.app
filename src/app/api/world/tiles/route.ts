@@ -2,6 +2,21 @@ import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { jsonResponse, errorResponse } from '@/lib/auth';
 import { generateWorldTiles } from '@/lib/game-logic';
+import { WORLD_SIZE } from '@/lib/types';
+
+/**
+ * Generate an array of sampled coordinates within a range
+ * e.g., for min=0, max=499, sample=5 -> [0, 5, 10, ..., 495]
+ */
+function getSampledCoordinates(min: number, max: number, sample: number): number[] {
+  const coords: number[] = [];
+  // Start at the first coordinate divisible by sample that's >= min
+  const start = Math.ceil(min / sample) * sample;
+  for (let i = start; i <= max; i += sample) {
+    coords.push(i);
+  }
+  return coords;
+}
 
 // GET tiles (with optional area filter)
 export async function GET(request: NextRequest) {
@@ -45,6 +60,74 @@ export async function GET(request: NextRequest) {
     const y = url.searchParams.get('y');
     const radius = parseInt(url.searchParams.get('radius') || '15');
 
+    // For sampled world overview requests (large radius + sample > 1),
+    // use a special query path that fetches only sampled coordinates
+    // with pagination to bypass the Supabase row limit
+    if (sample > 1 && x !== null && y !== null && radius >= 100) {
+      const centerX = parseInt(x);
+      const centerY = parseInt(y);
+      
+      // Compute bounds, clamped to world size
+      const minX = Math.max(0, centerX - radius);
+      const maxX = Math.min(WORLD_SIZE - 1, centerX + radius);
+      const minY = Math.max(0, centerY - radius);
+      const maxY = Math.min(WORLD_SIZE - 1, centerY + radius);
+      
+      // Get the sampled coordinate arrays
+      const xCoords = getSampledCoordinates(minX, maxX, sample);
+      const yCoords = getSampledCoordinates(minY, maxY, sample);
+      
+      // Expected tile count
+      const expectedCount = xCoords.length * yCoords.length;
+      
+      // Fetch tiles with pagination (Supabase has a ~1000 row default limit)
+      const PAGE_SIZE = 1000;
+      const allTiles: Array<{ x: number; y: number; terrain: string; owner_id: string | null }> = [];
+      let page = 0;
+      
+      while (allTiles.length < expectedCount) {
+        const from = page * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
+        
+        const { data: pageTiles, error } = await supabase
+          .from('tiles')
+          .select('x, y, terrain, owner_id')
+          .in('x', xCoords)
+          .in('y', yCoords)
+          .order('x', { ascending: true })
+          .order('y', { ascending: true })
+          .range(from, to);
+        
+        if (error) {
+          console.error('Error fetching sampled tiles page:', error);
+          return errorResponse('Failed to fetch tiles', 500);
+        }
+        
+        if (!pageTiles || pageTiles.length === 0) {
+          // No more tiles to fetch
+          break;
+        }
+        
+        allTiles.push(...pageTiles);
+        page++;
+        
+        // Safety limit to prevent infinite loops
+        if (page > 20) {
+          console.warn('Hit pagination safety limit for sampled tiles');
+          break;
+        }
+      }
+      
+      return jsonResponse({
+        success: true,
+        data: {
+          tiles: allTiles,
+          count: allTiles.length,
+        },
+      });
+    }
+
+    // Standard path for small-radius requests or no sampling
     let query = supabase.from('tiles').select('x, y, terrain, owner_id');
 
     // Filter by area if coordinates provided
@@ -69,7 +152,7 @@ export async function GET(request: NextRequest) {
       return errorResponse('Failed to fetch tiles', 500);
     }
     
-    // Apply client-requested sampling
+    // Apply client-requested sampling (for small-radius requests)
     let resultTiles = tiles || [];
     if (sample > 1) {
       resultTiles = resultTiles.filter(t => t.x % sample === 0 && t.y % sample === 0);

@@ -237,7 +237,7 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
       </div>
 
       {/* The Map Canvas */}
-      <div className="relative rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]" style={{ maxWidth: '600px' }}>
+      <div className="relative mx-auto rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]" style={{ maxWidth: '650px' }}>
         <canvas
           ref={canvasRef}
           width={GRID_SIZE * PIXEL_SIZE}
