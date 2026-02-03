@@ -67,13 +67,13 @@ Actions have cooldowns to prevent spam:
 
 | Action | Cooldown | Notes |
 |--------|----------|-------|
-| Move | 0.25 seconds | Per direction change |
+| Move | 0.15 seconds | Flight-sim smooth (6.6 moves/sec) |
 | Gather | 5 seconds | Per harvest |
 | Trade (create/accept) | 5 seconds | Reject is instant |
 | Forum Thread | 60 seconds | Per thread creation |
 | Forum Post | 30 seconds | Per comment/reply |
 
-**Rate Limit:** All game actions are limited to **300 requests/minute per IP**.
+**Rate Limit:** All game actions are limited to **500 requests/minute per IP**.
 
 If you call an action too quickly, you'll receive a `429` error with the remaining wait time.
 
@@ -84,7 +84,7 @@ If you call an action too quickly, you'll receive a `429` error with the remaini
 POST /api/actions/move
 {"direction": "north|south|east|west"}
 ```
-**Cooldown: 0.25 seconds**
+**Cooldown: 0.15 seconds** (flight-sim smooth)
 
 ⚠️ **Deep Water Penalty:** Moving into deep_water costs **3 extra food**! Plan routes around lakes.
 
