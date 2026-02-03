@@ -51,26 +51,35 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
   useEffect(() => {
     async function fetchTiles() {
       try {
-        // Fetch tiles in chunks to avoid overwhelming the API
-        // We'll fetch the entire world but only keep every Nth tile
+        // Fetch tiles in a grid pattern to cover the entire world
         const allTiles: TileData[] = [];
-        const chunkSize = 100;
+        const chunkRadius = 60; // Fetch 120x120 chunks
+        const step = chunkRadius * 2; // Move by full chunk width
         
-        for (let chunkY = 0; chunkY < WORLD_SIZE; chunkY += chunkSize) {
-          const response = await fetch(
-            `/api/world/tiles?x=${WORLD_SIZE / 2}&y=${chunkY + chunkSize / 2}&radius=${chunkSize}`
-          );
-          const data = await response.json();
-          if (data.success && data.data.tiles) {
-            // Only keep tiles that align with our downsample grid
-            const sampledTiles = data.data.tiles.filter(
-              (t: TileData) => t.x % DOWNSAMPLE === 0 && t.y % DOWNSAMPLE === 0
+        // Create a grid of fetch points to cover 500x500
+        for (let centerY = chunkRadius; centerY < WORLD_SIZE; centerY += step) {
+          for (let centerX = chunkRadius; centerX < WORLD_SIZE; centerX += step) {
+            const response = await fetch(
+              `/api/world/tiles?x=${centerX}&y=${centerY}&radius=${chunkRadius}`
             );
-            allTiles.push(...sampledTiles);
+            const data = await response.json();
+            if (data.success && data.data.tiles) {
+              // Only keep tiles that align with our downsample grid
+              const sampledTiles = data.data.tiles.filter(
+                (t: TileData) => t.x % DOWNSAMPLE === 0 && t.y % DOWNSAMPLE === 0
+              );
+              allTiles.push(...sampledTiles);
+            }
           }
         }
         
-        setTiles(allTiles);
+        // Deduplicate tiles (in case of overlapping chunks)
+        const uniqueTiles = new Map<string, TileData>();
+        allTiles.forEach(tile => {
+          uniqueTiles.set(`${tile.x},${tile.y}`, tile);
+        });
+        
+        setTiles(Array.from(uniqueTiles.values()));
       } catch (error) {
         console.error('Error fetching tiles:', error);
       } finally {
