@@ -5,21 +5,28 @@ import { generateWorldTiles } from '@/lib/game-logic';
 
 // GET tiles (with optional area filter)
 export async function GET(request: NextRequest) {
+  const url = new URL(request.url);
+  const sample = parseInt(url.searchParams.get('sample') || '1'); // Downsample factor (1 = no sampling)
+  
   if (!isSupabaseConfigured) {
     // Return generated tiles for preview mode
     const tiles = generateWorldTiles();
-    const url = new URL(request.url);
     const x = parseInt(url.searchParams.get('x') || '25');
     const y = parseInt(url.searchParams.get('y') || '25');
     const radius = parseInt(url.searchParams.get('radius') || '15');
 
-    const filteredTiles = tiles.filter(
+    let filteredTiles = tiles.filter(
       (t) =>
         t.x >= x - radius &&
         t.x <= x + radius &&
         t.y >= y - radius &&
         t.y <= y + radius
     );
+    
+    // Apply sampling if requested
+    if (sample > 1) {
+      filteredTiles = filteredTiles.filter(t => t.x % sample === 0 && t.y % sample === 0);
+    }
 
     return jsonResponse({
       success: true,
@@ -33,7 +40,6 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = createServerClient();
-    const url = new URL(request.url);
     
     const x = url.searchParams.get('x');
     const y = url.searchParams.get('y');
@@ -51,6 +57,10 @@ export async function GET(request: NextRequest) {
         .gte('y', centerY - radius)
         .lte('y', centerY + radius);
     }
+    
+    // Increase limit for larger requests
+    const maxTiles = (radius * 2 + 1) * (radius * 2 + 1);
+    query = query.limit(Math.min(maxTiles, 50000));
 
     const { data: tiles, error } = await query;
 
@@ -58,12 +68,18 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching tiles:', error);
       return errorResponse('Failed to fetch tiles', 500);
     }
+    
+    // Apply client-requested sampling
+    let resultTiles = tiles || [];
+    if (sample > 1) {
+      resultTiles = resultTiles.filter(t => t.x % sample === 0 && t.y % sample === 0);
+    }
 
     return jsonResponse({
       success: true,
       data: {
-        tiles: tiles || [],
-        count: tiles?.length || 0,
+        tiles: resultTiles,
+        count: resultTiles.length,
       },
     });
   } catch (error) {
