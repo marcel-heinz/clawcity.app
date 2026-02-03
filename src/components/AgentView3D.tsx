@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
-import { AgentPublic, Tile, TerrainType } from '@/lib/types';
+import { AgentPublic, Tile, TerrainType, WORLD_SIZE } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
+import { CrabSprite } from '@/components/CrabSprite';
 
 // Minecraft-style colors
 const COLORS = {
@@ -42,6 +43,19 @@ const COLORS = {
 
 const BLOCK_SIZE = 1;
 
+// Terrain colors for minimap (matching terrain-demo.html)
+const TERRAIN_COLORS: Record<TerrainType, string> = {
+  plains: '#90a955',
+  forest: '#386641',
+  mountain: '#6c757d',
+  market: '#ffd700',
+  water: '#4361ee',
+  rocky: '#495057',
+  sand: '#e9c46a',
+  deep_water: '#1d3557',
+  marsh: '#457b9d',
+};
+
 interface AgentView3DProps {
   centerX: number;
   centerY: number;
@@ -66,8 +80,12 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
   const [loading, setLoading] = useState(true);
   const [agentName, setAgentName] = useState('');
   const [displayPos, setDisplayPos] = useState({ x: centerX, y: centerY });
+  const [currentTerrain, setCurrentTerrain] = useState<TerrainType>('plains');
+  const [worldTiles, setWorldTiles] = useState<Tile[]>([]);
+  const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const VIEW_RADIUS = 12;
+  const MINIMAP_SIZE = 120;
 
   // Find selected agent's name
   useEffect(() => {
@@ -76,6 +94,11 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
       setAgentName(agent.name);
     }
   }, [agents, selectedAgentId]);
+
+  // Fetch world tiles for minimap on mount
+  useEffect(() => {
+    fetchWorldTiles();
+  }, [fetchWorldTiles]);
 
   // Create a simple crab mesh
   const createCrabMesh = useCallback((color: number) => {
@@ -345,6 +368,20 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     return [];
   }, []);
 
+  // Fetch all tiles for minimap (larger radius)
+  const fetchWorldTiles = useCallback(async () => {
+    try {
+      // Fetch entire world with sampling for performance
+      const response = await fetch(`/api/world/tiles?x=${WORLD_SIZE / 2}&y=${WORLD_SIZE / 2}&radius=${WORLD_SIZE / 2}&sample=5`);
+      const data = await response.json();
+      if (data.success) {
+        setWorldTiles(data.data.tiles as Tile[]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch world tiles:', error);
+    }
+  }, []);
+
   // Build terrain from tiles
   const buildTerrain = useCallback((tiles: Tile[], cx: number, cy: number) => {
     const terrainGroup = terrainGroupRef.current;
@@ -354,6 +391,12 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     while (terrainGroup.children.length > 0) {
       const child = terrainGroup.children[0];
       terrainGroup.remove(child);
+    }
+
+    // Find current tile to update terrain display
+    const currentTile = tiles.find(t => t.x === Math.floor(cx) && t.y === Math.floor(cy));
+    if (currentTile) {
+      setCurrentTerrain(currentTile.terrain);
     }
 
     tiles.forEach((tile) => {
@@ -403,6 +446,38 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     });
   }, [createMountain, createTree, createMarket, createWater, createRocky, createSand, createDeepWater, createMarsh]);
 
+  // Update minimap canvas
+  const updateMinimap = useCallback(() => {
+    const canvas = minimapCanvasRef.current;
+    if (!canvas || worldTiles.length === 0) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const scale = MINIMAP_SIZE / WORLD_SIZE;
+
+    // Clear canvas
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
+
+    // Draw terrain tiles
+    worldTiles.forEach(tile => {
+      ctx.fillStyle = TERRAIN_COLORS[tile.terrain] || '#555';
+      ctx.fillRect(tile.x * scale, tile.y * scale, Math.ceil(scale), Math.ceil(scale));
+    });
+
+    // Draw agent position marker (red dot)
+    ctx.fillStyle = '#ff4444';
+    ctx.beginPath();
+    ctx.arc(displayPos.x * scale, displayPos.y * scale, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }, [worldTiles, displayPos]);
+
+  // Update minimap when position or tiles change
+  useEffect(() => {
+    updateMinimap();
+  }, [updateMinimap]);
+
   // Main scene setup
   useEffect(() => {
     if (!containerRef.current) return;
@@ -447,13 +522,6 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     const agentGroup = new THREE.Group();
     agentGroupRef.current = agentGroup;
     scene.add(agentGroup);
-
-    // Create player crab (positioned in front of camera, visible)
-    const playerCrab = createCrabMesh(COLORS.agentSelf);
-    playerCrab.position.set(0, 0, 0.5); // Slightly in front of camera center
-    playerCrab.scale.setScalar(1.2);
-    playerCrab.rotation.y = Math.PI; // Face forward (away from camera)
-    scene.add(playerCrab);
 
     // Initial load
     fetchTiles(centerX, centerY).then(tiles => {
@@ -501,7 +569,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
         container.removeChild(renderer.domElement);
       }
     };
-  }, [centerX, centerY, createCrabMesh, fetchTiles, buildTerrain]);
+  }, [centerX, centerY, fetchTiles, buildTerrain, fetchWorldTiles]);
 
   // Supabase Realtime subscription for instant position updates
   useEffect(() => {
@@ -647,19 +715,20 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
       {/* HUD */}
       <div className="absolute top-0 left-0 right-0 z-10 p-3 pointer-events-none">
         <div className="flex justify-between items-start">
-          <div className="pointer-events-auto bg-black/60 backdrop-blur-sm rounded-lg px-4 py-2">
-            <div className="text-white font-bold">{agentName || 'Agent'}</div>
-            <div className="text-white/70 text-sm">({displayPos.x}, {displayPos.y})</div>
+          <div className="pointer-events-auto bg-black/70 backdrop-blur-sm rounded-lg px-4 py-3">
+            <div className="text-white font-bold text-sm">{agentName || 'Agent'}</div>
+            <div className="text-white/70 text-xs mt-0.5">({displayPos.x}, {displayPos.y})</div>
             <div className="text-green-400 text-xs mt-1 flex items-center gap-1">
               <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
               Live
             </div>
+            <div className="text-white/70 text-xs mt-1">Terrain: {currentTerrain.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</div>
           </div>
 
           {onClose && (
             <button
               onClick={onClose}
-              className="pointer-events-auto px-4 py-2 bg-black/60 backdrop-blur-sm hover:bg-black/80 rounded-lg text-white font-medium transition-colors"
+              className="pointer-events-auto px-4 py-2 bg-black/70 backdrop-blur-sm hover:bg-black/80 rounded-lg text-white font-medium transition-colors"
             >
               Close
             </button>
@@ -680,21 +749,24 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
       {/* Canvas */}
       <div ref={containerRef} className="w-full h-full" />
 
-      {/* Legend */}
-      <div className="absolute bottom-3 left-3 z-10 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-white">
-        <div className="flex gap-4">
-          <span className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded" style={{ backgroundColor: '#ff4444' }} /> You
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded" style={{ backgroundColor: '#ff8844' }} /> Others
-          </span>
-        </div>
+      {/* Bottom left - Agent's eye view label */}
+      <div className="absolute bottom-3 left-3 z-10 bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-white/70">
+        Agent&apos;s eye view
       </div>
 
-      {/* Controls hint */}
-      <div className="absolute bottom-3 right-3 z-10 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-white/70">
-        Agent&apos;s eye view
+      {/* Bottom right - Minimap */}
+      <div className="absolute bottom-3 right-3 z-10 bg-black/80 backdrop-blur-sm rounded-lg overflow-hidden border-2 border-white/20" style={{ width: MINIMAP_SIZE, height: MINIMAP_SIZE }}>
+        <canvas
+          ref={minimapCanvasRef}
+          width={MINIMAP_SIZE}
+          height={MINIMAP_SIZE}
+          className="w-full h-full"
+        />
+      </div>
+
+      {/* Bottom center - Small crab indicator */}
+      <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 z-10 pointer-events-none">
+        <CrabSprite animation="idle" scale={0.4} />
       </div>
     </div>
   );
