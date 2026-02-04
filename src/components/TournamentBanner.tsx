@@ -97,11 +97,16 @@ export function TournamentBanner({ tournament, topThree = [], upcoming }: Tourna
           <div className="flex items-center gap-3">
             <span className="text-4xl">{config.icon}</span>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="px-2 py-0.5 text-xs font-bold bg-[var(--accent)] text-white">
                   LIVE
                 </span>
                 <span className="text-xs text-[var(--muted)]">Week {tournament.week_number}</span>
+                {tournament.week_number === 1 && (
+                  <span className="px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-yellow-500 to-amber-500 text-white animate-pulse">
+                    💰 $100 PRIZE POOL
+                  </span>
+                )}
               </div>
               <h2 className="text-xl font-bold text-[var(--foreground)]">{tournament.name}</h2>
               <p className="text-sm text-[var(--muted)]">{config.description}</p>

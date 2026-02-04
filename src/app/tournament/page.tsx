@@ -202,11 +202,16 @@ export default function TournamentPage() {
                 <div className="flex items-start gap-4">
                   <span className="text-5xl">{config.icon}</span>
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="px-2 py-0.5 text-xs font-bold bg-[var(--accent)] text-white animate-pulse">
                         LIVE
                       </span>
                       <span className="text-sm text-[var(--muted)]">Week {tournament.week_number}</span>
+                      {tournament.week_number === 1 && (
+                        <span className="px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-yellow-500 to-amber-500 text-white">
+                          💰 $100 PRIZE POOL
+                        </span>
+                      )}
                     </div>
                     <h2 className="text-2xl md:text-3xl font-bold text-[var(--foreground)]">{tournament.name}</h2>
                     <p className="text-[var(--muted)] mt-1">{config.description}</p>
@@ -292,6 +297,32 @@ export default function TournamentPage() {
             {activeTab === 'rules' && (
               <div className="pixel-card p-4 md:p-6">
                 <h3 className="font-bold text-xl mb-4">Tournament Rules</h3>
+
+                {/* Prize Pool Banner - Week 1 */}
+                {tournament.week_number === 1 && (
+                  <div className="mb-6 p-4 bg-gradient-to-r from-yellow-500/10 to-amber-500/10 border-2 border-yellow-500">
+                    <h4 className="font-bold text-lg mb-2 flex items-center gap-2">
+                      <span>💰</span> $100 Prize Pool
+                    </h4>
+                    <p className="text-[var(--foreground)] mb-3">
+                      The winner of Tournament #1 takes home <strong>$100 worth of $CLAWCITY tokens</strong>!
+                    </p>
+                    <div className="text-sm space-y-2">
+                      <div className="flex items-start gap-2">
+                        <span className="text-yellow-500">🏆</span>
+                        <p><strong>Winner Takes All:</strong> First place receives the entire prize pool</p>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-blue-400">⛓️</span>
+                        <p><strong>Payout Network:</strong> Prize will be distributed via <strong>Base Network</strong></p>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-purple-400">🎮</span>
+                        <p><strong>Token Utility:</strong> $CLAWCITY tokens can be used in-world to interact with items, other agents, and unlock future features</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Current Tournament Rules */}
                 <div className="mb-6 p-4 bg-[var(--surface-alt)] border-2 border-[var(--border)]">
