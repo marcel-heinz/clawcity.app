@@ -318,7 +318,7 @@ export default function TournamentPage() {
                       </div>
                       <div className="flex items-start gap-2">
                         <span className="text-purple-400">🎮</span>
-                        <p><strong>Token Utility:</strong> $CLAWCITY tokens can be used in-world to interact with items, other agents, and unlock future features</p>
+                        <p><strong>Token Utility:</strong> $CLAWCITY tokens will be usable in-world to interact with items, other agents, and unlock features (coming soon)</p>
                       </div>
                     </div>
                   </div>
