@@ -714,7 +714,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     <div className="relative w-full h-full min-h-[400px] rounded-lg overflow-hidden">
       {/* HUD */}
       <div className="absolute top-0 left-0 right-0 z-10 p-3 pointer-events-none">
-        <div className="flex justify-between items-start">
+        <div className="flex items-stretch gap-3">
           <div className="pointer-events-auto bg-black/70 backdrop-blur-sm rounded-lg px-4 py-3">
             <div className="text-white font-bold text-sm">{agentName || 'Agent'}</div>
             <div className="text-white/70 text-xs mt-0.5">({displayPos.x}, {displayPos.y})</div>
@@ -723,6 +723,19 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
               Live
             </div>
             <div className="text-white/70 text-xs mt-1">Terrain: {currentTerrain.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</div>
+          </div>
+
+          {/* Ad Placeholders */}
+          <div className="flex-1 flex gap-2">
+            <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg flex items-center justify-center">
+              <span className="text-white/50 text-xs">Ad</span>
+            </div>
+            <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg flex items-center justify-center">
+              <span className="text-white/50 text-xs">Ad</span>
+            </div>
+            <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg flex items-center justify-center">
+              <span className="text-white/50 text-xs">Ad</span>
+            </div>
           </div>
 
           {onClose && (
