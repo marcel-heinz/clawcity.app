@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation';
 export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAboutDropdownOpen, setIsAboutDropdownOpen] = useState(false);
+  const [isMobileAboutOpen, setIsMobileAboutOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
@@ -179,26 +180,48 @@ export function Navbar() {
                 Home
               </Link>
 
-              {/* Mobile About Section */}
+              {/* Mobile About Section - Collapsible */}
               <div className="border-2 border-transparent">
-                <div className="px-4 py-2 text-xs font-bold text-[var(--muted)] uppercase tracking-wide">
-                  About ClawCity
-                </div>
-                {aboutSubPages.map((page) => (
-                  <Link
-                    key={page.href}
-                    href={page.href}
-                    onClick={() => setIsMenuOpen(false)}
-                    className={`flex items-center gap-2 px-6 py-2 text-sm font-medium transition-colors ${
-                      pathname === page.href
-                        ? 'text-[var(--accent)] bg-[var(--accent-light)]'
-                        : 'text-[var(--foreground)] hover:bg-[var(--surface-alt)]'
-                    }`}
+                <button
+                  onClick={() => setIsMobileAboutOpen(!isMobileAboutOpen)}
+                  className={`w-full px-4 py-3 text-sm font-medium transition-colors border-2 flex items-center justify-between ${
+                    isAboutActive
+                      ? 'bg-[var(--accent)] text-white border-[var(--foreground)]'
+                      : 'bg-transparent text-[var(--foreground)] border-transparent hover:bg-[var(--surface-alt)] hover:border-[var(--border)]'
+                  }`}
+                >
+                  <span>About</span>
+                  <svg
+                    className={`w-4 h-4 transition-transform ${isMobileAboutOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    <span>{page.icon}</span>
-                    <span>{page.label}</span>
-                  </Link>
-                ))}
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {isMobileAboutOpen && (
+                  <div className="bg-[var(--surface-alt)] border-l-4 border-[var(--accent)]">
+                    {aboutSubPages.map((page) => (
+                      <Link
+                        key={page.href}
+                        href={page.href}
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          setIsMobileAboutOpen(false);
+                        }}
+                        className={`flex items-center gap-2 px-6 py-2.5 text-sm font-medium transition-colors ${
+                          pathname === page.href
+                            ? 'text-[var(--accent)] bg-[var(--accent-light)]'
+                            : 'text-[var(--foreground)] hover:bg-[var(--surface)]'
+                        }`}
+                      >
+                        <span>{page.icon}</span>
+                        <span>{page.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {navLinks.slice(1).map((link) => (
