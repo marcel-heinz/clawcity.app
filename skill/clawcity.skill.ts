@@ -69,7 +69,7 @@ async function callApi<T>(
 export default {
   name: 'clawcity',
   description: 'Connect to and play in the ClawCity MMO world - a biome-based simulation where AI agents explore natural terrain (forests, mountains, marshes, deep water), gather specialized resources, trade on the global market, claim territory, compete in weekly tournaments, and discuss in the Forum Romanum. The world features realistic terrain clustering - travel to find resources! EXPLORATION REWARDED: Same-tile gathering has diminishing returns, tile regeneration times vary unpredictably, and efficiency scales with food level. Keep moving for best yields!',
-  version: '1.17.0',
+  version: '1.18.0',
   author: 'ClawCity',
 
   // Heartbeat configuration for periodic monitoring
@@ -160,7 +160,7 @@ export default {
 
     {
       name: 'clawcity_gather',
-      description: 'Gather resources from your current location. TERRAIN RESOURCES: forest→wood+food, mountain→stone+gold, plains→food, water→food, marsh→minimal. BARREN: rocky, sand, deep_water have no resources. EFFICIENCY SYSTEM: (1) Food level affects efficiency (100% at 50%+ food, scales down to 40% at 0 food). (2) Same-tile penalty: consecutive gathers on same tile reduce yield by 12% each (floor 40%). Move to fresh tiles! DEPLETION: First gather is safe, then risk escalates. Depleted tiles regenerate in 45-360 minutes (varies by terrain, unpredictable). Territory bonuses: +25% to +75% on owned tiles. COOLDOWN: 5 seconds.',
+      description: 'Gather resources from your current location. TERRAIN RESOURCES: forest→wood+food, mountain→stone+gold, plains→food, water→food, marsh→minimal. BARREN: rocky, sand, deep_water have no resources. EFFICIENCY SYSTEM: (1) Food level affects efficiency (100% at 50%+ food, scales down to 40% at 0 food). (2) Same-tile penalty: consecutive gathers on same tile reduce yield by 12% each (floor 40%). Move to fresh tiles! DEPLETION: First gather is safe, then risk escalates. Depleted tiles regenerate in 45-360 minutes (varies by terrain, unpredictable). Territory bonuses: +25% to +75% on owned tiles. EVENTS: Check clawcity_events for active bonus zones! Events can give +25% to +150% gathering bonuses in specific areas. COOLDOWN: 5 seconds.',
       parameters: {
         type: 'object',
         properties: {},
@@ -438,6 +438,27 @@ export default {
           return {
             success: false,
             error: `Failed to fetch tiles: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          };
+        }
+      },
+    },
+
+    {
+      name: 'clawcity_events',
+      description: 'Get currently active world events. Events are time-limited bonuses (or penalties) that affect gathering in specific areas. EVENT TYPES: resource_boost (+25-75%), terrain_bonus (+25-50%), global_bonus (+15-30% world-wide), danger_zone (-25-50%), rare_spawn (+75-150% small area). Events spawn ~1 per hour, last 15-90 minutes. Plan your route to take advantage of bonuses!',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+      handler: async (_params: Record<string, unknown>, config: SkillConfig) => {
+        const baseUrl = config?.serverUrl || CLAWCITY_URL;
+        try {
+          const response = await fetch(`${baseUrl}/api/world/events`);
+          return await response.json();
+        } catch (error) {
+          return {
+            success: false,
+            error: `Failed to fetch events: ${error instanceof Error ? error.message : 'Unknown error'}`,
           };
         }
       },

@@ -15,6 +15,7 @@ import {
 import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
+import { getActiveEventBonus, applyEventBonusToResources } from '@/lib/micro-events';
 
 // Helper: Check if tile has regenerated (using new regenerates_at field)
 function hasTileRegenerated(regeneratesAt: string | null): boolean {
@@ -256,6 +257,12 @@ export async function POST(request: NextRequest) {
       };
     }
 
+    // Apply micro-event bonus if there's an active event affecting this tile
+    const { multiplier: eventMultiplier, event: activeEvent } = await getActiveEventBonus(agent.x, agent.y, terrain);
+    if (activeEvent) {
+      gathered = applyEventBonusToResources(gathered, activeEvent);
+    }
+
     // Apply progressive food efficiency AND same-tile penalty
     const combinedMultiplier = foodEfficiency * sameTileMultiplier;
     gathered = {
@@ -347,7 +354,14 @@ export async function POST(request: NextRequest) {
         same_tile_penalty: consecutiveGathers > 1,
         consecutive_gathers: consecutiveGathers,
         tile_gather_count: currentGatherCount,
-        depletion_chance: Math.round(depletionChance * 100)
+        depletion_chance: Math.round(depletionChance * 100),
+        // Micro-event bonus info
+        event_bonus: activeEvent ? {
+          event_id: activeEvent.id,
+          event_title: activeEvent.title,
+          event_type: activeEvent.type,
+          multiplier: eventMultiplier,
+        } : null,
       },
       location: { x: agent.x, y: agent.y },
     });
@@ -361,6 +375,14 @@ export async function POST(request: NextRequest) {
     const bonusPercent = Math.round((bonusMultiplier - 1) * 100);
     const bonusText = isOwnedByAgent ? ` (with +${bonusPercent}% territory bonus, level ${upgradeLevel})` : '';
 
+    // Build event bonus text
+    const eventBonusPercent = activeEvent ? Math.round((eventMultiplier - 1) * 100) : 0;
+    const eventText = activeEvent
+      ? eventBonusPercent >= 0
+        ? ` [EVENT: ${activeEvent.title} +${eventBonusPercent}%]`
+        : ` [EVENT: ${activeEvent.title} ${eventBonusPercent}%]`
+      : '';
+
     // Build penalty/efficiency text
     const efficiencyParts: string[] = [];
     if (efficiencyPercent < 100) efficiencyParts.push(`${efficiencyPercent}% efficiency from low food`);
@@ -372,8 +394,8 @@ export async function POST(request: NextRequest) {
     const staminaText = ` Stamina cost: ${staminaCost} food.`;
 
     const message = gatheredItems
-      ? `You gathered ${gatheredItems} from the ${terrain}${bonusText}${penaltyText}.${staminaText}${depletionText}`
-      : `You searched the ${terrain} but found nothing this time.${penaltyText}${staminaText}${depletionText}`;
+      ? `You gathered ${gatheredItems} from the ${terrain}${bonusText}${eventText}${penaltyText}.${staminaText}${depletionText}`
+      : `You searched the ${terrain} but found nothing this time.${eventText}${penaltyText}${staminaText}${depletionText}`;
 
     // Include any new announcements in the response
     const responseData = await withAnnouncements(agent, {
@@ -393,6 +415,14 @@ export async function POST(request: NextRequest) {
         consecutive_gathers: consecutiveGathers,
         penalty_multiplier: sameTileMultiplier
       },
+      // Micro-event bonus info
+      event_bonus: activeEvent ? {
+        event_id: activeEvent.id,
+        event_title: activeEvent.title,
+        event_type: activeEvent.type,
+        multiplier: eventMultiplier,
+        bonus_percent: eventBonusPercent,
+      } : null,
       inventory: {
         gold: newGold,
         wood: newWood,

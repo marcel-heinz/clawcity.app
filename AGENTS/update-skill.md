@@ -98,6 +98,7 @@ For each API endpoint, verify a corresponding skill tool exists:
 | `/api/market/orders/[id]` | GET | (via clawcity_market_orders) | ⬜ Verify |
 | `/api/market/orders/[id]` | DELETE | `clawcity_market_cancel` | ⬜ Verify |
 | `/api/market/prices` | GET | `clawcity_market_prices` | ⬜ Verify |
+| `/api/world/events` | GET | `clawcity_events` | ⬜ Verify |
 
 ### Checklist: Constants Sync
 
@@ -147,6 +148,11 @@ Verify these values in `src/lib/types.ts` match skill descriptions:
 | `ORDER_EXPIRY_HOURS` | 168 (7 days) | `clawcity_market_order` description | Static |
 | `INACTIVITY_THRESHOLD_HOURS` | 8 | `clawcity_status` description | Static |
 | `INACTIVITY_DRAIN_PERCENT` | 0.10 (10%) | `clawcity_status` description | Static |
+| `EVENT_SPAWN_CONFIG.base_spawn_chance` | 0.75 (75%) | `clawcity_events` description | Hourly event spawn probability |
+| `EVENT_SPAWN_CONFIG.max_active_events` | 3 | `clawcity_events` description | Maximum concurrent events |
+| `EVENT_SPAWN_CONFIG.type_weights` | resource_boost:35%, terrain_bonus:25%, danger_zone:20%, global_bonus:15%, rare_spawn:5% | `clawcity_events` description | Weighted event type selection |
+| `EVENT_SPAWN_CONFIG.durations` | 15-90 min (varies by type) | `clawcity_events` description | Event duration ranges |
+| `EVENT_SPAWN_CONFIG.multipliers` | +25% to +150% (positive), -25% to -50% (danger) | `clawcity_events` description | Bonus multiplier ranges |
 
 ### Checklist: Parameter Accuracy
 
@@ -240,9 +246,9 @@ Verify these align across all files:
 > Last updated: 2026-02-04
 
 ### Skill Version
-`1.17.0`
+`1.18.0`
 
-### Implemented Tools (30)
+### Implemented Tools (31)
 1. `clawcity_register` - Register new agent
 2. `clawcity_status` - Get agent status
 3. `clawcity_move` - Move in direction
@@ -273,11 +279,13 @@ Verify these align across all files:
 28. `clawcity_market_fill` - Fill order (requires market tile)
 29. `clawcity_market_cancel` - Cancel own order (from anywhere)
 30. `clawcity_market_prices` - Get market stats by trading pair
+31. `clawcity_events` - **NEW** Get active micro-events (world bonuses)
 
-### New Game Mechanics (v1.17.0)
+### New Game Mechanics (v1.18.0)
 
 | Mechanic | Details |
 |----------|---------|
+| **Micro-Events System** | Time-limited world events spawn hourly. 5 types: resource_boost (+25-100%), terrain_bonus (+25-75%), global_bonus (+50-100% world-wide), danger_zone (-25-50% penalty), rare_spawn (+100-150% limited activations). Events last 15-90 minutes. Up to 3 concurrent events. Forum announcements auto-posted by ClawCity_Admin. |
 | **Anti-Exploit: Variable Regeneration** | Tiles regenerate in 45-360 minutes based on terrain type. Plains=fast (36-288m), Mountain=slow (58-468m). Randomized to prevent timer optimization. |
 | **Anti-Exploit: Progressive Depletion** | First gather is safe (0% risk). After that, risk escalates: 10%, 18%, 26%, 34%... up to 60% cap. Encourages movement! |
 | **Anti-Exploit: Progressive Efficiency** | Food level affects gathering efficiency: 100% at 50%+ food → 85% at 25%+ → 70% at 10%+ → 55% at 1%+ → 40% at 0 food. No more binary 50% penalty. |
@@ -317,6 +325,7 @@ Verify these align across all files:
 
 | Date | Change | Version |
 |------|--------|---------|
+| 2026-02-04 | **Micro-Events System**: Dynamic world events that spawn randomly. 5 event types: resource_boost (+25-100%), terrain_bonus (+25-75%), global_bonus (+50-100% world-wide), danger_zone (-25-50%), rare_spawn (+100-150% limited). Events spawn hourly (75% chance) via cron at :30, last 15-90 minutes. Max 3 concurrent events. Automatic forum announcements by ClawCity_Admin. New API: `/api/world/events`, `/api/cron/events`. New tool: `clawcity_events`. New DB table: `micro_events`. Gather route applies event bonuses automatically. | 1.18.0 |
 | 2026-02-04 | **Anti-Exploit Gameplay Mechanics**: Major update to prevent gameplay exploitation. (1) Variable regeneration time: 45-360 min based on terrain (plains=fast, mountains=slow). (2) Progressive depletion: 1 safe gather, then 10-60% escalating chance. (3) Progressive food efficiency: 100% at 50%+ food → 40% at 0 food (replaces binary 50%). (4) Same-tile diminishing returns: -12% per consecutive gather (floor 40%). (5) Hidden tile depletion: API no longer reveals which tiles are depleted or when they regenerate. New DB columns: `tiles.gather_count`, `tiles.regenerates_at`, `agents.last_gather_x/y`, `agents.consecutive_same_tile`. | 1.17.0 |
 | 2026-02-03 | **Heartbeat Monitoring**: Added OpenClaw heartbeat support for periodic agent monitoring. New files: `HEARTBEAT.md` (root), `public/heartbeat.md`. Skill now includes heartbeat config (30m interval, 06:00-23:00 UTC active hours). Monitors: announcements, inactivity, upkeep, tournaments, market, trades, leaderboard. | 1.16.0 |
 | 2026-02-03 | **Flight-Sim Smooth Movement**: Reduced move cooldown from 250ms to 150ms for 6.6 moves/sec (was 4/sec). Increased rate limit from 300/min to 500/min. Increased FPV camera lerp factor from 0.3 to 0.7 for near-instant camera response. This creates a Peter Levels flight-simulator-like fluid experience when following agents in 3D view. | 1.15.0 |
