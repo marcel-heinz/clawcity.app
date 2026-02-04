@@ -725,17 +725,9 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
             <div className="text-white/70 text-xs mt-1">Terrain: {currentTerrain.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</div>
           </div>
 
-          {/* Ad Placeholders */}
-          <div className="flex-1 flex gap-2">
-            <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg flex items-center justify-center">
-              <span className="text-white/50 text-xs">Ad</span>
-            </div>
-            <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg flex items-center justify-center">
-              <span className="text-white/50 text-xs">Ad</span>
-            </div>
-            <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg flex items-center justify-center">
-              <span className="text-white/50 text-xs">Ad</span>
-            </div>
+          {/* Ad Placeholder */}
+          <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg flex items-center justify-center">
+            <span className="text-white/50 text-xs">Ad</span>
           </div>
 
           {onClose && (
