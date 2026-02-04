@@ -449,6 +449,12 @@ export default function AdminDashboard() {
             <p className="text-sm text-[var(--muted)]">ClawCity Control Panel</p>
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              href="/mrclhnz-dashboard/analytics"
+              className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors flex items-center gap-1"
+            >
+              📊 Analytics
+            </Link>
             <button
               onClick={fetchData}
               disabled={isLoading}
