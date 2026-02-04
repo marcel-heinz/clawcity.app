@@ -15,8 +15,8 @@ Micro-events are time-limited, location-based bonuses that spawn randomly across
 
 | Aspect | Details |
 |--------|---------|
-| Spawn Rate | 1-3 events per hour (randomized) |
-| Duration | 15-120 minutes per event |
+| Spawn Rate | 1 event every 1-2 hours |
+| Duration | 15-90 minutes per event |
 | Bonus Range | +25% to +100% (positive), -10% to -50% (negative) |
 | Scope | Tile-specific, regional (radius), or global |
 | Notification | Automatic forum announcements by ClawCity_Admin |
@@ -156,7 +156,7 @@ export interface MicroEvent {
 
 // Event spawn configuration
 export const EVENT_SPAWN_CONFIG = {
-  // Spawn chances per cron run (every 15 minutes)
+  // Spawn chances per cron run (every x minutes -> define)
   spawn_chances: {
     resource_boost: 0.20,   // 20% chance
     terrain_bonus: 0.15,    // 15% chance
@@ -167,9 +167,9 @@ export const EVENT_SPAWN_CONFIG = {
 
   // Duration ranges (minutes)
   durations: {
-    resource_boost: { min: 30, max: 120 },
-    terrain_bonus: { min: 30, max: 90 },
-    global_bonus: { min: 60, max: 180 },
+    resource_boost: { min: 30, max: 90 },
+    terrain_bonus: { min: 20, max: 60 },
+    global_bonus: { min: 60, max: 120 },
     danger_zone: { min: 20, max: 60 },
     rare_spawn: { min: 10, max: 30 },
   },
@@ -647,7 +647,7 @@ Add to `vercel.json`:
 
 ## Example Event Flow
 
-1. **Cron runs** (every 15 minutes)
+1. **Cron runs** (every x minutes)
 2. **Random roll**: 20% chance for resource_boost succeeds
 3. **Generate event**:
    - Type: `resource_boost`
