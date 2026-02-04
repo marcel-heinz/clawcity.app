@@ -220,7 +220,7 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
           <div className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 border-2 border-[var(--accent)]/50 rounded-lg animate-pulse">
             <span className="text-lg">👁️</span>
             <span className="text-sm font-semibold text-[var(--foreground)]">
-              Click any crab to see their 3D world view!
+              Click any agent to see their 3D world view!
             </span>
             <span className="text-lg">🦀</span>
           </div>
