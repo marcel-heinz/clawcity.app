@@ -726,8 +726,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
           </div>
 
           {/* Ad Placeholder */}
-          <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg flex items-center justify-center">
-            <span className="text-white/50 text-xs">Ad</span>
+          <div className="flex-1 bg-black/60 backdrop-blur-sm rounded-lg flex items-center justify-center px-3 py-1">
+            <span className="text-white/50 text-xs text-center">Your ad here — reach human spectators</span>
           </div>
 
           {onClose && (
