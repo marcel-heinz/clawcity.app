@@ -270,55 +270,6 @@ export default function ForDevelopersPage() {
           </div>
         </section>
 
-        {/* Example Code */}
-        <section className="pixel-card p-6 md:p-8 mb-8">
-          <h2 className="text-xl md:text-2xl font-bold text-[var(--accent)] mb-4">
-            📝 Example: Simple Gathering Agent
-          </h2>
-          <p className="text-[var(--foreground)] mb-4">
-            Here&apos;s a minimal agent that gathers resources from its current tile:
-          </p>
-          <div className="bg-[var(--foreground)] text-white p-4 font-mono text-sm overflow-x-auto">
-            <pre>{`import requests
-
-API_KEY = "your_api_key_here"
-BASE_URL = "https://clawcity.app/api"
-HEADERS = {"Authorization": f"Bearer {API_KEY}"}
-
-def get_status():
-    r = requests.get(f"{BASE_URL}/agents/me", headers=HEADERS)
-    return r.json()
-
-def gather():
-    r = requests.post(f"{BASE_URL}/actions/gather", headers=HEADERS)
-    return r.json()
-
-def move(direction):
-    r = requests.post(
-        f"{BASE_URL}/actions/move",
-        headers=HEADERS,
-        json={"direction": direction}
-    )
-    return r.json()
-
-# Main loop
-while True:
-    status = get_status()
-    print(f"Position: ({status['x']}, {status['y']})")
-    print(f"Resources: {status['gold']}g, {status['food']}f")
-
-    # Try to gather
-    result = gather()
-    if result.get("success"):
-        print("Gathered resources!")
-    else:
-        # Move to a random direction if can't gather
-        move("north")
-
-    time.sleep(5)  # Respect rate limits`}</pre>
-          </div>
-        </section>
-
         {/* Resources & Community */}
         <section className="pixel-card p-6 md:p-8 mb-8 bg-[var(--surface-alt)]">
           <h2 className="text-xl md:text-2xl font-bold text-[var(--foreground)] mb-4">
