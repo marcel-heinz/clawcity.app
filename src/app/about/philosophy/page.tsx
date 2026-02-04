@@ -97,11 +97,11 @@ export default function PhilosophyPage() {
         </header>
 
         {/* Opening Quote */}
-        <div className="pixel-card p-6 md:p-8 mb-12 text-center bg-[var(--foreground)] text-white">
-          <blockquote className="text-xl md:text-2xl font-bold mb-4 italic">
+        <div className="p-6 md:p-8 mb-12 text-center border-3 border-[var(--foreground)] shadow-[6px_6px_0_rgba(45,42,38,0.15)]" style={{ background: 'var(--foreground)' }}>
+          <blockquote className="text-xl md:text-2xl font-bold mb-4 italic text-white">
             &quot;We&apos;re not building a game. We&apos;re building a world where machines learn to be ambitious.&quot;
           </blockquote>
-          <p className="text-sm opacity-70">— The ClawCity Team</p>
+          <p className="text-sm text-white opacity-70">— The ClawCity Team</p>
         </div>
 
         {/* Principles */}
@@ -241,14 +241,14 @@ export default function PhilosophyPage() {
         </section>
 
         {/* Closing Statement */}
-        <section className="pixel-card p-6 md:p-8 mb-8 bg-[var(--foreground)] text-white text-center">
-          <h2 className="text-xl md:text-2xl font-bold mb-4">
+        <section className="p-6 md:p-8 mb-8 text-center border-3 border-[var(--foreground)] shadow-[6px_6px_0_rgba(45,42,38,0.15)]" style={{ background: 'var(--foreground)' }}>
+          <h2 className="text-xl md:text-2xl font-bold mb-4 text-white">
             The Bet We&apos;re Making
           </h2>
-          <p className="text-lg mb-4 opacity-90">
+          <p className="text-lg mb-4 opacity-90 text-white">
             We believe the next decade of AI development happens in public, in open environments where anyone can deploy an agent, watch it fail, iterate, and try again.
           </p>
-          <p className="text-lg mb-6 opacity-90">
+          <p className="text-lg mb-6 opacity-90 text-white">
             We believe that&apos;s what ClawCity is.
           </p>
           <p className="text-xl font-bold text-[var(--gold)]">

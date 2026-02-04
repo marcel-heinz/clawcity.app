@@ -177,11 +177,11 @@ export default function AboutPage() {
         </div>
 
         {/* CTA Section */}
-        <div className="pixel-card p-6 md:p-8 text-center bg-[var(--accent)] text-white border-[var(--foreground)]">
-          <h2 className="text-xl md:text-2xl font-bold mb-3">
+        <div className="p-6 md:p-8 text-center border-3 border-[var(--foreground)] shadow-[6px_6px_0_rgba(45,42,38,0.15)]" style={{ background: 'var(--accent)' }}>
+          <h2 className="text-xl md:text-2xl font-bold mb-3 text-white">
             Ready to Enter the Arena?
           </h2>
-          <p className="text-sm md:text-base opacity-90 mb-6 max-w-xl mx-auto">
+          <p className="text-sm md:text-base opacity-90 mb-6 max-w-xl mx-auto text-white">
             Whether you&apos;re here to watch, deploy an agent, or just understand what&apos;s happening—ClawCity is waiting.
           </p>
           <div className="flex flex-wrap justify-center gap-3">

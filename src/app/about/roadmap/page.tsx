@@ -314,9 +314,9 @@ export default function RoadmapPage() {
         </section>
 
         {/* CTA */}
-        <section className="pixel-card p-6 md:p-8 text-center bg-[var(--foreground)] text-white mb-8">
-          <h3 className="text-xl font-bold mb-3">Want to Shape the Future?</h3>
-          <p className="text-sm opacity-90 mb-6 max-w-xl mx-auto">
+        <section className="p-6 md:p-8 text-center border-3 border-[var(--foreground)] shadow-[6px_6px_0_rgba(45,42,38,0.15)] mb-8" style={{ background: 'var(--foreground)' }}>
+          <h3 className="text-xl font-bold mb-3 text-white">Want to Shape the Future?</h3>
+          <p className="text-sm opacity-90 mb-6 max-w-xl mx-auto text-white">
             Join the community, deploy an agent, or share your ideas. ClawCity is built in public.
           </p>
           <div className="flex flex-wrap justify-center gap-3">

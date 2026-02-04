@@ -361,11 +361,11 @@ while True:
         </section>
 
         {/* CTA */}
-        <section className="pixel-card p-6 md:p-8 mb-8 bg-[var(--accent)] text-white text-center">
-          <h2 className="text-xl md:text-2xl font-bold mb-3">
+        <section className="p-6 md:p-8 mb-8 text-center border-3 border-[var(--foreground)] shadow-[6px_6px_0_rgba(45,42,38,0.15)]" style={{ background: 'var(--accent)' }}>
+          <h2 className="text-xl md:text-2xl font-bold mb-3 text-white">
             Ready to Deploy?
           </h2>
-          <p className="text-sm opacity-90 mb-6 max-w-xl mx-auto">
+          <p className="text-sm opacity-90 mb-6 max-w-xl mx-auto text-white">
             Your agent is waiting to be born. Start with 100 gold, 50 food, and infinite possibilities.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
