@@ -27,6 +27,10 @@ export interface Agent {
   food_depleted_at?: string | null;
   // Announcement tracking
   last_announcement_seen_at?: string | null;
+  // Same-tile gathering tracking (for diminishing returns)
+  last_gather_x?: number | null;
+  last_gather_y?: number | null;
+  consecutive_same_tile?: number;
 }
 
 export interface AgentPublic {
@@ -73,9 +77,12 @@ export interface Tile {
   owner_id?: string | null;
   owner_name?: string | null;
   claimed_at?: string | null;
-  // Resource depletion
+  // Resource depletion (legacy fields)
   depleted?: boolean;
   depleted_at?: string | null;
+  // New depletion system
+  gather_count?: number;        // Consecutive gathers since regeneration
+  regenerates_at?: string | null; // When tile will be available again
   // Territory upkeep (deprecated - now handled via scheduled cron)
   last_upkeep_paid?: string | null;
   // Territory upgrade level (1-3)
@@ -306,9 +313,88 @@ export const TERRAIN_SYMBOLS: Record<TerrainType, string> = {
   marsh: '※',          // Marshland/swamp
 };
 
-// Resource depletion constants
-export const DEPLETION_CHANCE = 0.20; // 20% chance per gather to deplete tile
-export const REGENERATION_MS = 60 * 60 * 1000; // 1 hour to regenerate
+// =============================================================================
+// ANTI-EXPLOIT MECHANICS (Variable Regeneration, Progressive Depletion, etc.)
+// =============================================================================
+
+// DEPRECATED: Fixed depletion constants (replaced by variable system)
+export const DEPLETION_CHANCE = 0.20; // DEPRECATED - Now uses getDepletionChance()
+export const REGENERATION_MS = 60 * 60 * 1000; // DEPRECATED - Now uses getTileRegenTime()
+
+// Variable Regeneration Time (45-360 minutes based on terrain)
+export const REGENERATION_BASE_MS = 45 * 60 * 1000; // 45 minutes minimum
+export const REGENERATION_VARIANCE_MS = 315 * 60 * 1000; // +0-315 min random (total max 360 min)
+
+// Terrain-specific regeneration multipliers
+// Lower = faster regen, Higher = slower regen
+export const TERRAIN_REGEN_MULTIPLIERS: Partial<Record<TerrainType, number>> = {
+  plains: 0.8,    // Faster (36-288 min)
+  forest: 1.0,    // Normal (45-360 min)
+  mountain: 1.3,  // Slower (58-468 min)
+  water: 0.6,     // Fast (27-216 min)
+  marsh: 1.1,     // Slightly slow (50-396 min)
+};
+
+// Calculate regeneration time for a tile based on terrain type
+export function getTileRegenTime(terrain: TerrainType): number {
+  const multiplier = TERRAIN_REGEN_MULTIPLIERS[terrain] || 1.0;
+  const base = REGENERATION_BASE_MS * multiplier;
+  const variance = Math.random() * REGENERATION_VARIANCE_MS * multiplier;
+  return Math.round(base + variance);
+}
+
+// Progressive Depletion System (1 safe gather, then escalating chance)
+export const SAFE_GATHER_COUNT = 1;           // First gather is always safe
+export const DEPLETION_BASE_CHANCE = 0.10;    // 10% starting chance at gather 2
+export const DEPLETION_ESCALATION = 0.08;     // +8% per gather after safe
+export const DEPLETION_MAX_CHANCE = 0.60;     // Cap at 60%
+
+// Calculate depletion chance based on gather count on this tile
+// Gather 1: 0% (safe), Gather 2: 10%, Gather 3: 18%, Gather 4: 26%, etc.
+export function getDepletionChance(gatherCount: number): number {
+  if (gatherCount <= SAFE_GATHER_COUNT) return 0;
+
+  const gathersAfterSafe = gatherCount - SAFE_GATHER_COUNT;
+  const chance = DEPLETION_BASE_CHANCE + (gathersAfterSafe - 1) * DEPLETION_ESCALATION;
+  return Math.min(chance, DEPLETION_MAX_CHANCE);
+}
+
+// Progressive Food Efficiency (gradual curve instead of binary 50%)
+export const EFFICIENCY_THRESHOLDS: Array<{ minFoodPercent: number; multiplier: number }> = [
+  { minFoodPercent: 50, multiplier: 1.00 },  // 100% at 50%+ food
+  { minFoodPercent: 25, multiplier: 0.85 },  // 85% at 25-50% food
+  { minFoodPercent: 10, multiplier: 0.70 },  // 70% at 10-25% food
+  { minFoodPercent: 1,  multiplier: 0.55 },  // 55% at 1-10% food
+  { minFoodPercent: 0,  multiplier: 0.40 },  // 40% at 0 food
+];
+
+// Calculate efficiency multiplier based on current food level
+export function getFoodEfficiencyMultiplier(food: number, maxFood: number = 100): number {
+  const foodPercent = (food / maxFood) * 100;
+  for (const threshold of EFFICIENCY_THRESHOLDS) {
+    if (foodPercent >= threshold.minFoodPercent) {
+      return threshold.multiplier;
+    }
+  }
+  return 0.40; // Fallback to minimum
+}
+
+// Same-Tile Diminishing Returns (encourages exploration)
+export const SAME_TILE_PENALTY = 0.12;        // 12% reduction per consecutive gather
+export const SAME_TILE_MIN_EFFICIENCY = 0.40; // Floor at 40%
+
+// Calculate same-tile penalty multiplier
+// Gather 1: 100%, Gather 2: 88%, Gather 3: 76%, etc.
+export function getSameTilePenalty(consecutiveGathers: number): number {
+  if (consecutiveGathers <= 1) return 1.0; // First gather = no penalty
+
+  const penalty = 1.0 - (SAME_TILE_PENALTY * (consecutiveGathers - 1));
+  return Math.max(penalty, SAME_TILE_MIN_EFFICIENCY);
+}
+
+// =============================================================================
+// DEPRECATED CONSTANTS
+// =============================================================================
 
 // DEPRECATED: Old gold-based upkeep (replaced by TERRITORY_UPKEEP_FOOD)
 // Keeping for backwards compatibility during migration
