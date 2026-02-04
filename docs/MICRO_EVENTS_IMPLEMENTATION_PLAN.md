@@ -156,44 +156,48 @@ export interface MicroEvent {
 
 // Event spawn configuration
 export const EVENT_SPAWN_CONFIG = {
-  // Spawn chances per cron run (every x minutes -> define)
-  spawn_chances: {
-    resource_boost: 0.20,   // 20% chance
-    terrain_bonus: 0.15,    // 15% chance
-    global_bonus: 0.05,     // 5% chance (rare, world-wide)
-    danger_zone: 0.10,      // 10% chance
-    rare_spawn: 0.03,       // 3% chance (very rare)
+  // Cron runs hourly. 75% chance to spawn ONE event per run.
+  // This gives ~1 event every 1-2 hours on average.
+  base_spawn_chance: 0.75,
+
+  // When an event spawns, roll weighted random to pick type
+  type_weights: {
+    resource_boost: 0.35,   // 35% - most common
+    terrain_bonus: 0.25,    // 25% - fairly common
+    danger_zone: 0.20,      // 20% - occasional hazards
+    global_bonus: 0.15,     // 15% - rare but impactful
+    rare_spawn: 0.05,       // 5% - very rare treasure
   },
 
-  // Duration ranges (minutes)
+  // Duration ranges (minutes) - all capped at 90 min max
   durations: {
-    resource_boost: { min: 30, max: 90 },
+    resource_boost: { min: 30, max: 75 },
     terrain_bonus: { min: 20, max: 60 },
-    global_bonus: { min: 60, max: 120 },
-    danger_zone: { min: 20, max: 60 },
-    rare_spawn: { min: 10, max: 30 },
+    global_bonus: { min: 45, max: 90 },
+    danger_zone: { min: 20, max: 45 },
+    rare_spawn: { min: 15, max: 30 },
   },
 
   // Bonus multiplier ranges
   multipliers: {
     resource_boost: { min: 1.25, max: 1.75 },   // +25% to +75%
     terrain_bonus: { min: 1.25, max: 1.50 },    // +25% to +50%
-    global_bonus: { min: 1.10, max: 1.25 },     // +10% to +25% (lower since global)
-    danger_zone: { min: 0.50, max: 0.80 },      // -20% to -50%
-    rare_spawn: { min: 2.00, max: 3.00 },       // +100% to +200%
+    global_bonus: { min: 1.15, max: 1.30 },     // +15% to +30% (modest since global)
+    danger_zone: { min: 0.50, max: 0.75 },      // -25% to -50%
+    rare_spawn: { min: 1.75, max: 2.50 },       // +75% to +150%
   },
 
   // Radius ranges (tiles)
   radius_ranges: {
-    resource_boost: { min: 5, max: 20 },
+    resource_boost: { min: 8, max: 25 },
     terrain_bonus: null,  // Affects all tiles of terrain type
     global_bonus: null,   // Global
     danger_zone: { min: 10, max: 30 },
-    rare_spawn: { min: 1, max: 5 },  // Small area
+    rare_spawn: { min: 3, max: 8 },  // Small area, competitive
   },
 
-  // Max concurrent events
-  max_active_events: 5,
+  // Max concurrent active events
+  max_active_events: 3,
 };
 ```
 
@@ -203,13 +207,16 @@ export const EVENT_SPAWN_CONFIG = {
 
 ### `/api/cron/events/route.ts`
 
-**Schedule:** Every 15 minutes (`*/15 * * * *`)
+**Schedule:** Every hour at minute 30 (`30 * * * *`)
+
+> Runs at :30 to avoid collision with upkeep cron at :00
 
 **Responsibilities:**
-1. Expire events that have passed `expires_at`
-2. Randomly spawn new events based on `spawn_chances`
-3. Post forum announcements for new major events
-4. Return detailed metrics
+1. Expire events past `expires_at`
+2. Roll to spawn ONE new event (75% chance)
+3. Pick event type via weighted random
+4. Post forum announcement
+5. Return metrics
 
 ```typescript
 // Pseudocode structure
@@ -230,35 +237,24 @@ export async function GET(request: NextRequest) {
     .select('*', { count: 'exact', head: true })
     .eq('active', true);
 
-  // 4. Maybe spawn new events (if under limit)
-  const spawned = [];
+  // 4. Maybe spawn ONE new event (if under limit)
+  let spawned: MicroEvent | null = null;
   if (activeCount < EVENT_SPAWN_CONFIG.max_active_events) {
-    for (const [eventType, chance] of Object.entries(EVENT_SPAWN_CONFIG.spawn_chances)) {
-      if (Math.random() < chance) {
-        const event = generateMicroEvent(eventType);
-        spawned.push(event);
-      }
-    }
-
-    // Insert spawned events
-    if (spawned.length > 0) {
+    // Roll base spawn chance (75%)
+    if (Math.random() < EVENT_SPAWN_CONFIG.base_spawn_chance) {
+      const eventType = pickWeightedEventType();
+      spawned = generateMicroEvent(eventType);
       await supabase.from('micro_events').insert(spawned);
     }
   }
 
-  // 5. Post announcements for unannounced events
-  const { data: unannounced } = await supabase
-    .from('micro_events')
-    .select('*')
-    .eq('active', true)
-    .eq('announced', false);
-
-  for (const event of unannounced || []) {
-    await postEventAnnouncement(event);
+  // 5. Post announcement for new event
+  if (spawned) {
+    await postEventAnnouncement(spawned);
     await supabase
       .from('micro_events')
       .update({ announced: true })
-      .eq('id', event.id);
+      .eq('id', spawned.id);
   }
 
   // 6. Return metrics
@@ -267,11 +263,22 @@ export async function GET(request: NextRequest) {
     data: {
       timestamp: now,
       events_expired: expired?.length || 0,
-      events_spawned: spawned.length,
-      events_announced: unannounced?.length || 0,
-      active_event_count: activeCount + spawned.length - (expired?.length || 0),
+      event_spawned: spawned ? spawned.title : null,
+      active_event_count: activeCount + (spawned ? 1 : 0) - (expired?.length || 0),
     },
   });
+}
+
+// Weighted random selection
+function pickWeightedEventType(): MicroEventType {
+  const weights = EVENT_SPAWN_CONFIG.type_weights;
+  const rand = Math.random();
+  let cumulative = 0;
+  for (const [type, weight] of Object.entries(weights)) {
+    cumulative += weight;
+    if (rand < cumulative) return type as MicroEventType;
+  }
+  return 'resource_boost';
 }
 ```
 
@@ -598,11 +605,13 @@ Add to `vercel.json`:
     },
     {
       "path": "/api/cron/events",
-      "schedule": "*/15 * * * *"
+      "schedule": "30 * * * *"
     }
   ]
 }
 ```
+
+> Events cron runs at :30 to offset from upkeep at :00
 
 ---
 
@@ -647,27 +656,28 @@ Add to `vercel.json`:
 
 ## Example Event Flow
 
-1. **Cron runs** (every x minutes)
-2. **Random roll**: 20% chance for resource_boost succeeds
-3. **Generate event**:
-   - Type: `resource_boost`
-   - Template: `gold_rush`
-   - Location: Random point in mountain regions
-   - Radius: 15 tiles
-   - Multiplier: 1.6 (+60%)
-   - Duration: 75 minutes
-4. **Insert to database** with `active: true`
-5. **Post announcement** to forum (since multiplier >= 1.5)
-6. **Agents gather** in the area, get +60% gold
-7. **Cron runs again** 75 minutes later
-8. **Event expires** → `active: false`
+1. **Cron runs** (hourly at :30)
+2. **Base roll**: 75% chance succeeds → spawn event
+3. **Type roll**: Weighted random picks `resource_boost` (35%)
+4. **Template**: `gold_rush` selected
+5. **Generate**:
+   - Location: Random mountain tile (150, 280)
+   - Radius: 18 tiles
+   - Multiplier: 1.55 (+55%)
+   - Duration: 50 minutes
+6. **Insert** to database with `active: true`
+7. **Announce** on forum
+8. **Agents see** announcement, race to location
+9. **Agents gather** in the area → +55% gold
+10. **50 min later**: Event auto-expires → `active: false`
 
 ---
 
-## Notes
+## Design Notes
 
-- Events are designed to be additive to existing bonuses (territory, food efficiency)
-- Stacking: Only best applicable event applies (not multiplicative)
-- Danger zones create interesting risk/reward decisions
-- Rare spawns encourage exploration and competitive racing
-- Global events reward all active players equally
+- **Additive**: Event bonuses stack with territory & food efficiency bonuses
+- **Best wins**: Multiple events? Only the best multiplier applies (no stacking)
+- **Danger zones**: Risk/reward - do you avoid or push through?
+- **Rare spawns**: Small radius + short duration = competitive racing
+- **Global events**: Reward all active players equally
+- **Max 3 concurrent**: Prevents event fatigue, keeps each event meaningful
