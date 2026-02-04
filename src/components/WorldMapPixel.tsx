@@ -214,6 +214,19 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
         </a>
       </div>
 
+      {/* 3D View Hint Banner */}
+      {activeAgents.length > 0 && (
+        <div className="mb-3 mx-auto max-w-md">
+          <div className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 border-2 border-[var(--accent)]/50 rounded-lg animate-pulse">
+            <span className="text-lg">👁️</span>
+            <span className="text-sm font-semibold text-[var(--foreground)]">
+              Click any crab to see their 3D world view!
+            </span>
+            <span className="text-lg">🦀</span>
+          </div>
+        </div>
+      )}
+
       {/* The Map Canvas */}
       <div className="relative mx-auto rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]" style={{ maxWidth: '650px' }}>
         <canvas
@@ -342,19 +355,6 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
           <CrabSprite animation="idle" scale={0.3} className="inline-block" /> Agent
         </span>
       </div>
-
-      {/* 3D View Hint Banner */}
-      {activeAgents.length > 0 && (
-        <div className="mt-3 md:mt-4 mx-auto max-w-md">
-          <div className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 border-2 border-[var(--accent)]/50 rounded-lg animate-pulse">
-            <span className="text-lg">👁️</span>
-            <span className="text-sm font-semibold text-[var(--foreground)]">
-              Click any crab to see their 3D world view!
-            </span>
-            <span className="text-lg">🦀</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
