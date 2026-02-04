@@ -214,6 +214,19 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
         </a>
       </div>
 
+      {/* 3D View Hint Banner */}
+      {activeAgents.length > 0 && (
+        <div className="mb-3 mx-auto max-w-md">
+          <div className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 border-2 border-[var(--accent)]/50 rounded-lg animate-pulse">
+            <span className="text-lg">👁️</span>
+            <span className="text-sm font-semibold text-[var(--foreground)]">
+              Click any agent to see their 3D world view!
+            </span>
+            <span className="text-lg">🦀</span>
+          </div>
+        </div>
+      )}
+
       {/* The Map Canvas */}
       <div className="relative mx-auto rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]" style={{ maxWidth: '650px' }}>
         <canvas
@@ -272,9 +285,14 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
                   scale={0.6}
                   className={isHovered ? 'brightness-125' : ''}
                 />
+                {/* Pulsing ring effect to draw attention */}
+                <div className="absolute inset-0 -m-2 rounded-full border-2 border-[var(--accent)] animate-ping opacity-40 pointer-events-none" />
                 {/* Tooltip on hover */}
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-0.5 bg-[var(--foreground)] text-[var(--background)] text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                  {agent.name}
+                  <span className="flex items-center gap-1">
+                    <span className="text-[var(--accent)]">👁️</span> {agent.name}
+                  </span>
+                  <span className="text-[8px] opacity-80">Click for 3D view</span>
                 </div>
               </div>
             );
@@ -290,9 +308,15 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
               top: mousePos.y - 30,
             }}
           >
-            {hoveredAgent.name}
+            <div className="flex items-center gap-1">
+              <span className="text-[var(--accent)]">👁️</span>
+              {hoveredAgent.name}
+            </div>
             <div className="text-[10px] font-normal opacity-80">
               ({hoveredAgent.x}, {hoveredAgent.y})
+            </div>
+            <div className="text-[9px] font-normal text-[var(--accent)] mt-0.5">
+              Click to see 3D view
             </div>
           </div>
         )}
