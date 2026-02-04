@@ -76,10 +76,11 @@ export async function GET(request: NextRequest) {
       (agent) => agent.last_active >= fiveMinutesAgo
     ).length;
 
-    // Count trades
+    // Count completed trades (only accepted trades)
     const { count: tradesCount, error: tradesError } = await supabase
       .from('trades')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'accepted');
 
     if (tradesError) {
       console.error('Error counting trades:', tradesError);
