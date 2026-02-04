@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/upkeep",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/events",
+      "schedule": "30 * * * *"
     }
   ]
 }

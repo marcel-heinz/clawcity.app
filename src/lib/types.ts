@@ -393,6 +393,200 @@ export function getSameTilePenalty(consecutiveGathers: number): number {
 }
 
 // =============================================================================
+// MICRO-EVENTS SYSTEM (Dynamic World Events)
+// =============================================================================
+
+// Micro-event types
+export type MicroEventType =
+  | 'resource_boost'   // +X% to specific resource(s)
+  | 'terrain_bonus'    // +X% to specific terrain type(s)
+  | 'global_bonus'     // World-wide effect
+  | 'danger_zone'      // Negative effect (storm, drought)
+  | 'rare_spawn';      // One-time high-value opportunity
+
+export type MicroEventBonusType = 'gather' | 'movement' | 'claim';
+
+export interface MicroEvent {
+  id: string;
+  type: MicroEventType;
+  title: string;
+  description: string;
+  // Location (NULL = global)
+  location_x: number | null;
+  location_y: number | null;
+  radius: number | null;
+  // Bonus
+  bonus_type: MicroEventBonusType;
+  bonus_multiplier: number;
+  affected_resources: ResourceType[] | null;
+  affected_terrains: TerrainType[] | null;
+  // Timing
+  active_from: string;
+  expires_at: string;
+  duration_minutes: number;
+  // Limits
+  max_activations: number | null;
+  activation_count: number;
+  // State
+  active: boolean;
+  announced: boolean;
+  created_at: string;
+}
+
+// Event spawn configuration
+export const EVENT_SPAWN_CONFIG = {
+  // Cron runs hourly. 75% chance to spawn ONE event per run.
+  // This gives ~1 event every 1-2 hours on average.
+  base_spawn_chance: 0.75,
+
+  // When an event spawns, roll weighted random to pick type
+  type_weights: {
+    resource_boost: 0.35,   // 35% - most common
+    terrain_bonus: 0.25,    // 25% - fairly common
+    danger_zone: 0.20,      // 20% - occasional hazards
+    global_bonus: 0.15,     // 15% - rare but impactful
+    rare_spawn: 0.05,       // 5% - very rare treasure
+  } as Record<MicroEventType, number>,
+
+  // Duration ranges (minutes) - all capped at 90 min max
+  durations: {
+    resource_boost: { min: 30, max: 75 },
+    terrain_bonus: { min: 20, max: 60 },
+    global_bonus: { min: 45, max: 90 },
+    danger_zone: { min: 20, max: 45 },
+    rare_spawn: { min: 15, max: 30 },
+  } as Record<MicroEventType, { min: number; max: number }>,
+
+  // Bonus multiplier ranges
+  multipliers: {
+    resource_boost: { min: 1.25, max: 1.75 },   // +25% to +75%
+    terrain_bonus: { min: 1.25, max: 1.50 },    // +25% to +50%
+    global_bonus: { min: 1.15, max: 1.30 },     // +15% to +30% (modest since global)
+    danger_zone: { min: 0.50, max: 0.75 },      // -25% to -50%
+    rare_spawn: { min: 1.75, max: 2.50 },       // +75% to +150%
+  } as Record<MicroEventType, { min: number; max: number }>,
+
+  // Radius ranges (tiles) - null means global/all-terrain
+  radius_ranges: {
+    resource_boost: { min: 8, max: 25 },
+    terrain_bonus: null,  // Affects all tiles of terrain type
+    global_bonus: null,   // Global
+    danger_zone: { min: 10, max: 30 },
+    rare_spawn: { min: 3, max: 8 },  // Small area, competitive
+  } as Record<MicroEventType, { min: number; max: number } | null>,
+
+  // Max concurrent active events
+  max_active_events: 3,
+};
+
+// Event templates for generation
+export const EVENT_TEMPLATES: Record<string, {
+  type: MicroEventType;
+  title: string;
+  description: string;
+  affected_terrains?: TerrainType[];
+  affected_resources?: ResourceType[];
+  multiplier_range?: { min: number; max: number };
+  max_activations?: number;
+}> = {
+  // Resource boosts
+  gold_rush: {
+    type: 'resource_boost',
+    title: 'Gold Rush!',
+    description: 'Rich gold veins discovered in the mountains!',
+    affected_terrains: ['mountain'],
+    affected_resources: ['gold'],
+    multiplier_range: { min: 1.5, max: 2.0 },
+  },
+  lumber_boom: {
+    type: 'resource_boost',
+    title: 'Lumber Boom',
+    description: 'Perfect conditions for logging in the forests.',
+    affected_terrains: ['forest'],
+    affected_resources: ['wood'],
+    multiplier_range: { min: 1.25, max: 1.75 },
+  },
+  bountiful_harvest: {
+    type: 'resource_boost',
+    title: 'Bountiful Harvest',
+    description: 'Fertile soil yields extra food across the plains.',
+    affected_terrains: ['plains'],
+    affected_resources: ['food'],
+    multiplier_range: { min: 1.25, max: 1.50 },
+  },
+  stone_quarry: {
+    type: 'resource_boost',
+    title: 'Stone Quarry Discovery',
+    description: 'New stone deposits found in the mountains!',
+    affected_terrains: ['mountain'],
+    affected_resources: ['stone'],
+    multiplier_range: { min: 1.3, max: 1.6 },
+  },
+  // Terrain bonuses
+  forest_blessing: {
+    type: 'terrain_bonus',
+    title: 'Forest Blessing',
+    description: 'All forest resources are more abundant today.',
+    affected_terrains: ['forest'],
+  },
+  mountain_riches: {
+    type: 'terrain_bonus',
+    title: 'Mountain Riches',
+    description: 'The mountains yield their treasures freely.',
+    affected_terrains: ['mountain'],
+  },
+  // Danger zones
+  storm_warning: {
+    type: 'danger_zone',
+    title: 'Storm Warning',
+    description: 'Severe weather reduces gathering efficiency in this area.',
+  },
+  drought: {
+    type: 'danger_zone',
+    title: 'Drought Conditions',
+    description: 'Dry weather reduces food availability.',
+    affected_resources: ['food'],
+  },
+  rockslide: {
+    type: 'danger_zone',
+    title: 'Rockslide Zone',
+    description: 'Dangerous conditions make mining difficult.',
+    affected_terrains: ['mountain'],
+    affected_resources: ['stone', 'gold'],
+  },
+  // Rare spawns
+  ancient_ruins: {
+    type: 'rare_spawn',
+    title: 'Ancient Ruins Discovered!',
+    description: 'Explorers report treasure at these coordinates!',
+    affected_resources: ['gold', 'stone'],
+    multiplier_range: { min: 2.0, max: 2.5 },
+    max_activations: 10,
+  },
+  hidden_grove: {
+    type: 'rare_spawn',
+    title: 'Hidden Grove Found!',
+    description: 'A secret grove with abundant resources!',
+    affected_resources: ['wood', 'food'],
+    multiplier_range: { min: 1.75, max: 2.25 },
+    max_activations: 8,
+  },
+  // Global events
+  prosperity_day: {
+    type: 'global_bonus',
+    title: 'Day of Prosperity',
+    description: 'The entire world enjoys bountiful resources!',
+  },
+  harvest_festival: {
+    type: 'global_bonus',
+    title: 'Harvest Festival',
+    description: 'A celebration of abundance across all lands!',
+    affected_resources: ['food'],
+    multiplier_range: { min: 1.2, max: 1.35 },
+  },
+};
+
+// =============================================================================
 // DEPRECATED CONSTANTS
 // =============================================================================
 
