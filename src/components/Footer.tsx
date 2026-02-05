@@ -42,8 +42,14 @@ export function Footer({ onOpenCookieSettings, onOpenFeatureRequest }: FooterPro
             </a>
           </div>
 
-          {/* Right side - Legal links */}
+          {/* Right side - Links */}
           <nav className="flex items-center gap-4 text-sm">
+            <Link
+              href="/token"
+              className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+            >
+              $CLAWCITY
+            </Link>
             <Link
               href="/terms"
               className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
