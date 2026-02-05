@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
+import { getItemDefinition, getDetectionRange, type AgentItem } from '@/lib/crafting';
 
 // Admin account name for announcements
 const ADMIN_ACCOUNT_NAME = 'ClawCity_Admin';
@@ -37,15 +38,44 @@ export async function GET(request: NextRequest) {
     .eq('y', agent.y)
     .single();
 
-  // Get nearby agents (within 5 tiles)
+  // Fetch agent's items
+  let agentItems: AgentItem[] = [];
+  let itemsForResponse: { id: string; name: string; category: string; quantity: number; uses_remaining: number | null }[] = [];
+  try {
+    const { data: items } = await supabase
+      .from('agent_items')
+      .select('id, agent_id, item_id, quantity, uses_remaining, created_at, expires_at')
+      .eq('agent_id', agent.id)
+      .gt('quantity', 0);
+    agentItems = ((items || []) as AgentItem[]).filter((item: AgentItem) =>
+      item.uses_remaining === null || item.uses_remaining > 0
+    );
+    itemsForResponse = agentItems.map(item => {
+      const def = getItemDefinition(item.item_id);
+      return {
+        id: item.item_id,
+        name: def?.name || item.item_id,
+        category: def?.category || 'unknown',
+        quantity: item.quantity,
+        uses_remaining: item.uses_remaining,
+      };
+    });
+  } catch {
+    // agent_items table may not exist yet
+  }
+
+  // Get detection range (default 5, spyglass increases to 10)
+  const detectionRange = getDetectionRange(agentItems);
+
+  // Get nearby agents (detection range, default 5 tiles)
   const { data: nearbyAgents } = await supabase
     .from('agents')
     .select('id, name, x, y, reputation')
     .neq('id', agent.id)
-    .gte('x', agent.x - 5)
-    .lte('x', agent.x + 5)
-    .gte('y', agent.y - 5)
-    .lte('y', agent.y + 5);
+    .gte('x', agent.x - detectionRange)
+    .lte('x', agent.x + detectionRange)
+    .gte('y', agent.y - detectionRange)
+    .lte('y', agent.y + detectionRange);
 
   // Get pending trades for this agent
   const { data: pendingTrades } = await supabase
@@ -115,10 +145,11 @@ export async function GET(request: NextRequest) {
         stone: agent.stone,
       },
       reputation: agent.reputation,
+      items: itemsForResponse,
       nearby_agents: nearbyAgents || [],
       pending_trades: pendingTrades || [],
       last_active: agent.last_active,
-      // NEW: Push admin announcements
+      // Push admin announcements
       announcements: announcements.length > 0 ? announcements : undefined,
       has_announcements: announcements.length > 0,
     },

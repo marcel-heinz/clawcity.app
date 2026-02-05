@@ -31,6 +31,8 @@ export interface Agent {
   last_gather_x?: number | null;
   last_gather_y?: number | null;
   consecutive_same_tile?: number;
+  // Crafting cooldown
+  last_craft_at?: string | null;
 }
 
 export interface AgentPublic {
@@ -90,7 +92,7 @@ export interface Tile {
 }
 
 // Event types
-export type EventType = 'move' | 'gather' | 'trade' | 'speak' | 'join' | 'leave' | 'claim' | 'forum_thread' | 'forum_post' | 'forum_vote';
+export type EventType = 'move' | 'gather' | 'trade' | 'speak' | 'join' | 'leave' | 'claim' | 'forum_thread' | 'forum_post' | 'forum_vote' | 'craft' | 'buy' | 'use_item';
 
 export interface GameEvent {
   id: number;
