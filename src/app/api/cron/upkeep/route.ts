@@ -13,6 +13,7 @@ import {
   BUILDING_DECAY_HOURS,
   type BuildingType,
 } from '@/lib/buildings';
+import { getUpkeepReduction, type AgentItem } from '@/lib/crafting';
 
 /**
  * GET /api/cron/upkeep
@@ -78,6 +79,23 @@ export async function GET(request: NextRequest) {
       territoryCountMap.set(tile.owner_id, count + 1);
     }
 
+    // Fetch all agent items for upkeep reduction (Reinforced Walls)
+    const agentItemsMap = new Map<string, AgentItem[]>();
+    try {
+      const { data: allItems } = await supabase
+        .from('agent_items')
+        .select('*');
+      for (const item of (allItems || []) as AgentItem[]) {
+        if (item.quantity > 0 && (item.uses_remaining === null || item.uses_remaining > 0)) {
+          const list = agentItemsMap.get(item.agent_id) || [];
+          list.push(item);
+          agentItemsMap.set(item.agent_id, list);
+        }
+      }
+    } catch {
+      // agent_items table may not exist yet
+    }
+
     let totalFoodDeducted = 0;
     let agentsProcessed = 0;
     let agentsDepleted = 0;
@@ -85,14 +103,14 @@ export async function GET(request: NextRequest) {
 
     for (const agent of allAgents || []) {
       const territoryCount = territoryCountMap.get(agent.id) || 0;
-      
+
       // Skip agents with no territories
       if (territoryCount === 0) {
         // Clear depleted state if they have no territories
         if (agent.food_depleted_at) {
           await supabase
             .from('agents')
-            .update({ 
+            .update({
               food_depleted_at: null,
               last_food_upkeep_at: now.toISOString()
             })
@@ -102,7 +120,11 @@ export async function GET(request: NextRequest) {
       }
 
       agentsProcessed++;
-      const upkeepCost = territoryCount * TERRITORY_UPKEEP_FOOD;
+      // Apply Reinforced Walls upkeep reduction
+      const items = agentItemsMap.get(agent.id) || [];
+      const upkeepReduction = getUpkeepReduction(items);
+      const baseUpkeepCost = territoryCount * TERRITORY_UPKEEP_FOOD;
+      const upkeepCost = Math.max(1, Math.floor(baseUpkeepCost * (1 - upkeepReduction / 100)));
 
       if (agent.food >= upkeepCost) {
         // Can afford upkeep - deduct food and clear depleted state
@@ -117,7 +139,22 @@ export async function GET(request: NextRequest) {
           .eq('id', agent.id);
         
         totalFoodDeducted += upkeepCost;
-        results.push(`${agent.name}: -${upkeepCost} food (${territoryCount} territories)`);
+
+        // Decrement Reinforced Walls uses if reduction was applied
+        if (upkeepReduction > 0) {
+          for (const item of items) {
+            if (item.item_id === 'reinforced_walls' && item.uses_remaining !== null && item.uses_remaining > 0) {
+              await supabase
+                .from('agent_items')
+                .update({ uses_remaining: item.uses_remaining - 1 })
+                .eq('agent_id', agent.id)
+                .eq('item_id', item.item_id);
+            }
+          }
+        }
+
+        const reductionNote = upkeepReduction > 0 ? ` [Reinforced Walls -${upkeepReduction}%]` : '';
+        results.push(`${agent.name}: -${upkeepCost} food (${territoryCount} territories)${reductionNote}`);
       } else {
         // Cannot afford full upkeep
         const foodDeducted = agent.food; // Deduct whatever they have
