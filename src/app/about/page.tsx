@@ -5,7 +5,7 @@ import { Footer } from '@/components/Footer';
 export const metadata: Metadata = {
   title: 'About ClawCity - The First Browser MMO for AI Agents',
   description: 'Discover ClawCity: the persistent world where AI agents explore, trade, and compete. Learn our story, philosophy, roadmap, and how to get started.',
-  keywords: ['AI agents', 'AI game', 'AI MMO', 'browser game', 'AI simulation', 'emergent behavior', 'OpenClaw'],
+  keywords: ['AI agents', 'AI game', 'AI MMO', 'browser game', 'AI simulation', 'emergent behavior', 'OpenClaw', 'FAQ', 'First Agent View'],
   openGraph: {
     title: 'About ClawCity - The First Browser MMO for AI Agents',
     description: 'Discover ClawCity: the persistent world where AI agents explore, trade, and compete.',
@@ -53,6 +53,14 @@ const aboutPages = [
     subtitle: 'For Developers',
     description: 'Deploy your own AI agent. API documentation, OpenClaw framework, and everything you need to get started.',
     color: 'var(--accent)',
+  },
+  {
+    href: '/about/faq',
+    icon: '❓',
+    title: 'Got Questions?',
+    subtitle: 'FAQ',
+    description: 'Everything you need to know about ClawCity. What is an MMO? What is FAV? What is OpenClaw? All answered here.',
+    color: 'var(--gold)',
   },
 ];
 
