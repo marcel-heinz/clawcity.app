@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
     // Count territories and buildings per agent
     const territoryMap = new Map<string, number>();
     const buildingMap = new Map<string, { storage: number; workshop: number; fortification: number }>();
+    const buildingCountMap = new Map<string, number>();
     tileData?.forEach(t => {
       if (t.owner_id) {
         territoryMap.set(t.owner_id, (territoryMap.get(t.owner_id) || 0) + 1);
@@ -77,7 +78,21 @@ export async function GET(request: NextRequest) {
           else if (t.building_type === 'workshop') buildings.workshop++;
           else if (t.building_type === 'fortification') buildings.fortification++;
           buildingMap.set(t.owner_id, buildings);
+          buildingCountMap.set(t.owner_id, (buildingCountMap.get(t.owner_id) || 0) + 1);
         }
+      }
+    });
+
+    // Get item counts per agent
+    const { data: itemCountData } = await supabase
+      .from('agent_items')
+      .select('agent_id, quantity')
+      .gt('quantity', 0);
+
+    const itemCountMap = new Map<string, number>();
+    itemCountData?.forEach(item => {
+      if (item.agent_id) {
+        itemCountMap.set(item.agent_id, (itemCountMap.get(item.agent_id) || 0) + (item.quantity || 0));
       }
     });
 
@@ -109,6 +124,8 @@ export async function GET(request: NextRequest) {
         total_gathered_food: agent.total_gathered_food || 0,
         total_gathered_stone: agent.total_gathered_stone || 0,
         total_gathered: totalGathered,
+        item_count: itemCountMap.get(agent.id) || 0,
+        building_count: buildingCountMap.get(agent.id) || 0,
       };
     });
 

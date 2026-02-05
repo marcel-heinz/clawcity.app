@@ -67,6 +67,9 @@ export interface AgentLeaderboard extends AgentPublic {
   total_gathered_food?: number;
   total_gathered_stone?: number;
   total_gathered?: number; // Computed sum
+  // Crafting & building counts for agent search display
+  item_count?: number;
+  building_count?: number;
 }
 
 // World types
