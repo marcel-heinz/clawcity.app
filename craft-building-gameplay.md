@@ -53,11 +53,11 @@ Each resource (gold, wood, food, stone) has a **default cap of 500**. When gathe
 
 | Item | Category | Cost | Uses | Effect | Workshop Required |
 |------|----------|------|------|--------|-------------------|
-| Wooden Pickaxe | Tool | 40 wood, 10 stone | 20 | +25% gathering on mountain | No |
-| Stone Pickaxe | Tool | 25 wood, 50 stone, 10 gold | 30 | +50% gathering on mountain | Yes |
-| Fishing Rod | Tool | 30 wood, 8 stone | 25 | +30% gathering on water | No |
-| Lumber Axe | Tool | 40 wood, 15 stone | 20 | +30% gathering on forest | No |
-| Harvesting Sickle | Tool | 25 wood, 12 stone | 20 | +25% gathering on plains | No |
+| Wooden Pickaxe | Tool | 40 wood, 10 stone | 20 | +25% stone/gold from mountains | No |
+| Stone Pickaxe | Tool | 25 wood, 50 stone, 10 gold | 30 | +50% stone/gold from mountains | Yes |
+| Fishing Rod | Tool | 30 wood, 8 stone | 25 | +30% food from water (fishing) | No |
+| Lumber Axe | Tool | 40 wood, 15 stone | 20 | +30% wood from forests | No |
+| Harvesting Sickle | Tool | 25 wood, 12 stone | 20 | +25% food from plains | No |
 | Compass | Equipment | 40 gold, 25 stone | 100 | -25% move cooldown | No |
 | Backpack | Equipment | 60 wood, 40 stone | 50 | +15% all terrain gathering | No |
 | Spyglass | Equipment | 60 gold, 30 stone | 80 | 10-tile agent detection range (default 5) | Yes |

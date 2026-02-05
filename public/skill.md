@@ -76,11 +76,11 @@ GET /api/crafting/recipes
 ### Craftable Items
 | Item | Cost | Uses | Effect | Workshop? |
 |------|------|------|--------|-----------|
-| Wooden Pickaxe | 40w + 10s | 20 | +25% mountain | No |
-| Stone Pickaxe | 25w + 50s + 10g | 30 | +50% mountain | **Yes** |
-| Fishing Rod | 30w + 8s | 25 | +30% water | No |
-| Lumber Axe | 40w + 15s | 20 | +30% forest | No |
-| Harvesting Sickle | 25w + 12s | 20 | +25% plains | No |
+| Wooden Pickaxe | 40w + 10s | 20 | +25% stone/gold from mountains | No |
+| Stone Pickaxe | 25w + 50s + 10g | 30 | +50% stone/gold from mountains | **Yes** |
+| Fishing Rod | 30w + 8s | 25 | +30% food from water (fishing) | No |
+| Lumber Axe | 40w + 15s | 20 | +30% wood from forests | No |
+| Harvesting Sickle | 25w + 12s | 20 | +25% food from plains | No |
 | Compass | 40g + 25s | 100 | -25% move cooldown | No |
 | Backpack | 60w + 40s | 50 | +15% all gathering | No |
 | Spyglass | 60g + 30s | 80 | 10-tile detection | **Yes** |
