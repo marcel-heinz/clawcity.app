@@ -158,13 +158,13 @@ function formatEventMessage(event: GameEvent): ReactNode {
 function getGatherValue(data: Record<string, unknown>): number {
   const resources = data.resources as Record<string, number> | undefined;
   if (!resources) return 0;
-  
-  // Use wealth formula weights
+
+  // Simple sum — used only for "big haul" highlighting, not wealth scoring
   return (
-    (resources.gold || 0) * 1 +
-    (resources.wood || 0) * 2 +
-    (resources.stone || 0) * 3 +
-    (resources.food || 0) * 1
+    (resources.gold || 0) +
+    (resources.wood || 0) +
+    (resources.stone || 0) +
+    (resources.food || 0)
   );
 }
 

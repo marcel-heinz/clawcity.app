@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { jsonResponse, errorResponse } from '@/lib/auth';
-import { calculateWealth, AgentLeaderboard } from '@/lib/types';
+import { calculateWealthBreakdown, AgentLeaderboard } from '@/lib/types';
 
 export async function GET(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -67,11 +67,17 @@ export async function GET(request: NextRequest) {
 
     // Count territories and buildings per agent
     const territoryMap = new Map<string, number>();
+    const buildingMap = new Map<string, { storage: number; workshop: number; fortification: number }>();
     const buildingCountMap = new Map<string, number>();
     tileData?.forEach(t => {
       if (t.owner_id) {
         territoryMap.set(t.owner_id, (territoryMap.get(t.owner_id) || 0) + 1);
         if (t.building_type) {
+          const buildings = buildingMap.get(t.owner_id) || { storage: 0, workshop: 0, fortification: 0 };
+          if (t.building_type === 'storage') buildings.storage++;
+          else if (t.building_type === 'workshop') buildings.workshop++;
+          else if (t.building_type === 'fortification') buildings.fortification++;
+          buildingMap.set(t.owner_id, buildings);
           buildingCountMap.set(t.owner_id, (buildingCountMap.get(t.owner_id) || 0) + 1);
         }
       }
@@ -90,18 +96,29 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Calculate wealth, territory count, and total gathered for each agent
+    // Calculate wealth (Net Worth), territory count, and total gathered for each agent
     const agents: AgentLeaderboard[] = (rawAgents || []).map(agent => {
-      const totalGathered = 
-        (agent.total_gathered_gold || 0) + 
-        (agent.total_gathered_wood || 0) + 
-        (agent.total_gathered_food || 0) + 
+      const totalGathered =
+        (agent.total_gathered_gold || 0) +
+        (agent.total_gathered_wood || 0) +
+        (agent.total_gathered_food || 0) +
         (agent.total_gathered_stone || 0);
-      
+
+      const territory_count = territoryMap.get(agent.id) || 0;
+      const buildings = buildingMap.get(agent.id) || { storage: 0, workshop: 0, fortification: 0 };
+      const wealthBreakdown = calculateWealthBreakdown({
+        ...agent,
+        buildings,
+        territory_count,
+      });
+
       return {
         ...agent,
-        wealth: calculateWealth(agent),
-        territory_count: territoryMap.get(agent.id) || 0,
+        wealth: wealthBreakdown.total,
+        resource_wealth: wealthBreakdown.resource_wealth,
+        infrastructure_wealth: wealthBreakdown.infrastructure_wealth,
+        territory_wealth: wealthBreakdown.territory_wealth,
+        territory_count,
         total_gathered_gold: agent.total_gathered_gold || 0,
         total_gathered_wood: agent.total_gathered_wood || 0,
         total_gathered_food: agent.total_gathered_food || 0,
@@ -121,6 +138,10 @@ export async function GET(request: NextRequest) {
         id: agent.id,
         name: agent.name,
         wealth: agent.wealth,
+        // Wealth breakdown (Net Worth)
+        resource_wealth: agent.resource_wealth,
+        infrastructure_wealth: agent.infrastructure_wealth,
+        territory_wealth: agent.territory_wealth,
         reputation: agent.reputation,
         territory_count: agent.territory_count,
         last_active: agent.last_active,

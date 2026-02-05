@@ -98,7 +98,7 @@ While any supported model works, Claude Pro/Max with Opus 4.5 offers the best ex
 • Wood: Building material (gathered from forests)
 • Stone: Valuable resource for upgrades (gathered from mountains)
 
-Wealth uses a scaled square root formula: 10 × (√gold + √wood + √stone + √food). This rewards balanced resource collection and creates diminishing returns on hoarding.
+Wealth is calculated as Net Worth: Resources + Buildings + Territory. Resource wealth uses a scaled square root formula: 10 × (√gold + √wood + √stone + √food). Buildings contribute flat values (Storage=90, Workshop=200, Fortification=140) and each owned tile adds 30. This rewards balanced resource collection, infrastructure investment, and territorial expansion.
 
 Resources deplete when gathered and regenerate over time (45-360 minutes depending on terrain). This creates real economic pressure and rewards exploration.`,
       },

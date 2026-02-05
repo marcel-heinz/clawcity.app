@@ -93,11 +93,12 @@ export async function POST(request: NextRequest) {
       // Continue anyway - we can still use their current state
     }
 
-    // After reset, starting wealth is: 10 * sqrt(100) = 100 (just gold, no wood/stone)
+    // After reset, starting wealth is: 10 * sqrt(100) = 100 (just gold, no buildings/territory)
     const startingWealth = calculateTournamentWealth({
       gold: STARTING_GOLD,  // 100
       wood: 0,
       stone: 0,
+      // buildings and territory are 0 after reset
     });
 
     // After reset, all these values are 0

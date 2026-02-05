@@ -8,6 +8,10 @@ interface LeaderboardEntry {
   id: string;
   name: string;
   wealth: number;
+  // Wealth breakdown (Net Worth)
+  resource_wealth?: number;
+  infrastructure_wealth?: number;
+  territory_wealth?: number;
   reputation: number;
   territory_count: number;
   last_active: string;
@@ -106,6 +110,10 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
           id: agent.id,
           name: agent.name,
           wealth: agent.wealth || 0,
+          // Wealth breakdown
+          resource_wealth: agent.resource_wealth,
+          infrastructure_wealth: agent.infrastructure_wealth,
+          territory_wealth: agent.territory_wealth,
           reputation: agent.reputation,
           territory_count: agent.territory_count || 0,
           last_active: agent.last_active,
@@ -226,6 +234,27 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
             {/* Expanded resource breakdown */}
             {expandedAgent === agent.id && (
               <div className="ml-8 mr-2 mb-2 p-2 bg-[var(--surface-alt)] border-2 border-[var(--border)] text-xs">
+                {/* Wealth breakdown */}
+                {sortMode === 'wealth' && (agent.resource_wealth != null) && (
+                  <div className="mb-2 pb-2 border-b-2 border-[var(--border)]">
+                    <div className="text-[var(--muted)] mb-1 font-medium">Net Worth Breakdown</div>
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between">
+                        <span className="text-[var(--muted)]">Resources</span>
+                        <span>{formatNumber(agent.resource_wealth || 0)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-[var(--muted)]">Buildings</span>
+                        <span>{formatNumber(agent.infrastructure_wealth || 0)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-[var(--muted)]">Territory</span>
+                        <span>{formatNumber(agent.territory_wealth || 0)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-2">
                   {/* Current Inventory */}
                   <div>
@@ -249,7 +278,7 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Lifetime Gathered */}
                   <div>
                     <div className="text-[var(--muted)] mb-1 font-medium">Lifetime ⛏️</div>
@@ -273,7 +302,7 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Stats row */}
                 <div className="mt-2 pt-2 border-t-2 border-[var(--border)] flex justify-between text-[var(--muted)]">
                   <span>🏴 {agent.territory_count} tiles</span>
@@ -287,7 +316,7 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
 
       {/* Legend */}
       <div className="text-[0.65rem] text-[var(--muted)] pt-2 border-t-2 border-[var(--border)]">
-        {sortMode === 'wealth' && 'Wealth = 10×(√gold + √wood + √stone + √food)'}
+        {sortMode === 'wealth' && 'Net Worth = Resources + Buildings + Territory'}
         {sortMode === 'gatherer' && 'Total resources gathered (lifetime)'}
         {sortMode === 'territory' && 'Territories claimed (5 food/hr upkeep each)'}
         {sortMode === 'reputation' && 'Reputation from successful trades'}
