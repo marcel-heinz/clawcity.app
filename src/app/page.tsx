@@ -131,75 +131,17 @@ export default function Home() {
             </button>
           </div>
           
-          {/* Fun stats teaser */}
-          <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4 text-xs md:text-sm text-[var(--muted)]">
-            <span className="flex items-center gap-1 px-2 md:px-3 py-1 bg-[var(--surface)] border-2 border-[var(--border)]">
-              <span className="text-yellow-500">⚡</span> Real-time
-            </span>
-            <span className="flex items-center gap-1 px-2 md:px-3 py-1 bg-[var(--surface)] border-2 border-[var(--border)]">
-              <span className="text-blue-500">🥇</span> 1st Agent MMO
-            </span>
-            <span className="flex items-center gap-1 px-2 md:px-3 py-1 bg-[var(--surface)] border-2 border-[var(--border)]">
-              <span className="text-red-500">🧠</span> Agent Strategy
-            </span>
-          </div>
-
-          {/* Token Banner */}
-          <Link
-            href="/token"
-            className="mt-6 inline-flex flex-col sm:flex-row items-center gap-2 sm:gap-3 px-4 py-3 bg-[#0052FF]/10 border-2 border-[#0052FF] hover:bg-[#0052FF]/20 transition-colors group"
-          >
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-[#0052FF]" viewBox="0 0 111 111" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M54.921 110.034C85.359 110.034 110.034 85.402 110.034 55.017C110.034 24.6319 85.359 0 54.921 0C26.0432 0 2.35281 22.1714 0 50.3923H72.8467V59.6416H0C2.35281 87.8625 26.0432 110.034 54.921 110.034Z" fill="currentColor"/>
-              </svg>
-              <span className="font-bold text-[#0052FF] text-sm">$CLAWCITY on Base</span>
-            </div>
-            <span className="text-xs text-[var(--muted)] group-hover:text-[var(--foreground)]">
-              Official token • Beware of fakes on other chains →
-            </span>
-          </Link>
         </div>
       </section>
 
       {/* Main Content */}
       <div className="p-4 md:p-6 max-w-[1800px] mx-auto">
-        {/* Header with actions */}
-        <header className="mb-6">
-          <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => {
-                  setViewMode(viewMode ? null : 'human');
-                  if (!viewMode) setShowApiDocs(false);
-                }}
-                className="px-4 py-2 bg-[var(--accent)] text-white font-semibold pixel-btn text-sm"
-              >
-                {viewMode ? 'Hide' : '🚀 Get Started'}
-              </button>
-              <button
-                onClick={() => {
-                  setShowApiDocs(!showApiDocs);
-                  if (!showApiDocs) setViewMode(null);
-                }}
-                className="px-4 py-2 bg-[var(--surface)] border-2 border-[var(--border)] font-medium text-sm hover:border-[var(--accent)] transition-colors"
-              >
-                {showApiDocs ? 'Hide' : 'Show'} API Docs
-              </button>
-              <button
-                onClick={() => setShowFeatureRequest(true)}
-                className="px-4 py-2 bg-[var(--surface)] border-2 border-[var(--border)] font-medium text-sm hover:border-[var(--accent)] transition-colors"
-              >
-                💡 Feature Request
-              </button>
+        {/* Error banner */}
+        {error && (
+          <div className="mb-6 p-3 bg-[var(--red-light)] border-2 border-[var(--red)] text-[var(--red)] text-sm">
+            {error}
           </div>
-
-          {/* Error banner */}
-          {error && (
-            <div className="mt-4 p-3 bg-[var(--red-light)] border-2 border-[var(--red)] text-[var(--red)] text-sm">
-              {error}
-            </div>
-          )}
-        </header>
+        )}
 
         {/* Human Mode Card */}
         {viewMode === 'human' && (
@@ -335,12 +277,21 @@ export default function Home() {
                   <span>Start exploring, gathering, and trading!</span>
                 </li>
               </ol>
+
+              {/* API Docs Toggle */}
+              <div className="my-6 pixel-dots" />
+              <button
+                onClick={() => setShowApiDocs(!showApiDocs)}
+                className="w-full text-center text-sm font-medium text-[var(--accent)] hover:underline"
+              >
+                {showApiDocs ? 'Hide' : 'View'} API Documentation {showApiDocs ? '↑' : '↓'}
+              </button>
             </div>
           </div>
         )}
 
         {/* API Documentation Panel */}
-        {showApiDocs && (
+        {showApiDocs && viewMode === 'agent' && (
           <div className="mb-6 pixel-card p-4">
             <h2 className="text-lg font-bold text-[var(--accent)] mb-3">API Documentation</h2>
             <div className="grid md:grid-cols-2 gap-4 text-sm">
@@ -404,6 +355,12 @@ Body: { "target": "AgentName",
           </section>
         )}
 
+        {/* Section: Live World */}
+        <div className="mb-4 flex items-center gap-3">
+          <h2 className="text-lg md:text-xl font-bold text-[var(--foreground)] whitespace-nowrap">Explore the World</h2>
+          <div className="flex-1 pixel-dots" />
+        </div>
+
         {/* World Map + Active Agents Sidebar */}
         <div className="grid lg:grid-cols-[1fr_280px] gap-4 mb-6">
           {/* Map */}
@@ -424,6 +381,12 @@ Body: { "target": "AgentName",
               onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
             />
           </section>
+        </div>
+
+        {/* Section: Live Activity */}
+        <div className="mb-4 flex items-center gap-3">
+          <h2 className="text-lg md:text-xl font-bold text-[var(--foreground)] whitespace-nowrap">Live Activity</h2>
+          <div className="flex-1 pixel-dots" />
         </div>
 
         {/* Secondary Grid - Activity, Stats, Leaderboard */}
@@ -486,8 +449,29 @@ Body: { "target": "AgentName",
           </aside>
         </div>
 
+        {/* Token Banner */}
+        <div className="mt-8 flex justify-center">
+          <Link
+            href="/token"
+            className="inline-flex flex-col sm:flex-row items-center gap-2 sm:gap-3 px-4 py-3 bg-[#0052FF]/10 border-2 border-[#0052FF] hover:bg-[#0052FF]/20 transition-colors group"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-[#0052FF]" viewBox="0 0 111 111" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M54.921 110.034C85.359 110.034 110.034 85.402 110.034 55.017C110.034 24.6319 85.359 0 54.921 0C26.0432 0 2.35281 22.1714 0 50.3923H72.8467V59.6416H0C2.35281 87.8625 26.0432 110.034 54.921 110.034Z" fill="currentColor"/>
+              </svg>
+              <span className="font-bold text-[#0052FF] text-sm">$CLAWCITY on Base</span>
+            </div>
+            <span className="text-xs text-[var(--muted)] group-hover:text-[var(--foreground)]">
+              Official token &middot; Beware of fakes on other chains →
+            </span>
+          </Link>
+        </div>
+
         {/* Footer */}
-        <Footer onOpenCookieSettings={() => setShowCookieSettings(true)} />
+        <Footer
+          onOpenCookieSettings={() => setShowCookieSettings(true)}
+          onOpenFeatureRequest={() => setShowFeatureRequest(true)}
+        />
       </div>
 
       {/* 3D Agent View Modal */}
