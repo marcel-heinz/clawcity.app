@@ -6,6 +6,7 @@ import { Direction } from '@/lib/types';
 import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
+import { getCooldownReduction, getDetectionRange, getItemDefinition, type AgentItem } from '@/lib/crafting';
 
 const VALID_DIRECTIONS: Direction[] = ['north', 'south', 'east', 'west'];
 
@@ -41,8 +42,24 @@ export async function POST(request: NextRequest) {
     const agent = auth.agent;
     const supabase = createServerClient();
 
-    // Get dynamic cooldown setting
-    const moveCooldownMs = await getCooldownMs('move');
+    // Fetch agent items for compass cooldown reduction and spyglass detection
+    let agentItems: AgentItem[] = [];
+    try {
+      const { data: items } = await supabase
+        .from('agent_items')
+        .select('*')
+        .eq('agent_id', agent.id);
+      agentItems = ((items || []) as AgentItem[]).filter((item: AgentItem) =>
+        item.quantity > 0 && (item.uses_remaining === null || item.uses_remaining > 0)
+      );
+    } catch {
+      // agent_items table may not exist yet
+    }
+
+    // Get dynamic cooldown setting, apply compass reduction
+    const baseCooldownMs = await getCooldownMs('move');
+    const cooldownReduction = getCooldownReduction(agentItems, 'move');
+    const moveCooldownMs = Math.floor(baseCooldownMs * (1 - cooldownReduction / 100));
 
     // Atomic cooldown check - prevents race conditions
     const cooldownResult = await atomicCooldownCheck(agent.id, 'move', moveCooldownMs);
@@ -145,18 +162,60 @@ export async function POST(request: NextRequest) {
       location: newPos,
     });
 
-    // Get nearby agents at new position
+    // Decrement compass uses (if compass provided cooldown reduction)
+    if (cooldownReduction > 0) {
+      for (const item of agentItems) {
+        const def = getItemDefinition(item.item_id);
+        if (!def) continue;
+        for (const effect of def.effects) {
+          if (effect.type === 'cooldown_reduction' && effect.action === 'move') {
+            if (item.uses_remaining !== null && item.uses_remaining > 0) {
+              await supabase
+                .from('agent_items')
+                .update({ uses_remaining: item.uses_remaining - 1 })
+                .eq('agent_id', agent.id)
+                .eq('item_id', item.item_id);
+            }
+          }
+        }
+      }
+    }
+
+    // Get nearby agents at new position (spyglass extends range)
+    const detectionRange = getDetectionRange(agentItems);
     const { data: nearbyAgents } = await supabase
       .from('agents')
       .select('id, name, x, y, reputation')
       .neq('id', agent.id)
-      .gte('x', newPos.x - 3)
-      .lte('x', newPos.x + 3)
-      .gte('y', newPos.y - 3)
-      .lte('y', newPos.y + 3);
+      .gte('x', newPos.x - detectionRange)
+      .lte('x', newPos.x + detectionRange)
+      .gte('y', newPos.y - detectionRange)
+      .lte('y', newPos.y + detectionRange);
+
+    // Decrement spyglass uses if it extended detection
+    if (detectionRange > 5) {
+      for (const item of agentItems) {
+        const def = getItemDefinition(item.item_id);
+        if (!def) continue;
+        for (const effect of def.effects) {
+          if (effect.type === 'detection_range') {
+            if (item.uses_remaining !== null && item.uses_remaining > 0) {
+              await supabase
+                .from('agent_items')
+                .update({ uses_remaining: item.uses_remaining - 1 })
+                .eq('agent_id', agent.id)
+                .eq('item_id', item.item_id);
+            }
+          }
+        }
+      }
+    }
 
     // Build response message
     let message = `Moved ${direction}`;
+    if (cooldownReduction > 0) {
+      message += ` (compass: -${cooldownReduction}% cooldown)`;
+    }
     if (deepWaterPenalty > 0) {
       message += ` (deep water: -${deepWaterPenalty} food stamina)${deepWaterWarning}`;
     }
