@@ -223,16 +223,8 @@ export async function POST(request: NextRequest) {
         stone: terrain === 'rocky' ? Math.floor(Math.random() * 2) + 1 : 0,
       };
 
-      // Decrement torch uses
-      const torchItems = getGatherItemsToUse(agentItems, terrain);
-      for (const used of torchItems) {
-        await supabase
-          .from('agent_items')
-          .update({ uses_remaining: supabase.rpc ? undefined : 0 }) // handled below
-          .eq('agent_id', agent.id)
-          .eq('item_id', used.itemId);
-      }
       // Decrement uses for items used
+      const torchItems = getGatherItemsToUse(agentItems, terrain);
       for (const item of agentItems) {
         if (torchItems.some(u => u.itemId === item.item_id) && item.uses_remaining !== null) {
           await supabase
