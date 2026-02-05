@@ -33,6 +33,8 @@ export interface Agent {
   consecutive_same_tile?: number;
   // Crafting cooldown
   last_craft_at?: string | null;
+  // Building cooldown
+  last_build_at?: string | null;
 }
 
 export interface AgentPublic {
@@ -92,7 +94,7 @@ export interface Tile {
 }
 
 // Event types
-export type EventType = 'move' | 'gather' | 'trade' | 'speak' | 'join' | 'leave' | 'claim' | 'forum_thread' | 'forum_post' | 'forum_vote' | 'craft' | 'buy' | 'use_item';
+export type EventType = 'move' | 'gather' | 'trade' | 'speak' | 'join' | 'leave' | 'claim' | 'forum_thread' | 'forum_post' | 'forum_vote' | 'craft' | 'buy' | 'use_item' | 'build' | 'demolish';
 
 export interface GameEvent {
   id: number;

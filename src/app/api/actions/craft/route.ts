@@ -14,6 +14,7 @@ import {
   type ValidItemId,
   type AgentItem,
 } from '@/lib/crafting';
+import { agentHasWorkshop } from '@/lib/buildings';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -64,6 +65,27 @@ export async function POST(request: NextRequest) {
     // Check recipe exists
     if (!itemDef.recipe) {
       return errorResponse('This item cannot be crafted. Try buying it from the shop.', 400);
+    }
+
+    // Check if item requires Workshop
+    if (itemDef.requires_workshop) {
+      let hasWorkshop = false;
+      try {
+        const { data: buildings } = await supabase
+          .from('tiles')
+          .select('building_type')
+          .eq('owner_id', agent.id)
+          .not('building_type', 'is', null);
+        hasWorkshop = agentHasWorkshop((buildings || []) as { building_type: string }[]);
+      } catch {
+        // building columns may not exist yet
+      }
+      if (!hasWorkshop) {
+        return errorResponse(
+          `${itemDef.name} requires a Workshop building. Build one on your territory first.`,
+          400
+        );
+      }
     }
 
     // Check resources
@@ -266,7 +288,7 @@ export async function POST(request: NextRequest) {
 
     const responseData = await withAnnouncements(agent, {
       message: `Crafted ${itemDef.name}! Cost: ${formatRecipeCost(itemDef.recipe)}.${instantMessage}` +
-        (itemDef.max_uses !== null ? ` (${itemDef.max_uses} uses)` : ' (permanent)'),
+        (itemDef.max_uses !== null ? ` (${itemDef.max_uses} uses)` : ''),
       item: {
         id: itemId,
         name: itemDef.name,

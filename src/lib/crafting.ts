@@ -77,6 +77,8 @@ export interface ItemDefinition {
   max_quantity: number;
   // Cooldown between crafting same item (ms)
   craft_cooldown_ms?: number;
+  // Requires a Workshop building to craft
+  requires_workshop?: boolean;
 }
 
 // Agent's inventory item (from database)
@@ -107,22 +109,23 @@ export const ITEM_DEFINITIONS = {
       terrains: ['mountain'] as TerrainType[],
       multiplier: 1.25,
     }],
-    recipe: { wood: 15, stone: 5 },
+    recipe: { wood: 40, stone: 10 },
     max_uses: 20,
     max_quantity: 1,
   },
   stone_pickaxe: {
     name: 'Stone Pickaxe',
-    description: 'A reinforced pickaxe. +50% stone and gold from mountains.',
+    description: 'A reinforced pickaxe. +50% stone and gold from mountains. Requires Workshop.',
     category: 'tool' as ItemCategory,
     effects: [{
       type: 'gather_bonus' as const,
       terrains: ['mountain'] as TerrainType[],
       multiplier: 1.50,
     }],
-    recipe: { wood: 10, stone: 25, gold: 5 },
+    recipe: { wood: 25, stone: 50, gold: 10 },
     max_uses: 30,
     max_quantity: 1,
+    requires_workshop: true,
   },
   fishing_rod: {
     name: 'Fishing Rod',
@@ -133,7 +136,7 @@ export const ITEM_DEFINITIONS = {
       terrains: ['water'] as TerrainType[],
       multiplier: 1.30,
     }],
-    recipe: { wood: 12, stone: 3 },
+    recipe: { wood: 30, stone: 8 },
     max_uses: 25,
     max_quantity: 1,
   },
@@ -146,7 +149,7 @@ export const ITEM_DEFINITIONS = {
       terrains: ['forest'] as TerrainType[],
       multiplier: 1.30,
     }],
-    recipe: { wood: 18, stone: 8 },
+    recipe: { wood: 40, stone: 15 },
     max_uses: 20,
     max_quantity: 1,
   },
@@ -159,63 +162,65 @@ export const ITEM_DEFINITIONS = {
       terrains: ['plains'] as TerrainType[],
       multiplier: 1.25,
     }],
-    recipe: { wood: 10, stone: 5 },
+    recipe: { wood: 25, stone: 12 },
     max_uses: 20,
     max_quantity: 1,
   },
 
   // =========================================================================
-  // EQUIPMENT - Permanent passive bonuses
+  // EQUIPMENT - Passive bonuses with durability (uses)
   // =========================================================================
   compass: {
     name: 'Compass',
-    description: 'Navigate faster. Move cooldown reduced by 25%.',
+    description: 'Navigate faster. Move cooldown reduced by 25%. (100 uses)',
     category: 'equipment' as ItemCategory,
     effects: [{
       type: 'cooldown_reduction' as const,
       action: 'move' as const,
       percent: 25,
     }],
-    recipe: { gold: 15, stone: 10 },
-    max_uses: null,
+    recipe: { gold: 40, stone: 25 },
+    max_uses: 100,
     max_quantity: 1,
   },
   backpack: {
     name: 'Backpack',
-    description: 'Carry more efficiently. +15% all resource gathering.',
+    description: 'Carry more efficiently. +15% all resource gathering. (50 uses)',
     category: 'equipment' as ItemCategory,
     effects: [{
       type: 'gather_bonus' as const,
       terrains: 'all' as const,
       multiplier: 1.15,
     }],
-    recipe: { wood: 25, stone: 20 },
-    max_uses: null,
+    recipe: { wood: 60, stone: 40 },
+    max_uses: 50,
     max_quantity: 1,
   },
   spyglass: {
     name: 'Spyglass',
-    description: 'See further. Nearby agent detection range doubled to 10 tiles.',
+    description: 'See further. Nearby agent detection range doubled to 10 tiles. (80 uses) Requires Workshop.',
     category: 'equipment' as ItemCategory,
     effects: [{
       type: 'detection_range' as const,
       range: 10,
     }],
-    recipe: { gold: 30, stone: 15 },
-    max_uses: null,
+    recipe: { gold: 60, stone: 30 },
+    max_uses: 80,
     max_quantity: 1,
+    requires_workshop: true,
   },
   reinforced_walls: {
     name: 'Reinforced Walls',
-    description: 'Stronger territories. Territory upkeep reduced by 40%.',
+    description: 'Stronger territories. Territory upkeep reduced by 40%. (80 uses) Requires Workshop.',
     category: 'equipment' as ItemCategory,
     effects: [{
       type: 'upkeep_reduction' as const,
       percent: 40,
     }],
-    recipe: { wood: 30, stone: 25, gold: 10 },
-    max_uses: null,
+    recipe: { wood: 75, stone: 60, gold: 25 },
+    max_uses: 80,
     max_quantity: 1,
+    requires_workshop: true,
   },
 
   // =========================================================================

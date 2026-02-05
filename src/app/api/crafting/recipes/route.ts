@@ -46,6 +46,7 @@ export async function GET(_request: NextRequest) {
       recipe: item.recipe,
       uses: item.max_uses,
       max_quantity: item.max_quantity,
+      requires_workshop: item.requires_workshop || false,
     };
   });
 

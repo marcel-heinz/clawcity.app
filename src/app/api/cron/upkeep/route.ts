@@ -1,13 +1,18 @@
 import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { jsonResponse, errorResponse } from '@/lib/auth';
-import { 
-  TERRITORY_UPKEEP_FOOD, 
-  INACTIVITY_THRESHOLD_HOURS, 
+import {
+  TERRITORY_UPKEEP_FOOD,
+  INACTIVITY_THRESHOLD_HOURS,
   INACTIVITY_DRAIN_PERCENT,
   STARTING_GOLD,
-  STARTING_FOOD 
+  STARTING_FOOD
 } from '@/lib/types';
+import {
+  BUILDING_DEFINITIONS,
+  BUILDING_DECAY_HOURS,
+  type BuildingType,
+} from '@/lib/buildings';
 
 /**
  * GET /api/cron/upkeep
@@ -191,6 +196,127 @@ export async function GET(request: NextRequest) {
     }
 
     // ============================================
+    // BUILDING UPKEEP - Deduct wood/stone/gold for buildings
+    // ============================================
+    const buildingResults: string[] = [];
+    let buildingsProcessed = 0;
+    let buildingsDestroyed = 0;
+    const buildingDecayThreshold = new Date(now.getTime() - BUILDING_DECAY_HOURS * 60 * 60 * 1000);
+
+    // Get all tiles with buildings
+    let buildingTiles: { x: number; y: number; owner_id: string; building_type: string; building_upkeep_paid_at: string | null }[] = [];
+    try {
+      const { data: bTiles } = await supabase
+        .from('tiles')
+        .select('x, y, owner_id, building_type, building_upkeep_paid_at')
+        .not('building_type', 'is', null);
+      buildingTiles = (bTiles || []) as typeof buildingTiles;
+    } catch {
+      // building columns may not exist yet
+    }
+
+    if (buildingTiles.length > 0) {
+      // Group buildings by owner
+      const ownerBuildings = new Map<string, typeof buildingTiles>();
+      for (const bt of buildingTiles) {
+        if (!bt.owner_id) continue;
+        const list = ownerBuildings.get(bt.owner_id) || [];
+        list.push(bt);
+        ownerBuildings.set(bt.owner_id, list);
+      }
+
+      for (const [ownerId, buildings] of ownerBuildings) {
+        // Calculate total upkeep for this owner
+        let totalGold = 0, totalWood = 0, totalStone = 0;
+        for (const b of buildings) {
+          const def = BUILDING_DEFINITIONS[b.building_type as BuildingType];
+          if (!def) continue;
+          totalGold += def.hourly_upkeep.gold || 0;
+          totalWood += def.hourly_upkeep.wood || 0;
+          totalStone += def.hourly_upkeep.stone || 0;
+        }
+
+        // Find the agent
+        const ownerAgent = (allAgents || []).find((a: { id: string; name: string; gold: number; wood: number; food: number; stone: number; food_depleted_at: string | null; last_active: string }) => a.id === ownerId);
+        if (!ownerAgent) continue;
+
+        buildingsProcessed += buildings.length;
+        const canAfford = ownerAgent.gold >= totalGold &&
+          ownerAgent.wood >= totalWood &&
+          ownerAgent.stone >= totalStone;
+
+        if (canAfford) {
+          // Deduct building upkeep
+          await supabase
+            .from('agents')
+            .update({
+              gold: ownerAgent.gold - totalGold,
+              wood: ownerAgent.wood - totalWood,
+              stone: ownerAgent.stone - totalStone,
+            })
+            .eq('id', ownerId);
+
+          // Update upkeep timestamps
+          for (const b of buildings) {
+            await supabase
+              .from('tiles')
+              .update({ building_upkeep_paid_at: now.toISOString() })
+              .eq('x', b.x)
+              .eq('y', b.y);
+          }
+
+          // Update local agent data for subsequent inactivity drain calculations
+          ownerAgent.gold -= totalGold;
+          ownerAgent.wood -= totalWood;
+          ownerAgent.stone -= totalStone;
+
+          buildingResults.push(
+            `${ownerAgent.name}: -${totalGold}g -${totalWood}w -${totalStone}s (${buildings.length} buildings)`
+          );
+        } else {
+          // Can't afford - check if any buildings should be destroyed
+          for (const b of buildings) {
+            const lastPaid = b.building_upkeep_paid_at ? new Date(b.building_upkeep_paid_at) : null;
+            const shouldDestroy = !lastPaid || lastPaid < buildingDecayThreshold;
+
+            if (shouldDestroy) {
+              // Destroy building
+              await supabase
+                .from('tiles')
+                .update({
+                  building_type: null,
+                  building_built_at: null,
+                  building_upkeep_paid_at: null,
+                })
+                .eq('x', b.x)
+                .eq('y', b.y);
+
+              buildingsDestroyed++;
+              buildingResults.push(
+                `${ownerAgent.name}: ${b.building_type} at (${b.x},${b.y}) DESTROYED (upkeep unpaid ${BUILDING_DECAY_HOURS}h)`
+              );
+
+              await supabase.from('events').insert({
+                agent_id: ownerId,
+                type: 'demolish',
+                data: {
+                  action: 'upkeep_decay',
+                  building_type: b.building_type,
+                  reason: 'upkeep_unpaid',
+                },
+                location: { x: b.x, y: b.y },
+              });
+            }
+          }
+
+          buildingResults.push(
+            `${ownerAgent.name}: CANNOT AFFORD building upkeep (need ${totalGold}g ${totalWood}w ${totalStone}s)`
+          );
+        }
+      }
+    }
+
+    // ============================================
     // INACTIVITY DRAIN - 10% per hour for ALL agents inactive 8+ hours
     // Floor at starting stats: 100 gold, 50 food, 0 wood, 0 stone
     // ============================================
@@ -252,6 +378,12 @@ export async function GET(request: NextRequest) {
           territories_released: territoriesReleased,
           upkeep_rate: `${TERRITORY_UPKEEP_FOOD} food/territory/hour`,
           details: results,
+        },
+        building_upkeep: {
+          buildings_processed: buildingsProcessed,
+          buildings_destroyed: buildingsDestroyed,
+          decay_hours: BUILDING_DECAY_HOURS,
+          details: buildingResults,
         },
         inactivity_drain: {
           agents_drained: agentsDrained,

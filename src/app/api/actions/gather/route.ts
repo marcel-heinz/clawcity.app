@@ -22,6 +22,7 @@ import {
   getGatherItemsToUse,
   type AgentItem,
 } from '@/lib/crafting';
+import { calculateResourceCap } from '@/lib/buildings';
 
 // Helper: Check if tile has regenerated (using new regenerates_at field)
 function hasTileRegenerated(regeneratesAt: string | null): boolean {
@@ -97,10 +98,10 @@ export async function POST(request: NextRequest) {
     const consecutiveGathers = isSameTile ? (agent.consecutive_same_tile || 0) + 1 : 1;
     const sameTileMultiplier = getSameTilePenalty(consecutiveGathers);
 
-    // Get current tile with ownership, depletion, and upgrade info
+    // Get current tile with ownership, depletion, upgrade, and building info
     const { data: tile } = await supabase
       .from('tiles')
-      .select('terrain, owner_id, depleted, depleted_at, regenerates_at, gather_count, upgrade_level')
+      .select('terrain, owner_id, depleted, depleted_at, regenerates_at, gather_count, upgrade_level, building_type')
       .eq('x', agent.x)
       .eq('y', agent.y)
       .single();
@@ -112,6 +113,20 @@ export async function POST(request: NextRequest) {
     const terrain = tile.terrain as TerrainType;
     const isOwnedByAgent = tile.owner_id === agent.id;
     const upgradeLevel = tile.upgrade_level || 1;
+
+    // Building exclusivity: other agents can't gather on tiles with buildings
+    if (tile.building_type && !isOwnedByAgent) {
+      return jsonResponse({
+        success: true,
+        data: {
+          message: `This tile has a ${tile.building_type} owned by another agent. You cannot gather here.`,
+          gathered: { gold: 0, wood: 0, food: 0, stone: 0 },
+          terrain,
+          tile_status: 'building_blocked',
+          stamina: { cost: 0, penalty_applied: false, food_remaining: agent.food },
+        },
+      });
+    }
 
     // Fetch agent's items for bonus calculations
     let agentItems: AgentItem[] = [];
@@ -437,6 +452,28 @@ export async function POST(request: NextRequest) {
         .eq('x', agent.x)
         .eq('y', agent.y);
     }
+
+    // Enforce resource cap
+    let storageCount = 0;
+    try {
+      const { data: storageTiles } = await supabase
+        .from('tiles')
+        .select('building_type')
+        .eq('owner_id', agent.id)
+        .eq('building_type', 'storage');
+      storageCount = storageTiles?.length || 0;
+    } catch {
+      // If building columns don't exist yet, continue without cap
+    }
+    const resourceCap = calculateResourceCap(storageCount);
+
+    // Apply resource cap: can't gather above cap (excess is lost)
+    gathered = {
+      gold: Math.max(0, Math.min(gathered.gold, resourceCap - agent.gold)),
+      wood: Math.max(0, Math.min(gathered.wood, resourceCap - agent.wood)),
+      food: Math.max(0, Math.min(gathered.food, resourceCap - agent.food)),
+      stone: Math.max(0, Math.min(gathered.stone, resourceCap - agent.stone)),
+    };
 
     // Calculate new inventory (food includes stamina cost deduction)
     const newGold = agent.gold + gathered.gold;

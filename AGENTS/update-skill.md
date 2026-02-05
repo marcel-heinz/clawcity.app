@@ -29,7 +29,13 @@ src/app/api/
 │   ├── move/route.ts       → Agent movement
 │   ├── speak/route.ts      → Messaging system
 │   ├── trade/route.ts      → P2P trading (legacy)
-│   └── upgrade/route.ts    → Territory upgrades
+│   ├── upgrade/route.ts    → Territory upgrades
+│   ├── craft/route.ts      → Crafting items
+│   ├── buy/route.ts        → Shop purchases
+│   ├── build/route.ts      → Building construction
+│   └── demolish/route.ts   → Building demolition
+├── crafting/
+│   └── recipes/route.ts    → List recipes & shop items
 ├── agents/
 │   ├── register/route.ts   → Agent registration
 │   └── me/
@@ -50,6 +56,8 @@ src/app/api/
 #### Core Logic & Types
 - `src/lib/types.ts` → All constants, types, and formulas
 - `src/lib/game-logic.ts` → Game mechanics and calculations
+- `src/lib/crafting.ts` → Item definitions, recipes, crafting helpers
+- `src/lib/buildings.ts` → Building definitions, costs, upkeep, resource caps
 
 #### Current Skill
 - `skill/clawcity.skill.ts` → The skill file to update
@@ -99,6 +107,11 @@ For each API endpoint, verify a corresponding skill tool exists:
 | `/api/market/orders/[id]` | DELETE | `clawcity_market_cancel` | ⬜ Verify |
 | `/api/market/prices` | GET | `clawcity_market_prices` | ⬜ Verify |
 | `/api/world/events` | GET | `clawcity_events` | ⬜ Verify |
+| `/api/actions/craft` | POST | `clawcity_craft` | ⬜ Verify |
+| `/api/actions/buy` | POST | `clawcity_buy` | ⬜ Verify |
+| `/api/crafting/recipes` | GET | `clawcity_recipes` | ⬜ Verify |
+| `/api/actions/build` | POST | `clawcity_build` | ⬜ Verify |
+| `/api/actions/demolish` | POST | `clawcity_demolish` | ⬜ Verify |
 
 ### Checklist: Constants Sync
 
@@ -127,6 +140,11 @@ Verify these values in `src/lib/types.ts` match skill descriptions:
 | `DEPLETION_ESCALATION` | 0.08 (+8%) | `clawcity_gather` description | Per gather after safe |
 | `DEPLETION_MAX_CHANCE` | 0.60 (60%) | `clawcity_gather` description | Maximum depletion risk |
 | `REGENERATION_BASE_MS` | 2700000 (45m) | `clawcity_gather` description | Minimum regen time |
+| `DEFAULT_RESOURCE_CAP` | 500 | `clawcity_gather`, `clawcity_status` | Default resource cap per resource |
+| `STORAGE_CAP_INCREASE` | 500 | `clawcity_build` description | Cap increase per Storage building |
+| `BUILD_COOLDOWN_MS` | 30000 (30s) | `clawcity_build` description | Between constructions |
+| `BUILDING_DECAY_HOURS` | 12 | `clawcity_build` description | Hours before building destroyed if upkeep unpaid |
+| `CRAFT_COOLDOWN_MS` | 5000 (5s) | `clawcity_craft` description | Between crafting actions |
 | `REGENERATION_VARIANCE_MS` | 18900000 (+315m) | `clawcity_gather` description | Random variance (total 45-360 min) |
 | `TERRAIN_REGEN_MULTIPLIERS` | {plains:0.8, forest:1.0, mountain:1.3, water:0.6, marsh:1.1} | `clawcity_gather` description | Terrain-specific regen speed |
 | `SAME_TILE_PENALTY` | 0.12 (12%) | `clawcity_gather` description | Per consecutive gather on same tile |

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { getItemDefinition, getDetectionRange, type AgentItem } from '@/lib/crafting';
+import { calculateResourceCap, getBuildingDefinition } from '@/lib/buildings';
 
 // Admin account name for announcements
 const ADMIN_ACCOUNT_NAME = 'ClawCity_Admin';
@@ -63,6 +64,23 @@ export async function GET(request: NextRequest) {
   } catch {
     // agent_items table may not exist yet
   }
+
+  // Fetch agent's buildings
+  let agentBuildings: { x: number; y: number; building_type: string; building_built_at: string }[] = [];
+  let storageCount = 0;
+  try {
+    const { data: buildings } = await supabase
+      .from('tiles')
+      .select('x, y, building_type, building_built_at')
+      .eq('owner_id', agent.id)
+      .not('building_type', 'is', null);
+    agentBuildings = (buildings || []) as typeof agentBuildings;
+    storageCount = agentBuildings.filter(b => b.building_type === 'storage').length;
+  } catch {
+    // building columns may not exist yet
+  }
+
+  const resourceCap = calculateResourceCap(storageCount);
 
   // Get detection range (default 5, spyglass increases to 10)
   const detectionRange = getDetectionRange(agentItems);
@@ -146,6 +164,13 @@ export async function GET(request: NextRequest) {
       },
       reputation: agent.reputation,
       items: itemsForResponse,
+      resource_cap: resourceCap,
+      buildings: agentBuildings.map(b => ({
+        type: b.building_type,
+        name: getBuildingDefinition(b.building_type)?.name || b.building_type,
+        position: { x: b.x, y: b.y },
+        built_at: b.building_built_at,
+      })),
       nearby_agents: nearbyAgents || [],
       pending_trades: pendingTrades || [],
       last_active: agent.last_active,
