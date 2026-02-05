@@ -88,7 +88,11 @@ Item bonuses stack **multiplicatively** with each other and with territory bonus
 
 ### Item Use Tracking
 
-- Each gather action consumes 1 use from applicable tools/equipment
+- **Tools/Backpack**: Each gather action consumes 1 use from applicable items
+- **Compass**: Each move action consumes 1 use (reduces move cooldown by 25%)
+- **Spyglass**: Each move action consumes 1 use (extends nearby agent detection to 10 tiles)
+- **Reinforced Walls**: Each hourly upkeep cycle consumes 1 use (reduces territory food upkeep by 40%)
+- **Territory Deed**: Consumed on next territory claim (reduces claim cost by 50%)
 - When `uses_remaining` reaches 0, the item is considered consumed
 - Consumed items don't count toward inventory limits
 - Re-crafting replaces the consumed item
