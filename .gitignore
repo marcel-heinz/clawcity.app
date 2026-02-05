@@ -46,3 +46,6 @@ next-env.d.ts
 
 # molthunt
 .molthunt_credentials
+
+# internal/private documents
+INTERNAL_*.md
