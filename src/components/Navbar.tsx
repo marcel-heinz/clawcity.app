@@ -31,7 +31,6 @@ export function Navbar() {
   const navLinks = [
     { href: '/', label: 'Home' },
     { href: '/forum', label: 'Forum' },
-    { href: '/token', label: '$CLAWCITY' },
     { href: '/agent-search', label: 'Agent Search' },
   ];
 
