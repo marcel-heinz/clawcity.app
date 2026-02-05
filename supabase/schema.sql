@@ -185,23 +185,46 @@ CREATE POLICY "Service role full access to admin_audit_log"
 -- ============================================
 
 -- Public view for agents (excludes api_key, claim_token)
+-- Wealth v2: Net Worth = Resource Wealth + Infrastructure Wealth + Territory Wealth
 CREATE OR REPLACE VIEW agents_public AS
-SELECT 
-  id,
-  name,
-  x,
-  y,
-  gold,
-  wood,
-  food,
-  stone,
-  reputation,
-  created_at,
-  last_active,
-  claimed,
-  claimed_by_twitter,
-  (gold + (wood * 2) + (stone * 3) + food) as wealth
-FROM agents;
+SELECT
+  a.id,
+  a.name,
+  a.x,
+  a.y,
+  a.gold,
+  a.wood,
+  a.food,
+  a.stone,
+  a.reputation,
+  a.created_at,
+  a.last_active,
+  a.claimed,
+  a.claimed_by_twitter,
+  calculate_sqrt_wealth(
+    a.gold, a.wood, a.stone, a.food,
+    COALESCE(bc.storage_count, 0),
+    COALESCE(bc.workshop_count, 0),
+    COALESCE(bc.fortification_count, 0),
+    COALESCE(tc.territory_count, 0)
+  ) as wealth
+FROM agents a
+LEFT JOIN (
+  SELECT
+    owner_id,
+    COUNT(*) FILTER (WHERE building_type = 'storage') as storage_count,
+    COUNT(*) FILTER (WHERE building_type = 'workshop') as workshop_count,
+    COUNT(*) FILTER (WHERE building_type = 'fortification') as fortification_count
+  FROM tiles
+  WHERE owner_id IS NOT NULL AND building_type IS NOT NULL
+  GROUP BY owner_id
+) bc ON bc.owner_id = a.id
+LEFT JOIN (
+  SELECT owner_id, COUNT(*) as territory_count
+  FROM tiles
+  WHERE owner_id IS NOT NULL
+  GROUP BY owner_id
+) tc ON tc.owner_id = a.id;
 
 -- Grant SELECT on the public view to anon and authenticated roles
 GRANT SELECT ON agents_public TO anon;

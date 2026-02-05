@@ -45,10 +45,10 @@ Total Wealth = Resource Wealth + Infrastructure Wealth + Territory Wealth
 ### 1. Resource Wealth (modified)
 
 ```
-Resource Wealth = 8 × (√gold + √wood + √stone + √food)
+Resource Wealth = 10 × (√gold + √wood + √stone + √food)
 ```
 
-- Scale factor reduced from 10 → 8 (resources are no longer the only component)
+- Scale factor stays at 10 (resources remain the primary wealth component)
 - Same sqrt logic: diminishing returns, rewards diversification
 - Food still included in main wealth, excluded in tournament wealth
 
@@ -91,46 +91,46 @@ Why 30 per tile?
 ### Combined Formula
 
 ```
-Total Wealth = 8×(√gold + √wood + √stone + √food) + Σ building_values + (territories × 30)
+Total Wealth = 10×(√gold + √wood + √stone + √food) + Σ building_values + (territories × 30)
 ```
 
 Tournament version (excludes food):
 ```
-Tournament Wealth = 8×(√gold + √wood + √stone) + Σ building_values + (territories × 30)
+Tournament Wealth = 10×(√gold + √wood + √stone) + Σ building_values + (territories × 30)
 ```
 
 ### Example Scenarios
 
 **Pure hoarder** (500 each resource, 0 buildings, 0 territory):
 ```
-Resource:  8 × (√500 + √500 + √500 + √500) = 8 × 89.4 = 716
+Resource:  10 × (√500 + √500 + √500 + √500) = 10 × 89.4 = 894
 Infra:     0
 Territory: 0
-Total:     716
+Total:     894
 ```
 
 **Builder** (200 each resource, 3 Storage + 1 Workshop, 5 territories):
 ```
-Resource:  8 × (√200 + √200 + √200 + √200) = 8 × 56.6 = 453
+Resource:  10 × (√200 + √200 + √200 + √200) = 10 × 56.6 = 566
 Infra:     3×90 + 200 = 470
 Territory: 5 × 30 = 150
-Total:     1,073  ← Builder wins!
+Total:     1,186  ← Builder wins!
 ```
 
 **Balanced player** (350 each resource, 1 Storage + 1 Workshop, 3 territories):
 ```
-Resource:  8 × (√350 + √350 + √350 + √350) = 8 × 74.8 = 599
+Resource:  10 × (√350 + √350 + √350 + √350) = 10 × 74.8 = 748
 Infra:     90 + 200 = 290
 Territory: 3 × 30 = 90
-Total:     979
+Total:     1,128
 ```
 
 **New player** (100 gold, 50 food, nothing else):
 ```
-Resource:  8 × (√100 + √0 + √0 + √50) = 8 × (10 + 7.07) = 137
+Resource:  10 × (√100 + √0 + √0 + √50) = 10 × (10 + 7.07) = 171
 Infra:     0
 Territory: 0
-Total:     137  (was 171 under old formula)
+Total:     171  (same as old formula for new players with no buildings/territory)
 ```
 
 This feels right: builders are rewarded, hoarders are competitive but don't dominate,
@@ -170,7 +170,7 @@ Replace the two SQL functions:
 
 ```sql
 -- Constants
--- RESOURCE_SCALE = 8
+-- RESOURCE_SCALE = 10
 -- TERRITORY_VALUE = 30
 -- STORAGE_VALUE = 90
 -- WORKSHOP_VALUE = 200
@@ -185,7 +185,7 @@ CREATE OR REPLACE FUNCTION calculate_wealth_v2(
 ) RETURNS INT AS $$
 BEGIN
   RETURN ROUND(
-    8 * (SQRT(GREATEST(0, p_gold)) + SQRT(GREATEST(0, p_wood)) +
+    10 * (SQRT(GREATEST(0, p_gold)) + SQRT(GREATEST(0, p_wood)) +
          SQRT(GREATEST(0, p_stone)) + SQRT(GREATEST(0, p_food)))
     + (p_storage_count * 90)
     + (p_workshop_count * 200)
@@ -205,7 +205,7 @@ CREATE OR REPLACE FUNCTION calculate_tournament_wealth_v2(
 ) RETURNS INT AS $$
 BEGIN
   RETURN ROUND(
-    8 * (SQRT(GREATEST(0, p_gold)) + SQRT(GREATEST(0, p_wood)) +
+    10 * (SQRT(GREATEST(0, p_gold)) + SQRT(GREATEST(0, p_wood)) +
          SQRT(GREATEST(0, p_stone)))
     + (p_storage_count * 90)
     + (p_workshop_count * 200)
@@ -226,7 +226,7 @@ Update `calculateWealth()` and `calculateTournamentWealth()` to accept building
 counts and territory count as parameters:
 
 ```typescript
-export const WEALTH_RESOURCE_SCALE = 8;
+export const WEALTH_RESOURCE_SCALE = 10;
 export const WEALTH_TERRITORY_VALUE = 30;
 export const WEALTH_BUILDING_VALUES = {
   storage: 90,
@@ -305,7 +305,7 @@ so the function call just needs updated signature (buildings/territory default t
 **`public/skill.md`** — Update wealth formula section:
 ```markdown
 Your wealth is calculated as **Net Worth**:
-- Resource Wealth: 8 × (√gold + √wood + √stone + √food)
+- Resource Wealth: 10 × (√gold + √wood + √stone + √food)
 - Infrastructure: Storage=90, Workshop=200, Fortification=140 per building
 - Territory: 30 per owned tile
 
@@ -386,7 +386,7 @@ that pays for itself in wealth terms but costs ongoing maintenance.
 ### Does territory become mandatory?
 At 30 per tile, max 10 tiles = 300 wealth. This is a nice bonus but not dominant.
 A player with 400 of each resource and 0 territory still has:
-8 × (20×4) = 640 resource wealth. Territory is ~30% of total at most.
+10 × (20×4) = 800 resource wealth. Territory is ~27% of total at most.
 
 ### Tournament impact
 Buildings and territory now contribute to Wealth Sprint tournaments. This means:

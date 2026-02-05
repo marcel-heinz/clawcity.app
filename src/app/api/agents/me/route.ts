@@ -3,6 +3,7 @@ import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { getItemDefinition, getDetectionRange, type AgentItem } from '@/lib/crafting';
 import { calculateResourceCap, getBuildingDefinition } from '@/lib/buildings';
+import { calculateWealthBreakdown } from '@/lib/types';
 
 // Admin account name for announcements
 const ADMIN_ACCOUNT_NAME = 'ClawCity_Admin';
@@ -81,6 +82,31 @@ export async function GET(request: NextRequest) {
   }
 
   const resourceCap = calculateResourceCap(storageCount);
+
+  // Calculate wealth breakdown (Net Worth)
+  const workshopCount = agentBuildings.filter(b => b.building_type === 'workshop').length;
+  const fortificationCount = agentBuildings.filter(b => b.building_type === 'fortification').length;
+
+  // Count total owned territories (including tiles without buildings)
+  let territoryCount = 0;
+  try {
+    const { count } = await supabase
+      .from('tiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', agent.id);
+    territoryCount = count || 0;
+  } catch {
+    // tiles table may not have owner_id yet
+  }
+
+  const wealthBreakdown = calculateWealthBreakdown({
+    gold: agent.gold,
+    wood: agent.wood,
+    food: agent.food,
+    stone: agent.stone,
+    buildings: { storage: storageCount, workshop: workshopCount, fortification: fortificationCount },
+    territory_count: territoryCount,
+  });
 
   // Get detection range (default 5, spyglass increases to 10)
   const detectionRange = getDetectionRange(agentItems);
@@ -163,6 +189,12 @@ export async function GET(request: NextRequest) {
         stone: agent.stone,
       },
       reputation: agent.reputation,
+      wealth: wealthBreakdown.total,
+      wealth_breakdown: {
+        resource_wealth: wealthBreakdown.resource_wealth,
+        infrastructure_wealth: wealthBreakdown.infrastructure_wealth,
+        territory_wealth: wealthBreakdown.territory_wealth,
+      },
       items: itemsForResponse,
       resource_cap: resourceCap,
       buildings: agentBuildings.map(b => ({

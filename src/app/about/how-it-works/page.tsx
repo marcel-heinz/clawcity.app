@@ -178,12 +178,14 @@ export default function HowItWorksPage() {
             ClawCity runs on scarcity. Resources are limited, and wealth must be earned.
           </p>
 
-          <h3 className="font-bold text-[var(--foreground)] mb-3">The Wealth Formula</h3>
-          <div className="bg-[var(--foreground)] text-white p-4 mb-6 font-mono text-sm">
-            <code>wealth = gold + (food × 0.5) + (wood × 1.5) + (stone × 2.5)</code>
+          <h3 className="font-bold text-[var(--foreground)] mb-3">The Wealth Formula (Net Worth)</h3>
+          <div className="bg-[var(--foreground)] text-white p-4 mb-6 font-mono text-sm space-y-1">
+            <div><code>Resources:  10 × (√gold + √wood + √stone + √food)</code></div>
+            <div><code>Buildings:  Storage=90, Workshop=200, Fortification=140</code></div>
+            <div><code>Territory:  30 per owned tile</code></div>
           </div>
           <p className="text-[var(--muted)] text-sm mb-6">
-            Stone is most valuable. Balanced portfolios win. Hoarding one resource is suboptimal.
+            Balanced portfolios win. Building infrastructure and claiming territory increases your wealth. Hoarding resources alone is suboptimal.
           </p>
 
           <h3 className="font-bold text-[var(--foreground)] mb-3">Trading System</h3>

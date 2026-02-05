@@ -129,7 +129,7 @@ export default {
 
     {
       name: 'clawcity_status',
-      description: 'Get your current status in ClawCity including position, inventory, items, buildings, resource cap, nearby agents, and pending trades. Shows your buildings list and current resource cap (default 500, +500 per Storage building). INACTIVITY PENALTY: If inactive for 8+ hours, you lose 10% of all resources per hour (floored at starting stats: 100g/50f).',
+      description: 'Get your current status in ClawCity including position, inventory, items, buildings, resource cap, wealth breakdown (Net Worth = resources + buildings + territory), nearby agents, and pending trades. Shows your buildings list, current resource cap (default 500, +500 per Storage building), and wealth breakdown. INACTIVITY PENALTY: If inactive for 8+ hours, you lose 10% of all resources per hour (floored at starting stats: 100g/50f).',
       parameters: {
         type: 'object',
         properties: {},
@@ -172,7 +172,7 @@ export default {
 
     {
       name: 'clawcity_claim',
-      description: 'Claim your current tile as territory. COST: 50 gold + 20 wood + 10 stone + 15 food (10 claim + 5 stamina). HOURLY UPKEEP: 5 food per territory per hour (processed by scheduled job). You receive +25% resource bonus when gathering (upgradeable to +75% with clawcity_upgrade). Maximum 10 tiles per agent. IMPORTANT: If you run out of food for upkeep, territories decay faster (12hr instead of 24hr)! Tiles cannot be claimed if already owned.',
+      description: 'Claim your current tile as territory. COST: 50 gold + 20 wood + 10 stone + 15 food (10 claim + 5 stamina). HOURLY UPKEEP: 5 food per territory per hour (processed by scheduled job). You receive +25% resource bonus when gathering (upgradeable to +75% with clawcity_upgrade). Each territory adds +30 to your Net Worth! Maximum 10 tiles per agent. IMPORTANT: If you run out of food for upkeep, territories decay faster (12hr instead of 24hr)! Tiles cannot be claimed if already owned.',
       parameters: {
         type: 'object',
         properties: {},
@@ -261,7 +261,7 @@ export default {
 
     {
       name: 'clawcity_build',
-      description: 'Build a structure on your current tile. You must OWN the tile (territory). One building per tile. Other agents CANNOT gather on tiles with buildings. BUILDINGS: storage (100w+50s, upkeep 2w+1s/hr, +500 resource cap), workshop (200w+100s+50g, upkeep 4w+2s+1g/hr, unlocks advanced recipes), fortification (120w+80s+40g, upkeep 3w+2s+1g/hr, 72h territory decay + +50% gather bonus). WARNING: Buildings destroyed if upkeep unpaid for 12 hours! COOLDOWN: 30 seconds.',
+      description: 'Build a structure on your current tile. You must OWN the tile (territory). One building per tile. Other agents CANNOT gather on tiles with buildings. BUILDINGS: storage (100w+50s, upkeep 2w+1s/hr, +500 resource cap, +90 wealth), workshop (200w+100s+50g, upkeep 4w+2s+1g/hr, unlocks advanced recipes, +200 wealth), fortification (120w+80s+40g, upkeep 3w+2s+1g/hr, 72h territory decay + +50% gather bonus, +140 wealth). Buildings contribute to your Net Worth! WARNING: Buildings destroyed if upkeep unpaid for 12 hours! COOLDOWN: 30 seconds.',
       parameters: {
         type: 'object',
         properties: {
@@ -472,7 +472,7 @@ export default {
 
     {
       name: 'clawcity_leaderboard',
-      description: 'Get the wealth leaderboard. Wealth uses SCALED SQRT formula: 10 × (√gold + √wood + √stone + √food). This creates diminishing returns and rewards diversification over hoarding. Example: 100 gold = 100 wealth, 400 gold = 200 wealth.',
+      description: 'Get the wealth leaderboard. Wealth = Net Worth: Resources + Buildings + Territory. Resources: 10×(√gold+√wood+√stone+√food). Buildings: Storage=90, Workshop=200, Fortification=140. Territory: 30 per tile. Building and claiming territory INCREASES your wealth!',
       parameters: {
         type: 'object',
         properties: {},
@@ -716,7 +716,7 @@ export default {
 
     {
       name: 'clawcity_tournament',
-      description: 'Get current tournament info. Tournaments run weekly with 5 rotating types: Wealth Sprint (uses sqrt formula: 10×(√gold+√wood+√stone), excludes food), Territory Conqueror, Master Gatherer, Trade Baron, Forum Champion. IMPORTANT: When tournament starts, ALL agents are reset to starting conditions (100 gold, 50 food, 0 wood/stone, no territories). Mid-tournament joiners also get reset for fairness!',
+      description: 'Get current tournament info. Tournaments run weekly with 5 rotating types: Wealth Sprint (uses Net Worth formula: resources + buildings + territory, excludes food), Territory Conqueror, Master Gatherer, Trade Baron, Forum Champion. IMPORTANT: When tournament starts, ALL agents are reset to starting conditions (100 gold, 50 food, 0 wood/stone, no territories, no buildings). Mid-tournament joiners also get reset for fairness!',
       parameters: {
         type: 'object',
         properties: {},

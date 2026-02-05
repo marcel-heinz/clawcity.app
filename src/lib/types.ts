@@ -55,6 +55,10 @@ export interface AgentLeaderboard extends AgentPublic {
   food: number;
   stone: number;
   wealth: number;
+  // Wealth breakdown (Net Worth system)
+  resource_wealth?: number;
+  infrastructure_wealth?: number;
+  territory_wealth?: number;
   territory_count: number;
   created_at?: string;
   // Lifetime gathering stats for Top Gatherers leaderboard
@@ -258,34 +262,92 @@ export const MAX_UPGRADE_LEVEL = 3;
 // Legacy constant - kept for reference, now replaced by UPGRADE_BONUSES
 export const TERRITORY_BONUS_MULTIPLIER = 1.25; // +25% resources on owned tiles (level 1)
 
-// Wealth calculation using scaled sqrt formula
-// This creates diminishing returns and rewards diversification over hoarding single resources
-// Formula: 10 * (sqrt(gold) + sqrt(wood) + sqrt(stone) + sqrt(food))
-export const WEALTH_SCALE_FACTOR = 10;
+// =============================================================================
+// WEALTH CALCULATION v2 — Net Worth System
+// =============================================================================
+// Total Wealth = Resource Wealth + Infrastructure Wealth + Territory Wealth
+//
+// Resource Wealth:       10 × (√gold + √wood + √stone + √food)
+// Infrastructure Wealth: flat value per building (Storage=90, Workshop=200, Fortification=140)
+// Territory Wealth:      30 per owned tile
+//
+// Buildings valued at ~60% of construction cost (they require ongoing upkeep).
+// Territory valued at ~30% of claim cost.
 
-// Calculate total wealth from resources using scaled sqrt
-// Rewards balanced resource collection, diminishing returns on hoarding
-export function calculateWealth(resources: { gold?: number; wood?: number; food?: number; stone?: number }): number {
-  return Math.round(
+export const WEALTH_SCALE_FACTOR = 10;
+export const WEALTH_TERRITORY_VALUE = 30;
+export const WEALTH_BUILDING_VALUES = {
+  storage: 90,
+  workshop: 200,
+  fortification: 140,
+} as const;
+
+export interface WealthInput {
+  gold?: number;
+  wood?: number;
+  food?: number;
+  stone?: number;
+  buildings?: { storage: number; workshop: number; fortification: number };
+  territory_count?: number;
+}
+
+export interface WealthBreakdown {
+  total: number;
+  resource_wealth: number;
+  infrastructure_wealth: number;
+  territory_wealth: number;
+}
+
+// Calculate total wealth (Net Worth) with breakdown
+export function calculateWealthBreakdown(input: WealthInput): WealthBreakdown {
+  const resource_wealth = Math.round(
     WEALTH_SCALE_FACTOR * (
-      Math.sqrt(resources.gold || 0) +
-      Math.sqrt(resources.wood || 0) +
-      Math.sqrt(resources.stone || 0) +
-      Math.sqrt(resources.food || 0)
+      Math.sqrt(input.gold || 0) +
+      Math.sqrt(input.wood || 0) +
+      Math.sqrt(input.stone || 0) +
+      Math.sqrt(input.food || 0)
     )
   );
+
+  const infrastructure_wealth =
+    (input.buildings?.storage || 0) * WEALTH_BUILDING_VALUES.storage +
+    (input.buildings?.workshop || 0) * WEALTH_BUILDING_VALUES.workshop +
+    (input.buildings?.fortification || 0) * WEALTH_BUILDING_VALUES.fortification;
+
+  const territory_wealth = (input.territory_count || 0) * WEALTH_TERRITORY_VALUE;
+
+  return {
+    total: resource_wealth + infrastructure_wealth + territory_wealth,
+    resource_wealth,
+    infrastructure_wealth,
+    territory_wealth,
+  };
+}
+
+// Calculate total wealth from resources, buildings, and territory
+export function calculateWealth(input: WealthInput): number {
+  return calculateWealthBreakdown(input).total;
 }
 
 // Calculate tournament wealth (excludes food - food is operational, not wealth storage)
 // Used for Wealth Sprint tournament scoring
-export function calculateTournamentWealth(resources: { gold?: number; wood?: number; stone?: number }): number {
-  return Math.round(
+export function calculateTournamentWealth(input: WealthInput): number {
+  const resource_wealth = Math.round(
     WEALTH_SCALE_FACTOR * (
-      Math.sqrt(resources.gold || 0) +
-      Math.sqrt(resources.wood || 0) +
-      Math.sqrt(resources.stone || 0)
+      Math.sqrt(input.gold || 0) +
+      Math.sqrt(input.wood || 0) +
+      Math.sqrt(input.stone || 0)
     )
   );
+
+  const infrastructure_wealth =
+    (input.buildings?.storage || 0) * WEALTH_BUILDING_VALUES.storage +
+    (input.buildings?.workshop || 0) * WEALTH_BUILDING_VALUES.workshop +
+    (input.buildings?.fortification || 0) * WEALTH_BUILDING_VALUES.fortification;
+
+  const territory_wealth = (input.territory_count || 0) * WEALTH_TERRITORY_VALUE;
+
+  return resource_wealth + infrastructure_wealth + territory_wealth;
 }
 
 // Terrain resource yields
