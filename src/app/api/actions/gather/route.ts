@@ -16,6 +16,13 @@ import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
 import { getActiveEventBonus, applyEventBonusToResources } from '@/lib/micro-events';
+import {
+  calculateItemGatherBonus,
+  canGatherWithItems,
+  getGatherItemsToUse,
+  type AgentItem,
+} from '@/lib/crafting';
+import { calculateResourceCap } from '@/lib/buildings';
 
 // Helper: Check if tile has regenerated (using new regenerates_at field)
 function hasTileRegenerated(regeneratesAt: string | null): boolean {
@@ -91,10 +98,10 @@ export async function POST(request: NextRequest) {
     const consecutiveGathers = isSameTile ? (agent.consecutive_same_tile || 0) + 1 : 1;
     const sameTileMultiplier = getSameTilePenalty(consecutiveGathers);
 
-    // Get current tile with ownership, depletion, and upgrade info
+    // Get current tile with ownership, depletion, upgrade, and building info
     const { data: tile } = await supabase
       .from('tiles')
-      .select('terrain, owner_id, depleted, depleted_at, regenerates_at, gather_count, upgrade_level')
+      .select('terrain, owner_id, depleted, depleted_at, regenerates_at, gather_count, upgrade_level, building_type')
       .eq('x', agent.x)
       .eq('y', agent.y)
       .single();
@@ -106,6 +113,35 @@ export async function POST(request: NextRequest) {
     const terrain = tile.terrain as TerrainType;
     const isOwnedByAgent = tile.owner_id === agent.id;
     const upgradeLevel = tile.upgrade_level || 1;
+
+    // Building exclusivity: other agents can't gather on tiles with buildings
+    if (tile.building_type && !isOwnedByAgent) {
+      return jsonResponse({
+        success: true,
+        data: {
+          message: `This tile has a ${tile.building_type} owned by another agent. You cannot gather here.`,
+          gathered: { gold: 0, wood: 0, food: 0, stone: 0 },
+          terrain,
+          tile_status: 'building_blocked',
+          stamina: { cost: 0, penalty_applied: false, food_remaining: agent.food },
+        },
+      });
+    }
+
+    // Fetch agent's items for bonus calculations
+    let agentItems: AgentItem[] = [];
+    try {
+      const { data: items } = await supabase
+        .from('agent_items')
+        .select('id, agent_id, item_id, quantity, uses_remaining, created_at, expires_at')
+        .eq('agent_id', agent.id)
+        .gt('quantity', 0);
+      agentItems = ((items || []) as AgentItem[]).filter((item: AgentItem) =>
+        item.uses_remaining === null || item.uses_remaining > 0
+      );
+    } catch {
+      // If agent_items table doesn't exist yet, continue without items
+    }
 
     // Markets don't produce resources
     if (terrain === 'market') {
@@ -164,13 +200,98 @@ export async function POST(request: NextRequest) {
     // Get current gather count for this tile (for progressive depletion)
     const currentGatherCount = (tile.gather_count || 0) + 1;
 
+    // Check if terrain normally has no resources but items enable gathering
+    const barrenTerrains: TerrainType[] = ['rocky', 'sand'];
+    if (barrenTerrains.includes(terrain)) {
+      if (!canGatherWithItems(agentItems, terrain)) {
+        return jsonResponse({
+          success: true,
+          data: {
+            message: `This ${terrain} terrain has no resources. A Torch would let you gather here.`,
+            gathered: { gold: 0, wood: 0, food: 0, stone: 0 },
+            terrain,
+            tile_status: 'barren',
+            stamina: { cost: 0, penalty_applied: false, food_remaining: agent.food },
+          },
+        });
+      }
+      // With torch: yield small resources
+      const torchYield = {
+        gold: 0,
+        wood: terrain === 'rocky' ? 0 : Math.floor(Math.random() * 2),
+        food: 0,
+        stone: terrain === 'rocky' ? Math.floor(Math.random() * 2) + 1 : 0,
+      };
+
+      // Decrement uses for items used
+      const torchItems = getGatherItemsToUse(agentItems, terrain);
+      for (const item of agentItems) {
+        if (torchItems.some(u => u.itemId === item.item_id) && item.uses_remaining !== null) {
+          await supabase
+            .from('agent_items')
+            .update({ uses_remaining: Math.max(0, item.uses_remaining - 1) })
+            .eq('agent_id', agent.id)
+            .eq('item_id', item.item_id);
+        }
+      }
+
+      const netFoodChange = -staminaCost;
+      const newFood = Math.max(0, agent.food + netFoodChange);
+      const newGold = agent.gold + torchYield.gold;
+      const newWood = agent.wood + torchYield.wood;
+      const newStone = agent.stone + torchYield.stone;
+
+      await supabase
+        .from('agents')
+        .update({
+          gold: newGold, wood: newWood, food: newFood, stone: newStone,
+          last_gather_x: agent.x, last_gather_y: agent.y,
+          consecutive_same_tile: consecutiveGathers,
+        })
+        .eq('id', agent.id);
+
+      const yieldText = Object.entries(torchYield)
+        .filter(([, v]) => v > 0)
+        .map(([k, v]) => `${v} ${k}`)
+        .join(', ') || 'nothing';
+
+      return jsonResponse({
+        success: true,
+        data: {
+          message: `Using your Torch, you scavenge ${yieldText} from the ${terrain}. Stamina cost: ${staminaCost} food.`,
+          gathered: torchYield,
+          terrain,
+          tile_status: 'available',
+          items_used: torchItems.map(t => t.itemName),
+          stamina: { cost: staminaCost, efficiency: efficiencyPercent, food_remaining: newFood },
+          inventory: { gold: newGold, wood: newWood, food: newFood, stone: newStone },
+        },
+      });
+    }
+
     // Water can be gathered from but less efficiently (and doesn't deplete)
     if (terrain === 'water') {
       let waterFood = Math.floor(Math.random() * 2) + 1;
 
+      // Apply item bonuses for water gathering
+      const waterItemMultiplier = calculateItemGatherBonus(agentItems, terrain);
+      waterFood = Math.floor(waterFood * waterItemMultiplier);
+
       // Apply progressive food efficiency and same-tile penalty
       const combinedMultiplier = foodEfficiency * sameTileMultiplier;
       waterFood = Math.floor(waterFood * combinedMultiplier);
+
+      // Decrement tool uses for water gathering items
+      const waterItemsUsed = getGatherItemsToUse(agentItems, terrain);
+      for (const item of agentItems) {
+        if (waterItemsUsed.some(u => u.itemId === item.item_id) && item.uses_remaining !== null) {
+          await supabase
+            .from('agent_items')
+            .update({ uses_remaining: Math.max(0, item.uses_remaining - 1) })
+            .eq('agent_id', agent.id)
+            .eq('item_id', item.item_id);
+        }
+      }
 
       // Net food change (gathered - stamina cost)
       const netFoodChange = waterFood - staminaCost;
@@ -263,6 +384,29 @@ export async function POST(request: NextRequest) {
       gathered = applyEventBonusToResources(gathered, activeEvent);
     }
 
+    // Apply item bonuses (tools, backpack, etc.)
+    const itemBonusMultiplier = calculateItemGatherBonus(agentItems, terrain);
+    if (itemBonusMultiplier > 1.0) {
+      gathered = {
+        gold: Math.floor(gathered.gold * itemBonusMultiplier),
+        wood: Math.floor(gathered.wood * itemBonusMultiplier),
+        food: Math.floor(gathered.food * itemBonusMultiplier),
+        stone: Math.floor(gathered.stone * itemBonusMultiplier),
+      };
+    }
+
+    // Decrement tool uses for items that applied bonuses
+    const gatherItemsUsed = getGatherItemsToUse(agentItems, terrain);
+    for (const item of agentItems) {
+      if (gatherItemsUsed.some(u => u.itemId === item.item_id) && item.uses_remaining !== null) {
+        await supabase
+          .from('agent_items')
+          .update({ uses_remaining: Math.max(0, item.uses_remaining - 1) })
+          .eq('agent_id', agent.id)
+          .eq('item_id', item.item_id);
+      }
+    }
+
     // Apply progressive food efficiency AND same-tile penalty
     const combinedMultiplier = foodEfficiency * sameTileMultiplier;
     gathered = {
@@ -300,6 +444,28 @@ export async function POST(request: NextRequest) {
         .eq('x', agent.x)
         .eq('y', agent.y);
     }
+
+    // Enforce resource cap
+    let storageCount = 0;
+    try {
+      const { data: storageTiles } = await supabase
+        .from('tiles')
+        .select('building_type')
+        .eq('owner_id', agent.id)
+        .eq('building_type', 'storage');
+      storageCount = storageTiles?.length || 0;
+    } catch {
+      // If building columns don't exist yet, continue without cap
+    }
+    const resourceCap = calculateResourceCap(storageCount);
+
+    // Apply resource cap: can't gather above cap (excess is lost)
+    gathered = {
+      gold: Math.max(0, Math.min(gathered.gold, resourceCap - agent.gold)),
+      wood: Math.max(0, Math.min(gathered.wood, resourceCap - agent.wood)),
+      food: Math.max(0, Math.min(gathered.food, resourceCap - agent.food)),
+      stone: Math.max(0, Math.min(gathered.stone, resourceCap - agent.stone)),
+    };
 
     // Calculate new inventory (food includes stamina cost deduction)
     const newGold = agent.gold + gathered.gold;
@@ -362,6 +528,11 @@ export async function POST(request: NextRequest) {
           event_type: activeEvent.type,
           multiplier: eventMultiplier,
         } : null,
+        // Item bonus info
+        item_bonus: gatherItemsUsed.length > 0 ? {
+          multiplier: itemBonusMultiplier,
+          items_used: gatherItemsUsed.map(i => i.itemName),
+        } : null,
       },
       location: { x: agent.x, y: agent.y },
     });
@@ -383,6 +554,12 @@ export async function POST(request: NextRequest) {
         : ` [EVENT: ${activeEvent.title} ${eventBonusPercent}%]`
       : '';
 
+    // Build item bonus text
+    const itemBonusPercent = itemBonusMultiplier > 1.0 ? Math.round((itemBonusMultiplier - 1) * 100) : 0;
+    const itemText = gatherItemsUsed.length > 0
+      ? ` [ITEMS: ${gatherItemsUsed.map(i => i.itemName).join(', ')} +${itemBonusPercent}%]`
+      : '';
+
     // Build penalty/efficiency text
     const efficiencyParts: string[] = [];
     if (efficiencyPercent < 100) efficiencyParts.push(`${efficiencyPercent}% efficiency from low food`);
@@ -394,8 +571,8 @@ export async function POST(request: NextRequest) {
     const staminaText = ` Stamina cost: ${staminaCost} food.`;
 
     const message = gatheredItems
-      ? `You gathered ${gatheredItems} from the ${terrain}${bonusText}${eventText}${penaltyText}.${staminaText}${depletionText}`
-      : `You searched the ${terrain} but found nothing this time.${eventText}${penaltyText}${staminaText}${depletionText}`;
+      ? `You gathered ${gatheredItems} from the ${terrain}${bonusText}${eventText}${itemText}${penaltyText}.${staminaText}${depletionText}`
+      : `You searched the ${terrain} but found nothing this time.${eventText}${itemText}${penaltyText}${staminaText}${depletionText}`;
 
     // Include any new announcements in the response
     const responseData = await withAnnouncements(agent, {
@@ -422,6 +599,12 @@ export async function POST(request: NextRequest) {
         event_type: activeEvent.type,
         multiplier: eventMultiplier,
         bonus_percent: eventBonusPercent,
+      } : null,
+      // Item bonus info
+      item_bonus: gatherItemsUsed.length > 0 ? {
+        multiplier: itemBonusMultiplier,
+        bonus_percent: itemBonusPercent,
+        items_used: gatherItemsUsed.map(i => ({ id: i.itemId, name: i.itemName })),
       } : null,
       inventory: {
         gold: newGold,
