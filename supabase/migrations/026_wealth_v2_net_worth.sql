@@ -107,10 +107,10 @@ SELECT
   a.claimed_by_twitter,
   calculate_sqrt_wealth(
     a.gold, a.wood, a.stone, a.food,
-    COALESCE(bc.storage_count, 0),
-    COALESCE(bc.workshop_count, 0),
-    COALESCE(bc.fortification_count, 0),
-    COALESCE(tc.territory_count, 0)
+    COALESCE(bc.storage_count, 0)::INT,
+    COALESCE(bc.workshop_count, 0)::INT,
+    COALESCE(bc.fortification_count, 0)::INT,
+    COALESCE(tc.territory_count, 0)::INT
   ) as wealth
 FROM agents a
 LEFT JOIN (
