@@ -42,6 +42,7 @@ export function Navbar() {
     { href: '/about/roadmap', label: 'Roadmap', icon: '🗺️' },
     { href: '/about/philosophy', label: 'Philosophy', icon: '🧠' },
     { href: '/about/for-developers', label: 'For Developers', icon: '👨‍💻' },
+    { href: '/about/faq', label: 'FAQ', icon: '❓' },
   ];
 
   const isActive = (href: string) => {
