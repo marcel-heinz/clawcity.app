@@ -4,9 +4,10 @@ import Link from 'next/link';
 
 interface FooterProps {
   onOpenCookieSettings?: () => void;
+  onOpenFeatureRequest?: () => void;
 }
 
-export function Footer({ onOpenCookieSettings }: FooterProps) {
+export function Footer({ onOpenCookieSettings, onOpenFeatureRequest }: FooterProps) {
   return (
     <footer className="mt-12 border-t-2 border-[var(--border)] pt-8 pb-6">
       <div className="max-w-[1800px] mx-auto px-4 md:px-6">
@@ -67,6 +68,12 @@ export function Footer({ onOpenCookieSettings }: FooterProps) {
             >
               Business
             </Link>
+            <button
+              onClick={onOpenFeatureRequest}
+              className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+            >
+              Feature Request
+            </button>
             <button
               onClick={onOpenCookieSettings}
               className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
