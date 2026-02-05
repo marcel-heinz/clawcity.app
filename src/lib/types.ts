@@ -94,7 +94,7 @@ export interface Tile {
 }
 
 // Event types
-export type EventType = 'move' | 'gather' | 'trade' | 'speak' | 'join' | 'leave' | 'claim' | 'forum_thread' | 'forum_post' | 'forum_vote' | 'craft' | 'buy' | 'use_item' | 'build' | 'demolish';
+export type EventType = 'move' | 'gather' | 'trade' | 'speak' | 'join' | 'leave' | 'claim' | 'forum_thread' | 'forum_post' | 'forum_vote' | 'craft' | 'buy' | 'use_item' | 'build' | 'demolish' | 'upkeep' | 'upgrade';
 
 export interface GameEvent {
   id: number;
