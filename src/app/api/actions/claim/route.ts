@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { 
+import {
   CLAIM_COST_GOLD,
   CLAIM_COST_WOOD,
   CLAIM_COST_STONE,
@@ -13,6 +13,7 @@ import {
 } from '@/lib/types';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
+import { getItemDefinition } from '@/lib/crafting';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -39,29 +40,62 @@ export async function POST(request: NextRequest) {
     const agent = auth.agent;
     const supabase = createServerClient();
 
-    // Calculate total food cost (claiming cost + stamina cost)
-    const totalFoodCost = CLAIM_COST_FOOD + STAMINA_COST_CLAIM;
+    // Check for Territory Deed (claim_discount effect)
+    let hasTerrityDeed = false;
+    let deedDiscountPercent = 0;
+    let deedItemRow: { id: string; uses_remaining: number | null } | null = null;
+
+    const { data: deedItem } = await supabase
+      .from('agent_items')
+      .select('id, uses_remaining')
+      .eq('agent_id', agent.id)
+      .eq('item_id', 'territory_deed')
+      .single();
+
+    if (deedItem && (deedItem.uses_remaining === null || deedItem.uses_remaining > 0)) {
+      const deedDef = getItemDefinition('territory_deed');
+      if (deedDef) {
+        for (const effect of deedDef.effects) {
+          if (effect.type === 'claim_discount') {
+            hasTerrityDeed = true;
+            deedDiscountPercent = effect.percent;
+            deedItemRow = deedItem;
+          }
+        }
+      }
+    }
+
+    // Apply discount if deed is active
+    const discountMultiplier = hasTerrityDeed ? (100 - deedDiscountPercent) / 100 : 1;
+    const effectiveGoldCost = Math.floor(CLAIM_COST_GOLD * discountMultiplier);
+    const effectiveWoodCost = Math.floor(CLAIM_COST_WOOD * discountMultiplier);
+    const effectiveStoneCost = Math.floor(CLAIM_COST_STONE * discountMultiplier);
+    const effectiveFoodClaimCost = Math.floor(CLAIM_COST_FOOD * discountMultiplier);
+
+    // Calculate total food cost (claiming cost + stamina cost - stamina is never discounted)
+    const totalFoodCost = effectiveFoodClaimCost + STAMINA_COST_CLAIM;
 
     // Check if agent has enough resources for ALL costs
     const missingResources: string[] = [];
-    
-    if (agent.gold < CLAIM_COST_GOLD) {
-      missingResources.push(`gold (need ${CLAIM_COST_GOLD}, have ${agent.gold})`);
+
+    if (agent.gold < effectiveGoldCost) {
+      missingResources.push(`gold (need ${effectiveGoldCost}, have ${agent.gold})`);
     }
-    if (agent.wood < CLAIM_COST_WOOD) {
-      missingResources.push(`wood (need ${CLAIM_COST_WOOD}, have ${agent.wood})`);
+    if (agent.wood < effectiveWoodCost) {
+      missingResources.push(`wood (need ${effectiveWoodCost}, have ${agent.wood})`);
     }
-    if (agent.stone < CLAIM_COST_STONE) {
-      missingResources.push(`stone (need ${CLAIM_COST_STONE}, have ${agent.stone})`);
+    if (agent.stone < effectiveStoneCost) {
+      missingResources.push(`stone (need ${effectiveStoneCost}, have ${agent.stone})`);
     }
     if (agent.food < totalFoodCost) {
-      missingResources.push(`food (need ${totalFoodCost} [${CLAIM_COST_FOOD} claim + ${STAMINA_COST_CLAIM} stamina], have ${agent.food})`);
+      missingResources.push(`food (need ${totalFoodCost} [${effectiveFoodClaimCost} claim + ${STAMINA_COST_CLAIM} stamina], have ${agent.food})`);
     }
 
     if (missingResources.length > 0) {
+      const deedNote = hasTerrityDeed ? ' (with Territory Deed -50% discount)' : '';
       return errorResponse(
         `Not enough resources to claim territory. Missing: ${missingResources.join(', ')}. ` +
-        `Full cost: ${CLAIM_COST_GOLD} gold, ${CLAIM_COST_WOOD} wood, ${CLAIM_COST_STONE} stone, ${totalFoodCost} food.`,
+        `Full cost: ${effectiveGoldCost} gold, ${effectiveWoodCost} wood, ${effectiveStoneCost} stone, ${totalFoodCost} food${deedNote}.`,
         400
       );
     }
@@ -122,15 +156,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate new resource amounts
-    const newGold = agent.gold - CLAIM_COST_GOLD;
-    const newWood = agent.wood - CLAIM_COST_WOOD;
-    const newStone = agent.stone - CLAIM_COST_STONE;
+    const newGold = agent.gold - effectiveGoldCost;
+    const newWood = agent.wood - effectiveWoodCost;
+    const newStone = agent.stone - effectiveStoneCost;
     const newFood = agent.food - totalFoodCost;
 
     // Deduct all resources from agent atomically
     const { error: resourceError } = await supabase
       .from('agents')
-      .update({ 
+      .update({
         gold: newGold,
         wood: newWood,
         stone: newStone,
@@ -169,18 +203,27 @@ export async function POST(request: NextRequest) {
       return errorResponse('Failed to claim tile', 500);
     }
 
+    // Consume Territory Deed if used
+    if (hasTerrityDeed && deedItemRow) {
+      await supabase
+        .from('agent_items')
+        .update({ uses_remaining: 0, quantity: 0 })
+        .eq('id', deedItemRow.id);
+    }
+
     // Log claim event
     await supabase.from('events').insert({
       agent_id: agent.id,
       type: 'claim',
-      data: { 
+      data: {
         terrain,
         cost: {
-          gold: CLAIM_COST_GOLD,
-          wood: CLAIM_COST_WOOD,
-          stone: CLAIM_COST_STONE,
+          gold: effectiveGoldCost,
+          wood: effectiveWoodCost,
+          stone: effectiveStoneCost,
           food: totalFoodCost
         },
+        territory_deed_used: hasTerrityDeed,
         territory_count: (territoryCount || 0) + 1,
         upkeep_cost_per_hour: TERRITORY_UPKEEP_FOOD,
       },
@@ -188,22 +231,24 @@ export async function POST(request: NextRequest) {
     });
 
     const newTerritoryCount = (territoryCount || 0) + 1;
+    const deedMessage = hasTerrityDeed ? ' (Territory Deed applied: -50% cost!)' : '';
 
     // Include any new announcements in the response
     const responseData = await withAnnouncements(agent, {
-      message: `You have claimed this ${terrain} tile! ` +
-        `Cost: ${CLAIM_COST_GOLD} gold, ${CLAIM_COST_WOOD} wood, ${CLAIM_COST_STONE} stone, ${totalFoodCost} food. ` +
+      message: `You have claimed this ${terrain} tile!${deedMessage} ` +
+        `Cost: ${effectiveGoldCost} gold, ${effectiveWoodCost} wood, ${effectiveStoneCost} stone, ${totalFoodCost} food. ` +
         `You now receive +25% resources when gathering here (upgradeable to +75%). ` +
         `IMPORTANT: Territory upkeep is ${TERRITORY_UPKEEP_FOOD} food/territory/hour (${newTerritoryCount * TERRITORY_UPKEEP_FOOD} food/hour total for your ${newTerritoryCount} territories).`,
       position: { x: agent.x, y: agent.y },
       terrain,
       cost: {
-        gold: CLAIM_COST_GOLD,
-        wood: CLAIM_COST_WOOD,
-        stone: CLAIM_COST_STONE,
+        gold: effectiveGoldCost,
+        wood: effectiveWoodCost,
+        stone: effectiveStoneCost,
         food: totalFoodCost,
+        territory_deed_used: hasTerrityDeed,
         food_breakdown: {
-          claim_cost: CLAIM_COST_FOOD,
+          claim_cost: effectiveFoodClaimCost,
           stamina_cost: STAMINA_COST_CLAIM
         }
       },
