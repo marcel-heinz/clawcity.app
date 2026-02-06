@@ -27,6 +27,7 @@ function isActiveAgent(lastActive: string): boolean {
 interface WorldMapPixelProps {
   agents: AgentPublic[];
   onAgentClick?: (agentId: string, x: number, y: number) => void;
+  onMapClick?: (x: number, y: number) => void;
 }
 
 interface TileData {
@@ -41,7 +42,7 @@ const DOWNSAMPLE = 5;
 const GRID_SIZE = WORLD_SIZE / DOWNSAMPLE; // 100x100
 const PIXEL_SIZE = 4; // Each tile is 4px (total 400px width)
 
-export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
+export function WorldMapPixel({ agents, onAgentClick, onMapClick }: WorldMapPixelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [tiles, setTiles] = useState<TileData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,15 +143,15 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
-    if (!canvas || !onAgentClick) return;
+    if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    
+
     const canvasX = (e.clientX - rect.left) * scaleX;
     const canvasY = (e.clientY - rect.top) * scaleY;
-    
+
     const gridX = Math.floor(canvasX / PIXEL_SIZE);
     const gridY = Math.floor(canvasY / PIXEL_SIZE);
 
@@ -161,10 +162,15 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
       return agentGridX === gridX && agentGridY === gridY;
     });
 
-    if (clickedAgent) {
+    if (clickedAgent && onAgentClick) {
       onAgentClick(clickedAgent.id, clickedAgent.x, clickedAgent.y);
+    } else if (!clickedAgent && onMapClick) {
+      // Clicked empty space - convert grid coords to world coords
+      const worldX = gridX * DOWNSAMPLE + Math.floor(DOWNSAMPLE / 2);
+      const worldY = gridY * DOWNSAMPLE + Math.floor(DOWNSAMPLE / 2);
+      onMapClick(worldX, worldY);
     }
-  }, [activeAgents, onAgentClick]);
+  }, [activeAgents, onAgentClick, onMapClick]);
 
   // Calculate stats
   const totalTerritories = tiles.filter(t => t.owner_id).length;
@@ -215,17 +221,15 @@ export function WorldMapPixel({ agents, onAgentClick }: WorldMapPixelProps) {
       </div>
 
       {/* 3D View Hint Banner */}
-      {activeAgents.length > 0 && (
-        <div className="mb-3 mx-auto max-w-md">
-          <div className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 border-2 border-[var(--accent)]/50 rounded-lg animate-pulse">
-            <span className="text-lg">👁️</span>
-            <span className="text-sm font-semibold text-[var(--foreground)]">
-              Click any agent to see their 3D world view!
-            </span>
-            <span className="text-lg">🦀</span>
-          </div>
+      <div className="mb-3 mx-auto max-w-lg">
+        <div className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 border-2 border-[var(--accent)]/50 rounded-lg animate-pulse">
+          <span className="text-lg">👁️</span>
+          <span className="text-sm font-semibold text-[var(--foreground)]">
+            Click an agent to follow them, or click the map to explore freely!
+          </span>
+          <span className="text-lg">🗺️</span>
         </div>
-      )}
+      </div>
 
       {/* The Map Canvas */}
       <div className="relative mx-auto rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]" style={{ maxWidth: '650px' }}>

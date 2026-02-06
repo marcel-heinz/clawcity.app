@@ -25,8 +25,9 @@ export default function Home() {
   const [showFeatureRequest, setShowFeatureRequest] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // 3D Agent View state
+  // 3D View state
   const [selectedAgent, setSelectedAgent] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [spectatorPos, setSpectatorPos] = useState<{ x: number; y: number } | null>(null);
 
   // Tournament state
   const [currentTournament, setCurrentTournament] = useState<Tournament | null>(null);
@@ -359,6 +360,12 @@ Body: { "target": "AgentName",
         <div className="mb-4 flex items-center gap-3">
           <h2 className="text-lg md:text-xl font-bold text-[var(--foreground)] whitespace-nowrap">Explore the World</h2>
           <div className="flex-1 pixel-dots" />
+          <button
+            onClick={() => setSpectatorPos({ x: 250, y: 250 })}
+            className="px-4 py-2 bg-[var(--surface)] border-2 border-[var(--border)] hover:border-[var(--accent)] hover:bg-[var(--surface-alt)] text-[var(--foreground)] text-sm font-semibold transition-colors flex items-center gap-2 pixel-btn"
+          >
+            <span>👁️</span> Explore in 3D
+          </button>
         </div>
 
         {/* World Map + Active Agents Sidebar */}
@@ -371,6 +378,7 @@ Body: { "target": "AgentName",
             <WorldMapPixel
               agents={agents}
               onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
+              onMapClick={(x, y) => setSpectatorPos({ x, y })}
             />
           </section>
 
@@ -474,7 +482,7 @@ Body: { "target": "AgentName",
         />
       </div>
 
-      {/* 3D Agent View Modal */}
+      {/* 3D Agent View Modal (follow mode) */}
       {selectedAgent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="relative w-full max-w-4xl h-[500px] md:h-[600px]">
@@ -483,7 +491,23 @@ Body: { "target": "AgentName",
               centerY={selectedAgent.y}
               agents={agents}
               selectedAgentId={selectedAgent.id}
+              mode="follow"
               onClose={() => setSelectedAgent(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 3D Spectator View Modal (free movement mode) */}
+      {spectatorPos && !selectedAgent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="relative w-full max-w-4xl h-[500px] md:h-[600px]">
+            <AgentView3D
+              centerX={spectatorPos.x}
+              centerY={spectatorPos.y}
+              agents={agents}
+              mode="spectator"
+              onClose={() => setSpectatorPos(null)}
             />
           </div>
         </div>

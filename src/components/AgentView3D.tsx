@@ -56,15 +56,24 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
   marsh: '#457b9d',
 };
 
+interface OtherAgentData {
+  worldX: number;
+  worldY: number;
+  current: THREE.Vector3;
+  target: THREE.Vector3;
+  mesh: THREE.Group;
+}
+
 interface AgentView3DProps {
   centerX: number;
   centerY: number;
   agents: AgentPublic[];
   selectedAgentId?: string;
+  mode?: 'follow' | 'spectator';
   onClose?: () => void;
 }
 
-export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose }: AgentView3DProps) {
+export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 'follow', onClose }: AgentView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -72,10 +81,27 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
   const agentGroupRef = useRef<THREE.Group | null>(null);
   const terrainGroupRef = useRef<THREE.Group | null>(null);
 
-  // Position tracking for smooth interpolation
+  // Position tracking for smooth interpolation (follow mode)
   const currentPosRef = useRef({ x: centerX, y: centerY });
   const targetPosRef = useRef({ x: centerX, y: centerY });
-  const otherAgentsRef = useRef<Map<string, { current: THREE.Vector3; target: THREE.Vector3; mesh: THREE.Group }>>(new Map());
+  const otherAgentsRef = useRef<Map<string, OtherAgentData>>(new Map());
+
+  // Spectator mode state
+  const yawRef = useRef(0);
+  const keysRef = useRef<Record<string, boolean>>({});
+  const spectatorPosRef = useRef({ x: centerX, y: centerY });
+  const terrainCenterRef = useRef({ x: Math.round(centerX), y: Math.round(centerY) });
+  const isFetchingTerrainRef = useRef(false);
+  const lastTerrainFetchRef = useRef(0);
+  const isDraggingRef = useRef(false);
+  const lastPointerRef = useRef({ x: 0, y: 0 });
+  const joystickInputRef = useRef({ x: 0, y: 0 });
+  const lastTimeRef = useRef(0);
+
+  // Joystick visual state
+  const [joystickPos, setJoystickPos] = useState({ x: 0, y: 0 });
+  const [joystickActive, setJoystickActive] = useState(false);
+  const joystickPadRef = useRef<HTMLDivElement>(null);
 
   const [loading, setLoading] = useState(true);
   const [agentName, setAgentName] = useState('');
@@ -87,13 +113,17 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
   const VIEW_RADIUS = 12;
   const MINIMAP_SIZE = 120;
 
+  const isSpectator = mode === 'spectator';
+
   // Find selected agent's name
   useEffect(() => {
-    const agent = agents.find(a => a.id === selectedAgentId);
-    if (agent) {
-      setAgentName(agent.name);
+    if (!isSpectator) {
+      const agent = agents.find(a => a.id === selectedAgentId);
+      if (agent) {
+        setAgentName(agent.name);
+      }
     }
-  }, [agents, selectedAgentId]);
+  }, [agents, selectedAgentId, isSpectator]);
 
   // Create a simple crab mesh
   const createCrabMesh = useCallback((color: number) => {
@@ -131,21 +161,21 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     const group = new THREE.Group();
     const height = 2.5 + Math.random() * 0.5;
     const baseRadius = 0.8;
-    
+
     // Main mountain body (cone)
     const mountainGeo = new THREE.ConeGeometry(baseRadius, height * 0.85, 6);
     const mountainMat = new THREE.MeshBasicMaterial({ color: COLORS.mountainMid });
     const mountain = new THREE.Mesh(mountainGeo, mountainMat);
     mountain.position.y = height * 0.425;
     group.add(mountain);
-    
+
     // Snow cap (smaller cone on top)
     const snowGeo = new THREE.ConeGeometry(baseRadius * 0.35, height * 0.25, 6);
     const snowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const snow = new THREE.Mesh(snowGeo, snowMat);
     snow.position.y = height * 0.75;
     group.add(snow);
-    
+
     // Rocky base
     const baseGeo = new THREE.CylinderGeometry(baseRadius * 1.1, baseRadius * 1.2, 0.3, 8);
     const baseMat = new THREE.MeshBasicMaterial({ color: COLORS.mountainDark });
@@ -161,14 +191,14 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     const group = new THREE.Group();
     const treeHeight = 1.2 + Math.random() * 0.4;
     const trunkHeight = treeHeight * 0.35;
-    
+
     // Trunk (cylinder)
     const trunkGeo = new THREE.CylinderGeometry(0.06, 0.1, trunkHeight, 8);
     const trunkMat = new THREE.MeshBasicMaterial({ color: COLORS.treeTrunk });
     const trunk = new THREE.Mesh(trunkGeo, trunkMat);
     trunk.position.y = trunkHeight / 2;
     group.add(trunk);
-    
+
     // Foliage layers (cones stacked like a pine tree)
     const foliageColor = new THREE.MeshBasicMaterial({ color: COLORS.treeLeaves });
     const layers = 3;
@@ -191,14 +221,14 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     const roofColor = COLORS.marketRoof;
     const doorColor = 0x8B4513;
     const windowColor = 0x87CEEB;
-    
+
     // Main building walls
     const wallGeo = new THREE.BoxGeometry(0.9, 0.8, 0.7);
     const wallMat = new THREE.MeshBasicMaterial({ color: wallColor });
     const walls = new THREE.Mesh(wallGeo, wallMat);
     walls.position.y = 0.4;
     group.add(walls);
-    
+
     // Peaked roof (using a cone rotated)
     const roofHeight = 0.4;
     const roofGeo = new THREE.ConeGeometry(0.7, roofHeight, 4);
@@ -208,14 +238,14 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     roof.position.y = 0.8 + roofHeight / 2;
     roof.scale.set(1, 1, 0.8);
     group.add(roof);
-    
+
     // Door
     const doorGeo = new THREE.BoxGeometry(0.2, 0.4, 0.05);
     const doorMat = new THREE.MeshBasicMaterial({ color: doorColor });
     const door = new THREE.Mesh(doorGeo, doorMat);
     door.position.set(0, 0.2, 0.36);
     group.add(door);
-    
+
     // Windows (2 on front)
     const winGeo = new THREE.BoxGeometry(0.15, 0.15, 0.05);
     const winMat = new THREE.MeshBasicMaterial({ color: windowColor });
@@ -224,7 +254,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     const win2 = new THREE.Mesh(winGeo, winMat);
     win2.position.set(0.25, 0.5, 0.36);
     group.add(win1, win2);
-    
+
     // Market awning/sign
     const awningGeo = new THREE.BoxGeometry(1.0, 0.05, 0.3);
     const awningMat = new THREE.MeshBasicMaterial({ color: COLORS.marketBase });
@@ -252,7 +282,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     const group = new THREE.Group();
     const rockColors = [COLORS.rockyDark, COLORS.rockyMid, COLORS.rockyLight];
     const numRocks = 4 + Math.floor(Math.random() * 3);
-    
+
     for (let i = 0; i < numRocks; i++) {
       const size = 0.1 + Math.random() * 0.2;
       const rockGeo = new THREE.DodecahedronGeometry(size, 0);
@@ -273,7 +303,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
   // Create sand (flat with gentle dune mounds)
   const createSand = useCallback(() => {
     const group = new THREE.Group();
-    
+
     // Base sand plane
     const sandBase = new THREE.Mesh(
       new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE),
@@ -282,7 +312,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     sandBase.rotation.x = -Math.PI / 2;
     sandBase.position.y = 0.01;
     group.add(sandBase);
-    
+
     // Small dune mound (half sphere)
     const duneGeo = new THREE.SphereGeometry(0.2, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
     const duneMat = new THREE.MeshBasicMaterial({ color: COLORS.sandDark });
@@ -308,7 +338,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
   // Create marsh (shallow water with cattails/reeds)
   const createMarsh = useCallback(() => {
     const group = new THREE.Group();
-    
+
     // Shallow murky water plane
     const mw = new THREE.Mesh(
       new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE),
@@ -317,26 +347,26 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     mw.rotation.x = -Math.PI / 2;
     mw.position.y = 0.02;
     group.add(mw);
-    
+
     // Cattails/reeds (cylinder stalks with oval tops)
     const numReeds = 3 + Math.floor(Math.random() * 3);
     for (let i = 0; i < numReeds; i++) {
       const reedGroup = new THREE.Group();
-      
+
       // Stalk (thin cylinder)
       const stalkGeo = new THREE.CylinderGeometry(0.015, 0.02, 0.5, 6);
       const stalkMat = new THREE.MeshBasicMaterial({ color: 0x556b2f });
       const stalk = new THREE.Mesh(stalkGeo, stalkMat);
       stalk.position.y = 0.25;
       reedGroup.add(stalk);
-      
+
       // Cattail top (brown cylinder)
       const topGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.12, 8);
       const topMat = new THREE.MeshBasicMaterial({ color: 0x654321 });
       const top = new THREE.Mesh(topGeo, topMat);
       top.position.y = 0.45;
       reedGroup.add(top);
-      
+
       reedGroup.position.set(
         (Math.random() - 0.5) * 0.6,
         0,
@@ -466,17 +496,93 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
       ctx.fillRect(tile.x * scale, tile.y * scale, Math.ceil(scale), Math.ceil(scale));
     });
 
-    // Draw agent position marker (red dot)
+    // Draw position marker (red dot)
     ctx.fillStyle = '#ff4444';
     ctx.beginPath();
     ctx.arc(displayPos.x * scale, displayPos.y * scale, 3, 0, Math.PI * 2);
     ctx.fill();
-  }, [worldTiles, displayPos]);
+
+    // In spectator mode, draw a direction indicator
+    if (isSpectator) {
+      const yaw = yawRef.current;
+      const markerLen = 6;
+      ctx.strokeStyle = '#ff4444';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(displayPos.x * scale, displayPos.y * scale);
+      ctx.lineTo(
+        displayPos.x * scale - Math.sin(yaw) * markerLen,
+        displayPos.y * scale - Math.cos(yaw) * markerLen
+      );
+      ctx.stroke();
+    }
+  }, [worldTiles, displayPos, isSpectator]);
 
   // Update minimap when position or tiles change
   useEffect(() => {
     updateMinimap();
   }, [updateMinimap]);
+
+  // Keyboard event listeners (spectator mode)
+  useEffect(() => {
+    if (!isSpectator) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+        e.preventDefault();
+        keysRef.current[key] = true;
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      keysRef.current[e.key.toLowerCase()] = false;
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isSpectator]);
+
+  // Pointer drag for camera rotation (spectator mode)
+  useEffect(() => {
+    if (!isSpectator) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      // Don't capture if touching the joystick or UI overlays
+      const target = e.target as HTMLElement;
+      if (target.closest('[data-spectator-ui]')) return;
+      isDraggingRef.current = true;
+      lastPointerRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!isDraggingRef.current) return;
+      const dx = e.clientX - lastPointerRef.current.x;
+      yawRef.current += dx * 0.005;
+      lastPointerRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const handlePointerUp = () => {
+      isDraggingRef.current = false;
+    };
+
+    container.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+
+    return () => {
+      container.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [isSpectator]);
 
   // Main scene setup
   useEffect(() => {
@@ -492,10 +598,15 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     scene.fog = new THREE.Fog(COLORS.sky, 8, 25);
     sceneRef.current = scene;
 
-    // Camera - ground level, behind agent, looking at horizon
+    // Camera
     const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 100);
-    camera.position.set(0, 0.8, 3); // At crab eye level, close behind
-    camera.lookAt(0, 0.8, -20); // Look at horizon (same Y = level view)
+    if (isSpectator) {
+      camera.position.set(0, 1.5, 0);
+      camera.lookAt(0, 1.5, -20);
+    } else {
+      camera.position.set(0, 0.8, 3); // At crab eye level, close behind
+      camera.lookAt(0, 0.8, -20); // Look at horizon (same Y = level view)
+    }
     cameraRef.current = camera;
 
     // Renderer
@@ -529,19 +640,137 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
       setLoading(false);
     });
 
-    // Animation loop with interpolation
+    // Initialize time ref
+    lastTimeRef.current = performance.now();
+
+    // Animation loop
     let animationId: number;
+    let lastDisplayUpdateTime = 0;
+
     const animate = () => {
       animationId = requestAnimationFrame(animate);
 
-      // Smooth interpolation of position (lerp) - 0.7 for flight-sim responsive feel
-      const lerpFactor = 0.7;
-      currentPosRef.current.x += (targetPosRef.current.x - currentPosRef.current.x) * lerpFactor;
-      currentPosRef.current.y += (targetPosRef.current.y - currentPosRef.current.y) * lerpFactor;
+      const now = performance.now();
+      const dt = Math.min((now - lastTimeRef.current) / 1000, 0.1);
+      lastTimeRef.current = now;
 
-      // Interpolate other agents
+      if (isSpectator) {
+        // --- SPECTATOR MODE ---
+        const MOVE_SPEED = 5; // tiles per second
+        const ROTATE_SPEED = 2; // radians per second
+        const yaw = yawRef.current;
+        const keys = keysRef.current;
+        const joystick = joystickInputRef.current;
+
+        // Calculate direction vectors
+        const forwardX = -Math.sin(yaw);
+        const forwardZ = -Math.cos(yaw);
+        const rightX = Math.cos(yaw);
+        const rightZ = -Math.sin(yaw);
+
+        let moveX = 0, moveZ = 0;
+
+        // WASD movement
+        if (keys['w'] || keys['arrowup']) { moveX += forwardX; moveZ += forwardZ; }
+        if (keys['s'] || keys['arrowdown']) { moveX -= forwardX; moveZ -= forwardZ; }
+        if (keys['a']) { moveX -= rightX; moveZ -= rightZ; }
+        if (keys['d']) { moveX += rightX; moveZ += rightZ; }
+
+        // Arrow keys left/right for rotation
+        if (keys['arrowleft']) yawRef.current += ROTATE_SPEED * dt;
+        if (keys['arrowright']) yawRef.current -= ROTATE_SPEED * dt;
+
+        // Joystick input (mobile)
+        if (joystick.x !== 0 || joystick.y !== 0) {
+          moveX += forwardX * (-joystick.y) + rightX * joystick.x;
+          moveZ += forwardZ * (-joystick.y) + rightZ * joystick.x;
+        }
+
+        // Apply movement
+        const mag = Math.sqrt(moveX * moveX + moveZ * moveZ);
+        if (mag > 0) {
+          const speed = MOVE_SPEED * dt;
+          spectatorPosRef.current.x += (moveX / mag) * speed;
+          spectatorPosRef.current.y += (moveZ / mag) * speed;
+
+          // Clamp to world bounds
+          spectatorPosRef.current.x = Math.max(0, Math.min(WORLD_SIZE - 1, spectatorPosRef.current.x));
+          spectatorPosRef.current.y = Math.max(0, Math.min(WORLD_SIZE - 1, spectatorPosRef.current.y));
+        }
+
+        // Throttled display position update
+        if (now - lastDisplayUpdateTime > 100) {
+          lastDisplayUpdateTime = now;
+          const roundedX = Math.round(spectatorPosRef.current.x);
+          const roundedY = Math.round(spectatorPosRef.current.y);
+          setDisplayPos(prev =>
+            prev.x !== roundedX || prev.y !== roundedY
+              ? { x: roundedX, y: roundedY }
+              : prev
+          );
+        }
+
+        // Camera position in local space (relative to terrain center)
+        const tc = terrainCenterRef.current;
+        const localX = spectatorPosRef.current.x - tc.x;
+        const localZ = spectatorPosRef.current.y - tc.y;
+        const currentYaw = yawRef.current;
+
+        camera.position.set(localX, 1.5, localZ);
+        camera.lookAt(
+          localX - Math.sin(currentYaw) * 20,
+          1.5,
+          localZ - Math.cos(currentYaw) * 20
+        );
+
+        // Ground plane follows spectator to avoid seeing edges
+        ground.position.x = localX;
+        ground.position.z = localZ;
+
+        // Check if terrain needs rebuilding
+        const distFromCenter = Math.sqrt(
+          (spectatorPosRef.current.x - tc.x) ** 2 +
+          (spectatorPosRef.current.y - tc.y) ** 2
+        );
+
+        if (distFromCenter > 5 && !isFetchingTerrainRef.current && now - lastTerrainFetchRef.current > 500) {
+          lastTerrainFetchRef.current = now;
+          isFetchingTerrainRef.current = true;
+
+          const newCx = Math.round(spectatorPosRef.current.x);
+          const newCy = Math.round(spectatorPosRef.current.y);
+          terrainCenterRef.current = { x: newCx, y: newCy };
+
+          fetchTiles(newCx, newCy).then(tiles => {
+            buildTerrain(tiles, newCx, newCy);
+
+            // Reposition other agents relative to new center
+            otherAgentsRef.current.forEach((agentData, agentId) => {
+              const relX = agentData.worldX - newCx;
+              const relZ = agentData.worldY - newCy;
+              if (Math.abs(relX) > VIEW_RADIUS || Math.abs(relZ) > VIEW_RADIUS) {
+                agentGroupRef.current?.remove(agentData.mesh);
+                otherAgentsRef.current.delete(agentId);
+              } else {
+                agentData.target.set(relX, 0, relZ);
+                agentData.current.set(relX, 0, relZ);
+                agentData.mesh.position.set(relX, 0, relZ);
+              }
+            });
+
+            isFetchingTerrainRef.current = false;
+          });
+        }
+      } else {
+        // --- FOLLOW MODE (existing behavior) ---
+        const lerpFactor = 0.7;
+        currentPosRef.current.x += (targetPosRef.current.x - currentPosRef.current.x) * lerpFactor;
+        currentPosRef.current.y += (targetPosRef.current.y - currentPosRef.current.y) * lerpFactor;
+      }
+
+      // Interpolate other agents (both modes)
       otherAgentsRef.current.forEach((agentData) => {
-        agentData.current.lerp(agentData.target, lerpFactor);
+        agentData.current.lerp(agentData.target, 0.7);
         agentData.mesh.position.copy(agentData.current);
       });
 
@@ -569,20 +798,28 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
         container.removeChild(renderer.domElement);
       }
     };
-  }, [centerX, centerY, fetchTiles, buildTerrain, fetchWorldTiles]);
+  }, [centerX, centerY, isSpectator, fetchTiles, buildTerrain]);
 
   // Supabase Realtime subscription for instant position updates
   useEffect(() => {
     let isMounted = true;
 
+    // Get the reference position for relative calculations
+    const getCenter = () => {
+      if (isSpectator) {
+        return terrainCenterRef.current;
+      }
+      return targetPosRef.current;
+    };
+
     // Handler for agent position updates
     const handleAgentUpdate = async (payload: { new: { id: string; x: number; y: number; name: string } }) => {
       if (!isMounted) return;
-      
+
       const updatedAgent = payload.new;
-      
-      // Check if this is our selected agent
-      if (updatedAgent.id === selectedAgentId) {
+
+      // In follow mode, check if this is our selected agent
+      if (!isSpectator && updatedAgent.id === selectedAgentId) {
         const oldX = targetPosRef.current.x;
         const oldY = targetPosRef.current.y;
 
@@ -597,14 +834,13 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
           buildTerrain(tiles, updatedAgent.x, updatedAgent.y);
         }
       } else {
-        // Update other agent position
+        // Update other agent position (both modes)
         const agentGroup = agentGroupRef.current;
         if (!agentGroup) return;
 
-        const cx = targetPosRef.current.x;
-        const cy = targetPosRef.current.y;
-        const relX = updatedAgent.x - cx;
-        const relZ = updatedAgent.y - cy;
+        const center = getCenter();
+        const relX = updatedAgent.x - center.x;
+        const relZ = updatedAgent.y - center.y;
 
         // Only show nearby agents
         if (Math.abs(relX) > VIEW_RADIUS || Math.abs(relZ) > VIEW_RADIUS) {
@@ -621,12 +857,16 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
         if (existing) {
           // Update target position for smooth lerp
           existing.target.set(relX, 0, relZ);
+          existing.worldX = updatedAgent.x;
+          existing.worldY = updatedAgent.y;
         } else {
           // Create new agent mesh
           const mesh = createCrabMesh(COLORS.agentOther);
           mesh.position.set(relX, 0, relZ);
           agentGroup.add(mesh);
           otherAgentsRef.current.set(updatedAgent.id, {
+            worldX: updatedAgent.x,
+            worldY: updatedAgent.y,
             current: new THREE.Vector3(relX, 0, relZ),
             target: new THREE.Vector3(relX, 0, relZ),
             mesh
@@ -644,34 +884,38 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
         if (data.success && data.data.agents) {
           const allAgents: AgentPublic[] = data.data.agents;
 
-          // Find our agent
-          const ourAgent = allAgents.find(a => a.id === selectedAgentId);
-          if (ourAgent) {
-            targetPosRef.current.x = ourAgent.x;
-            targetPosRef.current.y = ourAgent.y;
-            setDisplayPos({ x: ourAgent.x, y: ourAgent.y });
-            
-            const tiles = await fetchTiles(ourAgent.x, ourAgent.y);
-            buildTerrain(tiles, ourAgent.x, ourAgent.y);
+          if (!isSpectator) {
+            // Find our agent (follow mode)
+            const ourAgent = allAgents.find(a => a.id === selectedAgentId);
+            if (ourAgent) {
+              targetPosRef.current.x = ourAgent.x;
+              targetPosRef.current.y = ourAgent.y;
+              setDisplayPos({ x: ourAgent.x, y: ourAgent.y });
+
+              const tiles = await fetchTiles(ourAgent.x, ourAgent.y);
+              buildTerrain(tiles, ourAgent.x, ourAgent.y);
+            }
           }
 
           // Populate other agents
           const agentGroup = agentGroupRef.current;
           if (agentGroup) {
-            const cx = targetPosRef.current.x;
-            const cy = targetPosRef.current.y;
+            const center = getCenter();
 
             allAgents.forEach(agent => {
-              if (agent.id === selectedAgentId) return;
+              // In follow mode, skip the selected agent. In spectator mode, show all.
+              if (!isSpectator && agent.id === selectedAgentId) return;
 
-              const relX = agent.x - cx;
-              const relZ = agent.y - cy;
+              const relX = agent.x - center.x;
+              const relZ = agent.y - center.y;
 
               if (Math.abs(relX) <= VIEW_RADIUS && Math.abs(relZ) <= VIEW_RADIUS) {
                 const mesh = createCrabMesh(COLORS.agentOther);
                 mesh.position.set(relX, 0, relZ);
                 agentGroup.add(mesh);
                 otherAgentsRef.current.set(agent.id, {
+                  worldX: agent.x,
+                  worldY: agent.y,
                   current: new THREE.Vector3(relX, 0, relZ),
                   target: new THREE.Vector3(relX, 0, relZ),
                   mesh
@@ -689,8 +933,12 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
     initialFetch();
 
     // Subscribe to realtime updates on agents_realtime table
+    const channelName = isSpectator
+      ? 'spectator-fpv-' + Math.random().toString(36).slice(2, 8)
+      : 'agent-fpv-' + selectedAgentId;
+
     const channel = supabase
-      .channel('agent-fpv-' + selectedAgentId)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -708,21 +956,68 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
       isMounted = false;
       supabase.removeChannel(channel);
     };
-  }, [selectedAgentId, fetchTiles, buildTerrain, createCrabMesh]);
+  }, [selectedAgentId, isSpectator, fetchTiles, buildTerrain, createCrabMesh]);
+
+  // Joystick touch handlers
+  const handleJoystickTouch = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const pad = joystickPadRef.current;
+    if (!pad) return;
+
+    const rect = pad.getBoundingClientRect();
+    const padCenterX = rect.width / 2;
+    const padCenterY = rect.height / 2;
+
+    const touch = e.touches[0];
+    const dx = touch.clientX - rect.left - padCenterX;
+    const dy = touch.clientY - rect.top - padCenterY;
+
+    const maxDist = rect.width / 2;
+    const dist = Math.min(Math.sqrt(dx * dx + dy * dy), maxDist);
+    const angle = Math.atan2(dy, dx);
+
+    const normX = (dist / maxDist) * Math.cos(angle);
+    const normY = (dist / maxDist) * Math.sin(angle);
+
+    setJoystickPos({ x: normX * maxDist * 0.6, y: normY * maxDist * 0.6 });
+    joystickInputRef.current = { x: normX, y: normY };
+    setJoystickActive(true);
+  }, []);
+
+  const handleJoystickEnd = useCallback(() => {
+    setJoystickPos({ x: 0, y: 0 });
+    joystickInputRef.current = { x: 0, y: 0 };
+    setJoystickActive(false);
+  }, []);
 
   return (
     <div className="relative w-full h-full min-h-[400px] rounded-lg overflow-hidden">
       {/* HUD */}
       <div className="absolute top-0 left-0 right-0 z-10 p-3 pointer-events-none">
         <div className="flex items-stretch gap-3">
-          <div className="pointer-events-auto bg-black/70 backdrop-blur-sm rounded-lg px-4 py-3">
-            <div className="text-white font-bold text-sm">{agentName || 'Agent'}</div>
-            <div className="text-white/70 text-xs mt-0.5">({displayPos.x}, {displayPos.y})</div>
-            <div className="text-green-400 text-xs mt-1 flex items-center gap-1">
-              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              Live
-            </div>
-            <div className="text-white/70 text-xs mt-1">Terrain: {currentTerrain.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</div>
+          <div className="pointer-events-auto bg-black/70 backdrop-blur-sm rounded-lg px-4 py-3" data-spectator-ui>
+            {isSpectator ? (
+              <>
+                <div className="text-white font-bold text-sm">Spectator</div>
+                <div className="text-white/70 text-xs mt-0.5">({displayPos.x}, {displayPos.y})</div>
+                <div className="text-blue-400 text-xs mt-1 flex items-center gap-1">
+                  <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+                  Free roam
+                </div>
+                <div className="text-white/70 text-xs mt-1">Terrain: {currentTerrain.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</div>
+              </>
+            ) : (
+              <>
+                <div className="text-white font-bold text-sm">{agentName || 'Agent'}</div>
+                <div className="text-white/70 text-xs mt-0.5">({displayPos.x}, {displayPos.y})</div>
+                <div className="text-green-400 text-xs mt-1 flex items-center gap-1">
+                  <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                  Live
+                </div>
+                <div className="text-white/70 text-xs mt-1">Terrain: {currentTerrain.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</div>
+              </>
+            )}
           </div>
 
           {/* Ad Placeholder */}
@@ -734,6 +1029,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
             <button
               onClick={onClose}
               className="pointer-events-auto px-4 py-2 bg-black/70 backdrop-blur-sm hover:bg-black/80 rounded-lg text-white font-medium transition-colors"
+              data-spectator-ui
             >
               Close
             </button>
@@ -741,22 +1037,34 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
         </div>
       </div>
 
+      {/* Controls hint (spectator mode, desktop) */}
+      {isSpectator && (
+        <div className="absolute top-16 left-3 z-10 pointer-events-none hidden md:block" data-spectator-ui>
+          <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-white/60 space-y-0.5">
+            <div className="text-white/80 font-semibold mb-1">Controls</div>
+            <div><span className="text-white/90 font-mono">W A S D</span> Move</div>
+            <div><span className="text-white/90 font-mono">← →</span> Rotate</div>
+            <div><span className="text-white/90 font-mono">Drag</span> Look around</div>
+          </div>
+        </div>
+      )}
+
       {/* Loading */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
           <div className="text-white text-center">
-            <div className="text-3xl mb-2">🦀</div>
-            <span>Entering world...</span>
+            <div className="text-3xl mb-2">{isSpectator ? '👁️' : '🦀'}</div>
+            <span>{isSpectator ? 'Entering spectator mode...' : 'Entering world...'}</span>
           </div>
         </div>
       )}
 
       {/* Canvas */}
-      <div ref={containerRef} className="w-full h-full" />
+      <div ref={containerRef} className={`w-full h-full ${isSpectator ? 'cursor-grab active:cursor-grabbing' : ''}`} />
 
-      {/* Bottom left - Agent's eye view label */}
+      {/* Bottom left - Mode label */}
       <div className="absolute bottom-3 left-3 z-10 bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-white/70">
-        Agent&apos;s eye view
+        {isSpectator ? 'Free exploration' : "Agent\u0027s eye view"}
       </div>
 
       {/* Bottom right - Minimap */}
@@ -769,10 +1077,44 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, onClose
         />
       </div>
 
-      {/* Bottom center - Crab indicator */}
-      <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 translate-y-1/4 z-10 pointer-events-none">
-        <CrabSprite animation="idle" scale={2.5} />
-      </div>
+      {/* Bottom center - Crab indicator (follow mode only) */}
+      {!isSpectator && (
+        <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 translate-y-1/4 z-10 pointer-events-none">
+          <CrabSprite animation="idle" scale={2.5} />
+        </div>
+      )}
+
+      {/* Virtual Joystick (spectator mode, mobile/touch) */}
+      {isSpectator && (
+        <div
+          ref={joystickPadRef}
+          className="absolute bottom-20 left-4 z-20 w-24 h-24 md:hidden rounded-full bg-white/10 border-2 border-white/30 touch-none select-none"
+          data-spectator-ui
+          onTouchStart={handleJoystickTouch}
+          onTouchMove={handleJoystickTouch}
+          onTouchEnd={handleJoystickEnd}
+          onTouchCancel={handleJoystickEnd}
+        >
+          {/* Inner stick */}
+          <div
+            className={`absolute w-10 h-10 rounded-full bg-white/40 pointer-events-none ${joystickActive ? '' : 'transition-transform duration-150'}`}
+            style={{
+              left: '50%',
+              top: '50%',
+              transform: `translate(calc(-50% + ${joystickPos.x}px), calc(-50% + ${joystickPos.y}px))`,
+            }}
+          />
+        </div>
+      )}
+
+      {/* Mobile rotate hint (spectator mode) */}
+      {isSpectator && (
+        <div className="absolute bottom-20 right-4 z-20 md:hidden" data-spectator-ui>
+          <div className="bg-black/50 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-white/50 text-center">
+            Drag to<br />look around
+          </div>
+        </div>
+      )}
     </div>
   );
 }
