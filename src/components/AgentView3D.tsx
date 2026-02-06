@@ -6,44 +6,60 @@ import { AgentPublic, Tile, TerrainType, WORLD_SIZE } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
 import { CrabSprite } from '@/components/CrabSprite';
 
-// Minecraft-style colors
+// ─── Color palette ───────────────────────────────────────────────────────────
 const COLORS = {
-  sky: 0x87CEEB,
+  sky: 0x7ec8e3,
+  skyHorizon: 0xc4e0f9,
   ground: 0x5a8f29,
-  // Mountain: 3 layers
-  mountainDark: 0x4a4a4a,
-  mountainMid: 0x6a6a6a,
+  groundDark: 0x4a7a22,
+  // Mountain
+  mountainDark: 0x5a5a5a,
+  mountainMid: 0x7a7a7a,
   mountainLight: 0x9a9a9a,
-  // Forest: 2 layers
-  treeTrunk: 0x8B4513,
-  treeLeaves: 0x1a5a1a,
+  mountainSnow: 0xf0f0f0,
+  // Forest
+  treeTrunk: 0x6b3a1f,
+  treeLeaves: 0x1e6b1e,
+  treeLeavesLight: 0x2d8a2d,
+  treeLeavesTop: 0x3da03d,
   // Water
-  water: 0x4169E1,
+  water: 0x3a8fd4,
+  waterFoam: 0x7ec8e3,
   // Market
-  marketBase: 0xFFD700,
-  marketRoof: 0xCC0000,
+  marketBase: 0xf5deb3,
+  marketRoof: 0xb84c3c,
+  marketDoor: 0x6b3a1f,
   // Agents
   agentSelf: 0xff4444,
   agentOther: 0xff8844,
-  // NEW TERRAIN TYPES
-  // Rocky/barren ground
-  rockyDark: 0x374151,
-  rockyMid: 0x4b5563,
-  rockyLight: 0x6b7280,
-  // Sand/beach
+  // Rocky
+  rockyDark: 0x4a4a4a,
+  rockyMid: 0x5a5a5a,
+  rockyLight: 0x7a7a7a,
+  // Sand
   sand: 0xe9c46a,
-  sandDark: 0xddb84d,
+  sandDark: 0xd4a843,
   // Deep water
-  deepWater: 0x1e3a5f,
-  deepWaterLight: 0x2d5f9a,
+  deepWater: 0x1a3a6a,
   // Marsh
-  marshWater: 0x457b9d,
+  marshWater: 0x4a7a6a,
   marshPlant: 0x2d6a4f,
+  // Buildings
+  storageWalls: 0xc4a06a,
+  storageRoof: 0x8b6914,
+  workshopWalls: 0x8a8a8a,
+  workshopRoof: 0x5a3a1a,
+  workshopChimney: 0x4a4a4a,
+  fortWalls: 0x6a6a7a,
+  fortTower: 0x5a5a6a,
+  // Ambient
+  sunColor: 0xfff5e6,
+  ambientColor: 0x6688bb,
 };
 
 const BLOCK_SIZE = 1;
 
-// Terrain colors for minimap (matching terrain-demo.html)
+// Terrain colors for minimap
 const TERRAIN_COLORS: Record<TerrainType, string> = {
   plains: '#90a955',
   forest: '#386641',
@@ -73,6 +89,16 @@ interface AgentView3DProps {
   onClose?: () => void;
 }
 
+// ─── Camera config ───────────────────────────────────────────────────────────
+const CAMERA_HEIGHT = 6;        // Height above agent
+const CAMERA_DISTANCE = 8;      // Distance behind agent
+const CAMERA_LOOK_AHEAD = 2;    // How far ahead of agent to look
+const CAMERA_FOV = 55;
+const CAMERA_NEAR = 0.1;
+const CAMERA_FAR = 120;
+const FOG_NEAR = 20;
+const FOG_FAR = 60;
+
 export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 'follow', onClose }: AgentView3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -80,8 +106,9 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const agentGroupRef = useRef<THREE.Group | null>(null);
   const terrainGroupRef = useRef<THREE.Group | null>(null);
+  const selfAgentRef = useRef<THREE.Group | null>(null);
 
-  // Position tracking for smooth interpolation (follow mode)
+  // Position tracking
   const currentPosRef = useRef({ x: centerX, y: centerY });
   const targetPosRef = useRef({ x: centerX, y: centerY });
   const otherAgentsRef = useRef<Map<string, OtherAgentData>>(new Map());
@@ -97,6 +124,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   const lastPointerRef = useRef({ x: 0, y: 0 });
   const joystickInputRef = useRef({ x: 0, y: 0 });
   const lastTimeRef = useRef(0);
+  const waterMeshesRef = useRef<THREE.Mesh[]>([]);
 
   // Joystick visual state
   const [joystickPos, setJoystickPos] = useState({ x: 0, y: 0 });
@@ -110,7 +138,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   const [worldTiles, setWorldTiles] = useState<Tile[]>([]);
   const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const VIEW_RADIUS = 12;
+  const VIEW_RADIUS = 16;
   const MINIMAP_SIZE = 120;
 
   const isSpectator = mode === 'spectator';
@@ -119,390 +147,647 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   useEffect(() => {
     if (!isSpectator) {
       const agent = agents.find(a => a.id === selectedAgentId);
-      if (agent) {
-        setAgentName(agent.name);
-      }
+      if (agent) setAgentName(agent.name);
     }
   }, [agents, selectedAgentId, isSpectator]);
 
-  // Create a simple crab mesh
+  // ─── Mesh Creators ───────────────────────────────────────────────────────────
+
   const createCrabMesh = useCallback((color: number) => {
     const group = new THREE.Group();
-    const material = new THREE.MeshBasicMaterial({ color });
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.1 });
 
-    // Body - flat wide box
+    // Body
     const bodyGeo = new THREE.BoxGeometry(0.5, 0.25, 0.4);
-    const body = new THREE.Mesh(bodyGeo, material);
+    const body = new THREE.Mesh(bodyGeo, mat);
     body.position.y = 0.2;
+    body.castShadow = true;
     group.add(body);
 
     // Eyes
-    const eyeGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const eyeGeo = new THREE.BoxGeometry(0.08, 0.1, 0.08);
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3 });
     const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-    leftEye.position.set(-0.12, 0.35, 0.15);
+    leftEye.position.set(-0.12, 0.38, 0.15);
     const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-    rightEye.position.set(0.12, 0.35, 0.15);
+    rightEye.position.set(0.12, 0.38, 0.15);
     group.add(leftEye, rightEye);
 
+    // Eye whites (small sphere)
+    const whiteGeo = new THREE.SphereGeometry(0.03, 6, 6);
+    const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+    const lw = new THREE.Mesh(whiteGeo, whiteMat);
+    lw.position.set(-0.12, 0.42, 0.19);
+    const rw = new THREE.Mesh(whiteGeo, whiteMat);
+    rw.position.set(0.12, 0.42, 0.19);
+    group.add(lw, rw);
+
     // Claws
-    const clawGeo = new THREE.BoxGeometry(0.2, 0.15, 0.15);
-    const leftClaw = new THREE.Mesh(clawGeo, material);
-    leftClaw.position.set(-0.4, 0.15, 0.1);
-    const rightClaw = new THREE.Mesh(clawGeo, material);
-    rightClaw.position.set(0.4, 0.15, 0.1);
+    const clawGeo = new THREE.BoxGeometry(0.2, 0.15, 0.18);
+    const leftClaw = new THREE.Mesh(clawGeo, mat);
+    leftClaw.position.set(-0.42, 0.18, 0.12);
+    leftClaw.castShadow = true;
+    const rightClaw = new THREE.Mesh(clawGeo, mat);
+    rightClaw.position.set(0.42, 0.18, 0.12);
+    rightClaw.castShadow = true;
     group.add(leftClaw, rightClaw);
 
-    return group;
-  }, []);
-
-  // Create mountain (cone with snow cap)
-  const createMountain = useCallback(() => {
-    const group = new THREE.Group();
-    const height = 2.5 + Math.random() * 0.5;
-    const baseRadius = 0.8;
-
-    // Main mountain body (cone)
-    const mountainGeo = new THREE.ConeGeometry(baseRadius, height * 0.85, 6);
-    const mountainMat = new THREE.MeshBasicMaterial({ color: COLORS.mountainMid });
-    const mountain = new THREE.Mesh(mountainGeo, mountainMat);
-    mountain.position.y = height * 0.425;
-    group.add(mountain);
-
-    // Snow cap (smaller cone on top)
-    const snowGeo = new THREE.ConeGeometry(baseRadius * 0.35, height * 0.25, 6);
-    const snowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const snow = new THREE.Mesh(snowGeo, snowMat);
-    snow.position.y = height * 0.75;
-    group.add(snow);
-
-    // Rocky base
-    const baseGeo = new THREE.CylinderGeometry(baseRadius * 1.1, baseRadius * 1.2, 0.3, 8);
-    const baseMat = new THREE.MeshBasicMaterial({ color: COLORS.mountainDark });
-    const base = new THREE.Mesh(baseGeo, baseMat);
-    base.position.y = 0.15;
-    group.add(base);
-
-    return group;
-  }, []);
-
-  // Create forest (pine tree with layered cone foliage)
-  const createTree = useCallback(() => {
-    const group = new THREE.Group();
-    const treeHeight = 1.2 + Math.random() * 0.4;
-    const trunkHeight = treeHeight * 0.35;
-
-    // Trunk (cylinder)
-    const trunkGeo = new THREE.CylinderGeometry(0.06, 0.1, trunkHeight, 8);
-    const trunkMat = new THREE.MeshBasicMaterial({ color: COLORS.treeTrunk });
-    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-    trunk.position.y = trunkHeight / 2;
-    group.add(trunk);
-
-    // Foliage layers (cones stacked like a pine tree)
-    const foliageColor = new THREE.MeshBasicMaterial({ color: COLORS.treeLeaves });
-    const layers = 3;
-    for (let i = 0; i < layers; i++) {
-      const layerRadius = 0.5 - (i * 0.12);
-      const layerHeight = 0.5 - (i * 0.1);
-      const foliageGeo = new THREE.ConeGeometry(layerRadius, layerHeight, 8);
-      const foliage = new THREE.Mesh(foliageGeo, foliageColor);
-      foliage.position.y = trunkHeight + (i * 0.25) + 0.2;
-      group.add(foliage);
+    // Legs (small cylinders)
+    const legGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.15, 4);
+    const legMat = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+    for (let i = 0; i < 3; i++) {
+      const ll = new THREE.Mesh(legGeo, legMat);
+      ll.position.set(-0.2, 0.08, -0.1 + i * 0.15);
+      ll.rotation.z = 0.4;
+      group.add(ll);
+      const rl = new THREE.Mesh(legGeo, legMat);
+      rl.position.set(0.2, 0.08, -0.1 + i * 0.15);
+      rl.rotation.z = -0.4;
+      group.add(rl);
     }
 
     return group;
   }, []);
 
-  // Create market (building with peaked roof, door, windows)
-  const createMarket = useCallback(() => {
+  const createMountain = useCallback((seed: number) => {
     const group = new THREE.Group();
-    const wallColor = 0xf5deb3; // Wheat/tan color
-    const roofColor = COLORS.marketRoof;
-    const doorColor = 0x8B4513;
-    const windowColor = 0x87CEEB;
+    const height = 2.2 + (seed % 30) * 0.04;
+    const baseRadius = 0.65 + (seed % 20) * 0.01;
 
-    // Main building walls
-    const wallGeo = new THREE.BoxGeometry(0.9, 0.8, 0.7);
-    const wallMat = new THREE.MeshBasicMaterial({ color: wallColor });
-    const walls = new THREE.Mesh(wallGeo, wallMat);
-    walls.position.y = 0.4;
-    group.add(walls);
+    // Main mountain body
+    const mountainGeo = new THREE.ConeGeometry(baseRadius, height * 0.85, 7);
+    const mountainMat = new THREE.MeshStandardMaterial({
+      color: COLORS.mountainMid,
+      roughness: 0.9,
+      metalness: 0.05,
+      flatShading: true,
+    });
+    const mountain = new THREE.Mesh(mountainGeo, mountainMat);
+    mountain.position.y = height * 0.425;
+    mountain.castShadow = true;
+    mountain.receiveShadow = true;
+    group.add(mountain);
 
-    // Peaked roof (using a cone rotated)
-    const roofHeight = 0.4;
-    const roofGeo = new THREE.ConeGeometry(0.7, roofHeight, 4);
-    roofGeo.rotateY(Math.PI / 4);
-    const roofMat = new THREE.MeshBasicMaterial({ color: roofColor });
-    const roof = new THREE.Mesh(roofGeo, roofMat);
-    roof.position.y = 0.8 + roofHeight / 2;
-    roof.scale.set(1, 1, 0.8);
-    group.add(roof);
+    // Snow cap
+    const snowGeo = new THREE.ConeGeometry(baseRadius * 0.3, height * 0.22, 7);
+    const snowMat = new THREE.MeshStandardMaterial({
+      color: COLORS.mountainSnow,
+      roughness: 0.4,
+      metalness: 0.0,
+    });
+    const snow = new THREE.Mesh(snowGeo, snowMat);
+    snow.position.y = height * 0.76;
+    group.add(snow);
 
-    // Door
-    const doorGeo = new THREE.BoxGeometry(0.2, 0.4, 0.05);
-    const doorMat = new THREE.MeshBasicMaterial({ color: doorColor });
-    const door = new THREE.Mesh(doorGeo, doorMat);
-    door.position.set(0, 0.2, 0.36);
-    group.add(door);
+    // Rocky base
+    const baseGeo = new THREE.CylinderGeometry(baseRadius * 1.05, baseRadius * 1.15, 0.25, 8);
+    const baseMat = new THREE.MeshStandardMaterial({
+      color: COLORS.mountainDark,
+      roughness: 0.95,
+      flatShading: true,
+    });
+    const base = new THREE.Mesh(baseGeo, baseMat);
+    base.position.y = 0.12;
+    base.receiveShadow = true;
+    group.add(base);
 
-    // Windows (2 on front)
-    const winGeo = new THREE.BoxGeometry(0.15, 0.15, 0.05);
-    const winMat = new THREE.MeshBasicMaterial({ color: windowColor });
-    const win1 = new THREE.Mesh(winGeo, winMat);
-    win1.position.set(-0.25, 0.5, 0.36);
-    const win2 = new THREE.Mesh(winGeo, winMat);
-    win2.position.set(0.25, 0.5, 0.36);
-    group.add(win1, win2);
-
-    // Market awning/sign
-    const awningGeo = new THREE.BoxGeometry(1.0, 0.05, 0.3);
-    const awningMat = new THREE.MeshBasicMaterial({ color: COLORS.marketBase });
-    const awning = new THREE.Mesh(awningGeo, awningMat);
-    awning.position.set(0, 0.7, 0.5);
-    awning.rotation.x = -0.2;
-    group.add(awning);
-
-    return group;
-  }, []);
-
-  // Create water (flat plane)
-  const createWater = useCallback(() => {
-    const water = new THREE.Mesh(
-      new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE),
-      new THREE.MeshBasicMaterial({ color: COLORS.water, transparent: true, opacity: 0.85 })
-    );
-    water.rotation.x = -Math.PI / 2;
-    water.position.y = 0.02;
-    return water;
-  }, []);
-
-  // Create rocky ground (organic scattered rocks)
-  const createRocky = useCallback(() => {
-    const group = new THREE.Group();
-    const rockColors = [COLORS.rockyDark, COLORS.rockyMid, COLORS.rockyLight];
-    const numRocks = 4 + Math.floor(Math.random() * 3);
-
-    for (let i = 0; i < numRocks; i++) {
-      const size = 0.1 + Math.random() * 0.2;
-      const rockGeo = new THREE.DodecahedronGeometry(size, 0);
-      const rockMat = new THREE.MeshBasicMaterial({ color: rockColors[Math.floor(Math.random() * 3)] });
+    // Add a couple small rocks around base
+    const rockGeo = new THREE.DodecahedronGeometry(0.12, 0);
+    const rockMat = new THREE.MeshStandardMaterial({ color: COLORS.mountainDark, roughness: 0.95, flatShading: true });
+    for (let i = 0; i < 2; i++) {
       const rock = new THREE.Mesh(rockGeo, rockMat);
-      rock.position.set(
-        (Math.random() - 0.5) * 0.6,
-        size * 0.7,
-        (Math.random() - 0.5) * 0.6
-      );
-      rock.rotation.set(Math.random(), Math.random(), Math.random());
+      const angle = (seed + i * 137) % 360 * Math.PI / 180;
+      rock.position.set(Math.cos(angle) * baseRadius * 0.9, 0.08, Math.sin(angle) * baseRadius * 0.9);
+      rock.rotation.set(seed * 0.1, seed * 0.2, 0);
+      rock.castShadow = true;
       group.add(rock);
     }
 
     return group;
   }, []);
 
-  // Create sand (flat with gentle dune mounds)
-  const createSand = useCallback(() => {
+  const createTree = useCallback((seed: number) => {
+    const group = new THREE.Group();
+    const treeHeight = 1.1 + (seed % 20) * 0.03;
+    const trunkHeight = treeHeight * 0.35;
+
+    // Trunk
+    const trunkGeo = new THREE.CylinderGeometry(0.05, 0.09, trunkHeight, 6);
+    const trunkMat = new THREE.MeshStandardMaterial({
+      color: COLORS.treeTrunk,
+      roughness: 0.9,
+    });
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.y = trunkHeight / 2;
+    trunk.castShadow = true;
+    group.add(trunk);
+
+    // Foliage layers (pine tree style)
+    const colors = [COLORS.treeLeaves, COLORS.treeLeavesLight, COLORS.treeLeavesTop];
+    const layers = 3;
+    for (let i = 0; i < layers; i++) {
+      const layerRadius = 0.45 - (i * 0.1);
+      const layerHeight = 0.45 - (i * 0.08);
+      const foliageGeo = new THREE.ConeGeometry(layerRadius, layerHeight, 7);
+      const foliageMat = new THREE.MeshStandardMaterial({
+        color: colors[i],
+        roughness: 0.8,
+        flatShading: true,
+      });
+      const foliage = new THREE.Mesh(foliageGeo, foliageMat);
+      foliage.position.y = trunkHeight + (i * 0.22) + 0.18;
+      foliage.castShadow = true;
+      foliage.receiveShadow = true;
+      group.add(foliage);
+    }
+
+    return group;
+  }, []);
+
+  const createMarket = useCallback((_seed: number) => {
     const group = new THREE.Group();
 
-    // Base sand plane
+    // Main building walls
+    const wallGeo = new THREE.BoxGeometry(0.85, 0.75, 0.65);
+    const wallMat = new THREE.MeshStandardMaterial({ color: COLORS.marketBase, roughness: 0.7 });
+    const walls = new THREE.Mesh(wallGeo, wallMat);
+    walls.position.y = 0.375;
+    walls.castShadow = true;
+    walls.receiveShadow = true;
+    group.add(walls);
+
+    // Peaked roof
+    const roofGeo = new THREE.ConeGeometry(0.65, 0.38, 4);
+    roofGeo.rotateY(Math.PI / 4);
+    const roofMat = new THREE.MeshStandardMaterial({ color: COLORS.marketRoof, roughness: 0.6 });
+    const roof = new THREE.Mesh(roofGeo, roofMat);
+    roof.position.y = 0.95;
+    roof.scale.set(1, 1, 0.78);
+    roof.castShadow = true;
+    group.add(roof);
+
+    // Door
+    const doorGeo = new THREE.BoxGeometry(0.18, 0.38, 0.04);
+    const doorMat = new THREE.MeshStandardMaterial({ color: COLORS.marketDoor, roughness: 0.8 });
+    const door = new THREE.Mesh(doorGeo, doorMat);
+    door.position.set(0, 0.19, 0.34);
+    group.add(door);
+
+    // Windows
+    const winGeo = new THREE.BoxGeometry(0.12, 0.12, 0.04);
+    const winMat = new THREE.MeshStandardMaterial({ color: 0xffe08a, roughness: 0.2, emissive: 0xffe08a, emissiveIntensity: 0.3 });
+    const win1 = new THREE.Mesh(winGeo, winMat);
+    win1.position.set(-0.24, 0.5, 0.34);
+    const win2 = new THREE.Mesh(winGeo, winMat);
+    win2.position.set(0.24, 0.5, 0.34);
+    group.add(win1, win2);
+
+    // Market sign/awning
+    const awningGeo = new THREE.BoxGeometry(0.95, 0.04, 0.28);
+    const awningMat = new THREE.MeshStandardMaterial({ color: 0xc83232, roughness: 0.5 });
+    const awning = new THREE.Mesh(awningGeo, awningMat);
+    awning.position.set(0, 0.68, 0.48);
+    awning.rotation.x = -0.15;
+    awning.castShadow = true;
+    group.add(awning);
+
+    return group;
+  }, []);
+
+  const createWater = useCallback(() => {
+    const geo = new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE);
+    const mat = new THREE.MeshStandardMaterial({
+      color: COLORS.water,
+      transparent: true,
+      opacity: 0.8,
+      roughness: 0.1,
+      metalness: 0.3,
+    });
+    const water = new THREE.Mesh(geo, mat);
+    water.rotation.x = -Math.PI / 2;
+    water.position.y = -0.05;
+    water.receiveShadow = true;
+    return water;
+  }, []);
+
+  const createRocky = useCallback((seed: number) => {
+    const group = new THREE.Group();
+    const rockColors = [COLORS.rockyDark, COLORS.rockyMid, COLORS.rockyLight];
+    const numRocks = 3 + (seed % 3);
+
+    for (let i = 0; i < numRocks; i++) {
+      const size = 0.08 + ((seed + i * 17) % 20) * 0.01;
+      const rockGeo = new THREE.DodecahedronGeometry(size, 0);
+      const rockMat = new THREE.MeshStandardMaterial({
+        color: rockColors[(seed + i) % 3],
+        roughness: 0.95,
+        flatShading: true,
+      });
+      const rock = new THREE.Mesh(rockGeo, rockMat);
+      const angle = ((seed + i * 97) % 360) * Math.PI / 180;
+      const dist = 0.1 + ((seed + i * 31) % 20) * 0.015;
+      rock.position.set(Math.cos(angle) * dist, size * 0.6, Math.sin(angle) * dist);
+      rock.rotation.set(seed * 0.1 + i, seed * 0.2 + i * 0.5, 0);
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      group.add(rock);
+    }
+
+    return group;
+  }, []);
+
+  const createSand = useCallback((seed: number) => {
+    const group = new THREE.Group();
+
     const sandBase = new THREE.Mesh(
       new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE),
-      new THREE.MeshBasicMaterial({ color: COLORS.sand })
+      new THREE.MeshStandardMaterial({ color: COLORS.sand, roughness: 0.9 })
     );
     sandBase.rotation.x = -Math.PI / 2;
     sandBase.position.y = 0.01;
+    sandBase.receiveShadow = true;
     group.add(sandBase);
 
-    // Small dune mound (half sphere)
-    const duneGeo = new THREE.SphereGeometry(0.2, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
-    const duneMat = new THREE.MeshBasicMaterial({ color: COLORS.sandDark });
+    // Dune mound
+    const duneGeo = new THREE.SphereGeometry(0.18, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+    const duneMat = new THREE.MeshStandardMaterial({ color: COLORS.sandDark, roughness: 0.95 });
     const dune = new THREE.Mesh(duneGeo, duneMat);
-    dune.position.set(0.2, 0, 0.1);
-    dune.scale.set(1.5, 0.5, 1);
+    const angle = (seed * 47 % 360) * Math.PI / 180;
+    dune.position.set(Math.cos(angle) * 0.2, 0, Math.sin(angle) * 0.15);
+    dune.scale.set(1.5, 0.4, 1);
+    dune.receiveShadow = true;
     group.add(dune);
 
     return group;
   }, []);
 
-  // Create deep water (darker, deeper plane)
   const createDeepWater = useCallback(() => {
     const dw = new THREE.Mesh(
       new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE),
-      new THREE.MeshBasicMaterial({ color: COLORS.deepWater, transparent: true, opacity: 0.9 })
+      new THREE.MeshStandardMaterial({
+        color: COLORS.deepWater,
+        transparent: true,
+        opacity: 0.88,
+        roughness: 0.05,
+        metalness: 0.4,
+      })
     );
     dw.rotation.x = -Math.PI / 2;
-    dw.position.y = -0.05;
+    dw.position.y = -0.1;
+    dw.receiveShadow = true;
     return dw;
   }, []);
 
-  // Create marsh (shallow water with cattails/reeds)
-  const createMarsh = useCallback(() => {
+  const createMarsh = useCallback((seed: number) => {
     const group = new THREE.Group();
 
-    // Shallow murky water plane
     const mw = new THREE.Mesh(
       new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE),
-      new THREE.MeshBasicMaterial({ color: COLORS.marshWater, transparent: true, opacity: 0.75 })
+      new THREE.MeshStandardMaterial({ color: COLORS.marshWater, transparent: true, opacity: 0.7, roughness: 0.2, metalness: 0.1 })
     );
     mw.rotation.x = -Math.PI / 2;
-    mw.position.y = 0.02;
+    mw.position.y = 0.01;
+    mw.receiveShadow = true;
     group.add(mw);
 
-    // Cattails/reeds (cylinder stalks with oval tops)
-    const numReeds = 3 + Math.floor(Math.random() * 3);
+    // Cattails
+    const numReeds = 2 + (seed % 3);
     for (let i = 0; i < numReeds; i++) {
       const reedGroup = new THREE.Group();
-
-      // Stalk (thin cylinder)
-      const stalkGeo = new THREE.CylinderGeometry(0.015, 0.02, 0.5, 6);
-      const stalkMat = new THREE.MeshBasicMaterial({ color: 0x556b2f });
+      const stalkGeo = new THREE.CylinderGeometry(0.012, 0.018, 0.45, 5);
+      const stalkMat = new THREE.MeshStandardMaterial({ color: 0x556b2f, roughness: 0.8 });
       const stalk = new THREE.Mesh(stalkGeo, stalkMat);
-      stalk.position.y = 0.25;
+      stalk.position.y = 0.22;
+      stalk.castShadow = true;
       reedGroup.add(stalk);
 
-      // Cattail top (brown cylinder)
-      const topGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.12, 8);
-      const topMat = new THREE.MeshBasicMaterial({ color: 0x654321 });
+      const topGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.1, 6);
+      const topMat = new THREE.MeshStandardMaterial({ color: 0x654321, roughness: 0.9 });
       const top = new THREE.Mesh(topGeo, topMat);
-      top.position.y = 0.45;
+      top.position.y = 0.42;
       reedGroup.add(top);
 
-      reedGroup.position.set(
-        (Math.random() - 0.5) * 0.6,
-        0,
-        (Math.random() - 0.5) * 0.6
-      );
-      reedGroup.rotation.z = (Math.random() - 0.5) * 0.2;
+      const angle = ((seed + i * 120) % 360) * Math.PI / 180;
+      const dist = 0.1 + ((seed + i * 43) % 15) * 0.02;
+      reedGroup.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
+      reedGroup.rotation.z = ((seed + i) % 10 - 5) * 0.02;
       group.add(reedGroup);
     }
 
     return group;
   }, []);
 
-  // Fetch tiles
+  // ─── Building Creators ────────────────────────────────────────────────────────
+
+  const createStorageBuilding = useCallback((_seed: number) => {
+    const group = new THREE.Group();
+
+    // Main warehouse body
+    const wallGeo = new THREE.BoxGeometry(0.8, 0.6, 0.7);
+    const wallMat = new THREE.MeshStandardMaterial({ color: COLORS.storageWalls, roughness: 0.75 });
+    const walls = new THREE.Mesh(wallGeo, wallMat);
+    walls.position.y = 0.3;
+    walls.castShadow = true;
+    walls.receiveShadow = true;
+    group.add(walls);
+
+    // Sloped roof (box stretched)
+    const roofGeo = new THREE.BoxGeometry(0.9, 0.08, 0.8);
+    const roofMat = new THREE.MeshStandardMaterial({ color: COLORS.storageRoof, roughness: 0.6 });
+    const roof = new THREE.Mesh(roofGeo, roofMat);
+    roof.position.y = 0.64;
+    roof.castShadow = true;
+    group.add(roof);
+
+    // Ridge line
+    const ridgeGeo = new THREE.BoxGeometry(0.92, 0.06, 0.15);
+    const ridge = new THREE.Mesh(ridgeGeo, roofMat);
+    ridge.position.y = 0.7;
+    group.add(ridge);
+
+    // Large door
+    const doorGeo = new THREE.BoxGeometry(0.35, 0.45, 0.04);
+    const doorMat = new THREE.MeshStandardMaterial({ color: 0x5a3a1a, roughness: 0.8 });
+    const door = new THREE.Mesh(doorGeo, doorMat);
+    door.position.set(0, 0.22, 0.36);
+    group.add(door);
+
+    // Crate decorations on sides
+    const crateGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+    const crateMat = new THREE.MeshStandardMaterial({ color: 0x8a6a3a, roughness: 0.85 });
+    const crate1 = new THREE.Mesh(crateGeo, crateMat);
+    crate1.position.set(0.5, 0.08, 0.15);
+    crate1.castShadow = true;
+    group.add(crate1);
+    const crate2 = new THREE.Mesh(crateGeo, crateMat);
+    crate2.position.set(0.5, 0.08, -0.1);
+    crate2.rotation.y = 0.3;
+    crate2.castShadow = true;
+    group.add(crate2);
+
+    return group;
+  }, []);
+
+  const createWorkshopBuilding = useCallback((_seed: number) => {
+    const group = new THREE.Group();
+
+    // Main structure
+    const wallGeo = new THREE.BoxGeometry(0.75, 0.7, 0.65);
+    const wallMat = new THREE.MeshStandardMaterial({ color: COLORS.workshopWalls, roughness: 0.8 });
+    const walls = new THREE.Mesh(wallGeo, wallMat);
+    walls.position.y = 0.35;
+    walls.castShadow = true;
+    walls.receiveShadow = true;
+    group.add(walls);
+
+    // Peaked roof
+    const roofGeo = new THREE.ConeGeometry(0.58, 0.35, 4);
+    roofGeo.rotateY(Math.PI / 4);
+    const roofMat = new THREE.MeshStandardMaterial({ color: COLORS.workshopRoof, roughness: 0.7 });
+    const roof = new THREE.Mesh(roofGeo, roofMat);
+    roof.position.y = 0.88;
+    roof.scale.set(1, 1, 0.82);
+    roof.castShadow = true;
+    group.add(roof);
+
+    // Chimney
+    const chimneyGeo = new THREE.BoxGeometry(0.12, 0.4, 0.12);
+    const chimneyMat = new THREE.MeshStandardMaterial({ color: COLORS.workshopChimney, roughness: 0.9 });
+    const chimney = new THREE.Mesh(chimneyGeo, chimneyMat);
+    chimney.position.set(0.2, 0.95, -0.15);
+    chimney.castShadow = true;
+    group.add(chimney);
+
+    // Anvil (small box + cylinder)
+    const anvilGeo = new THREE.BoxGeometry(0.18, 0.1, 0.1);
+    const anvilMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.3, metalness: 0.7 });
+    const anvil = new THREE.Mesh(anvilGeo, anvilMat);
+    anvil.position.set(-0.5, 0.05, 0.25);
+    anvil.castShadow = true;
+    group.add(anvil);
+
+    // Forge glow (emissive window)
+    const glowGeo = new THREE.BoxGeometry(0.12, 0.12, 0.04);
+    const glowMat = new THREE.MeshStandardMaterial({
+      color: 0xff6622,
+      emissive: 0xff4400,
+      emissiveIntensity: 0.6,
+      roughness: 0.3,
+    });
+    const glow = new THREE.Mesh(glowGeo, glowMat);
+    glow.position.set(0, 0.35, 0.34);
+    group.add(glow);
+
+    return group;
+  }, []);
+
+  const createFortificationBuilding = useCallback((_seed: number) => {
+    const group = new THREE.Group();
+
+    // Base wall (wide, low)
+    const wallGeo = new THREE.BoxGeometry(0.9, 0.5, 0.9);
+    const wallMat = new THREE.MeshStandardMaterial({ color: COLORS.fortWalls, roughness: 0.85, flatShading: true });
+    const walls = new THREE.Mesh(wallGeo, wallMat);
+    walls.position.y = 0.25;
+    walls.castShadow = true;
+    walls.receiveShadow = true;
+    group.add(walls);
+
+    // Battlements (crenellations)
+    const bGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+    const bMat = new THREE.MeshStandardMaterial({ color: COLORS.fortWalls, roughness: 0.85, flatShading: true });
+    const positions = [
+      [-0.35, 0.58, -0.35], [0, 0.58, -0.35], [0.35, 0.58, -0.35],
+      [-0.35, 0.58, 0.35], [0, 0.58, 0.35], [0.35, 0.58, 0.35],
+      [-0.35, 0.58, 0], [0.35, 0.58, 0],
+    ];
+    positions.forEach(([px, py, pz]) => {
+      const b = new THREE.Mesh(bGeo, bMat);
+      b.position.set(px, py, pz);
+      b.castShadow = true;
+      group.add(b);
+    });
+
+    // Corner tower
+    const towerGeo = new THREE.CylinderGeometry(0.12, 0.14, 0.85, 6);
+    const towerMat = new THREE.MeshStandardMaterial({ color: COLORS.fortTower, roughness: 0.8, flatShading: true });
+    const tower = new THREE.Mesh(towerGeo, towerMat);
+    tower.position.set(0.4, 0.42, 0.4);
+    tower.castShadow = true;
+    group.add(tower);
+
+    // Tower cap
+    const capGeo = new THREE.ConeGeometry(0.16, 0.2, 6);
+    const capMat = new THREE.MeshStandardMaterial({ color: COLORS.marketRoof, roughness: 0.6 });
+    const cap = new THREE.Mesh(capGeo, capMat);
+    cap.position.set(0.4, 0.92, 0.4);
+    group.add(cap);
+
+    // Gate
+    const gateGeo = new THREE.BoxGeometry(0.22, 0.35, 0.06);
+    const gateMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 0.8 });
+    const gate = new THREE.Mesh(gateGeo, gateMat);
+    gate.position.set(0, 0.17, 0.46);
+    group.add(gate);
+
+    return group;
+  }, []);
+
+  // ─── Fetch tiles ──────────────────────────────────────────────────────────────
+
   const fetchTiles = useCallback(async (cx: number, cy: number) => {
     try {
       const response = await fetch(`/api/world/tiles?x=${cx}&y=${cy}&radius=${VIEW_RADIUS}`);
       const data = await response.json();
-      if (data.success) {
-        return data.data.tiles as Tile[];
-      }
+      if (data.success) return data.data.tiles as Tile[];
     } catch (error) {
       console.error('Failed to fetch tiles:', error);
     }
     return [];
   }, []);
 
-  // Fetch all tiles for minimap (larger radius)
   const fetchWorldTiles = useCallback(async () => {
     try {
-      // Fetch entire world with sampling for performance
       const response = await fetch(`/api/world/tiles?x=${WORLD_SIZE / 2}&y=${WORLD_SIZE / 2}&radius=${WORLD_SIZE / 2}&sample=5`);
       const data = await response.json();
-      if (data.success) {
-        setWorldTiles(data.data.tiles as Tile[]);
-      }
+      if (data.success) setWorldTiles(data.data.tiles as Tile[]);
     } catch (error) {
       console.error('Failed to fetch world tiles:', error);
     }
   }, []);
 
-  // Fetch world tiles for minimap on mount
-  useEffect(() => {
-    fetchWorldTiles();
-  }, [fetchWorldTiles]);
+  useEffect(() => { fetchWorldTiles(); }, [fetchWorldTiles]);
 
-  // Build terrain from tiles
+  // ─── Build terrain from tiles ─────────────────────────────────────────────────
+
   const buildTerrain = useCallback((tiles: Tile[], cx: number, cy: number) => {
     const terrainGroup = terrainGroupRef.current;
     if (!terrainGroup) return;
 
     // Clear existing terrain
     while (terrainGroup.children.length > 0) {
-      const child = terrainGroup.children[0];
-      terrainGroup.remove(child);
+      terrainGroup.remove(terrainGroup.children[0]);
     }
+    waterMeshesRef.current = [];
 
-    // Find current tile to update terrain display
+    // Find current tile
     const currentTile = tiles.find(t => t.x === Math.floor(cx) && t.y === Math.floor(cy));
-    if (currentTile) {
-      setCurrentTerrain(currentTile.terrain);
-    }
+    if (currentTile) setCurrentTerrain(currentTile.terrain);
 
     tiles.forEach((tile) => {
       const x = tile.x - cx;
       const z = tile.y - cy;
-
-      // Add some variety based on position
       const seed = (tile.x * 7 + tile.y * 13) % 100;
       const offsetX = (seed % 10 - 5) * 0.02;
       const offsetZ = ((seed * 3) % 10 - 5) * 0.02;
+
+      // Ground tile for every terrain type
+      const groundGeo = new THREE.PlaneGeometry(BLOCK_SIZE * 1.01, BLOCK_SIZE * 1.01);
+      const groundColor = tile.terrain === 'plains' ? (seed % 2 === 0 ? COLORS.ground : COLORS.groundDark) : COLORS.ground;
+      const groundMat = new THREE.MeshStandardMaterial({ color: groundColor, roughness: 0.9 });
+      const groundTile = new THREE.Mesh(groundGeo, groundMat);
+      groundTile.rotation.x = -Math.PI / 2;
+      groundTile.position.set(x, 0, z);
+      groundTile.receiveShadow = true;
+      terrainGroup.add(groundTile);
+
+      // Territory owner indicator (subtle border highlight)
+      if (tile.owner_id) {
+        const borderGeo = new THREE.PlaneGeometry(BLOCK_SIZE * 0.95, BLOCK_SIZE * 0.95);
+        const borderMat = new THREE.MeshStandardMaterial({
+          color: 0x44ff44,
+          transparent: true,
+          opacity: 0.12,
+          roughness: 0.5,
+        });
+        const border = new THREE.Mesh(borderGeo, borderMat);
+        border.rotation.x = -Math.PI / 2;
+        border.position.set(x, 0.005, z);
+        terrainGroup.add(border);
+      }
 
       let obj: THREE.Object3D | null = null;
 
       switch (tile.terrain) {
         case 'mountain':
-          obj = createMountain();
+          obj = createMountain(seed);
           break;
         case 'forest':
-          obj = createTree();
+          obj = createTree(seed);
           break;
         case 'market':
-          obj = createMarket();
+          obj = createMarket(seed);
           break;
         case 'water':
           obj = createWater();
+          if (obj instanceof THREE.Mesh) waterMeshesRef.current.push(obj);
           break;
-        // NEW TERRAIN TYPES
         case 'rocky':
-          obj = createRocky();
+          obj = createRocky(seed);
           break;
         case 'sand':
-          obj = createSand();
+          obj = createSand(seed);
           break;
         case 'deep_water':
           obj = createDeepWater();
+          if (obj instanceof THREE.Mesh) waterMeshesRef.current.push(obj);
           break;
         case 'marsh':
-          obj = createMarsh();
+          obj = createMarsh(seed);
           break;
-        // Plains: no object, just ground
       }
 
       if (obj) {
         obj.position.set(x + offsetX, 0, z + offsetZ);
         terrainGroup.add(obj);
       }
-    });
-  }, [createMountain, createTree, createMarket, createWater, createRocky, createSand, createDeepWater, createMarsh]);
 
-  // Update minimap canvas
+      // Render building on this tile
+      if (tile.building_type) {
+        let building: THREE.Object3D | null = null;
+        switch (tile.building_type) {
+          case 'storage':
+            building = createStorageBuilding(seed);
+            break;
+          case 'workshop':
+            building = createWorkshopBuilding(seed);
+            break;
+          case 'fortification':
+            building = createFortificationBuilding(seed);
+            break;
+        }
+        if (building) {
+          building.position.set(x, 0, z);
+          terrainGroup.add(building);
+        }
+      }
+    });
+  }, [createMountain, createTree, createMarket, createWater, createRocky, createSand, createDeepWater, createMarsh, createStorageBuilding, createWorkshopBuilding, createFortificationBuilding]);
+
+  // ─── Update minimap ───────────────────────────────────────────────────────────
+
   const updateMinimap = useCallback(() => {
     const canvas = minimapCanvasRef.current;
     if (!canvas || worldTiles.length === 0) return;
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const scale = MINIMAP_SIZE / WORLD_SIZE;
 
-    // Clear canvas
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
 
-    // Draw terrain tiles
     worldTiles.forEach(tile => {
       ctx.fillStyle = TERRAIN_COLORS[tile.terrain] || '#555';
       ctx.fillRect(tile.x * scale, tile.y * scale, Math.ceil(scale), Math.ceil(scale));
     });
 
-    // Draw position marker (red dot)
+    // Position marker
     ctx.fillStyle = '#ff4444';
     ctx.beginPath();
     ctx.arc(displayPos.x * scale, displayPos.y * scale, 3, 0, Math.PI * 2);
     ctx.fill();
 
-    // In spectator mode, draw a direction indicator
     if (isSpectator) {
       const yaw = yawRef.current;
       const markerLen = 6;
@@ -518,15 +803,12 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     }
   }, [worldTiles, displayPos, isSpectator]);
 
-  // Update minimap when position or tiles change
-  useEffect(() => {
-    updateMinimap();
-  }, [updateMinimap]);
+  useEffect(() => { updateMinimap(); }, [updateMinimap]);
 
-  // Keyboard event listeners (spectator mode)
+  // ─── Keyboard events (spectator mode) ─────────────────────────────────────────
+
   useEffect(() => {
     if (!isSpectator) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
@@ -534,18 +816,10 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         keysRef.current[key] = true;
       }
     };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      keysRef.current[e.key.toLowerCase()] = false;
-    };
-
+    const handleKeyUp = (e: KeyboardEvent) => { keysRef.current[e.key.toLowerCase()] = false; };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
+    return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
   }, [isSpectator]);
 
   // Pointer drag for camera rotation (spectator mode)
@@ -555,28 +829,22 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     if (!container) return;
 
     const handlePointerDown = (e: PointerEvent) => {
-      // Don't capture if touching the joystick or UI overlays
       const target = e.target as HTMLElement;
       if (target.closest('[data-spectator-ui]')) return;
       isDraggingRef.current = true;
       lastPointerRef.current = { x: e.clientX, y: e.clientY };
     };
-
     const handlePointerMove = (e: PointerEvent) => {
       if (!isDraggingRef.current) return;
       const dx = e.clientX - lastPointerRef.current.x;
       yawRef.current += dx * 0.005;
       lastPointerRef.current = { x: e.clientX, y: e.clientY };
     };
-
-    const handlePointerUp = () => {
-      isDraggingRef.current = false;
-    };
+    const handlePointerUp = () => { isDraggingRef.current = false; };
 
     container.addEventListener('pointerdown', handlePointerDown);
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
-
     return () => {
       container.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('pointermove', handlePointerMove);
@@ -584,10 +852,10 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     };
   }, [isSpectator]);
 
-  // Main scene setup
+  // ─── Main scene setup ─────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!containerRef.current) return;
-
     const container = containerRef.current;
     const width = container.clientWidth;
     const height = container.clientHeight;
@@ -595,33 +863,60 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     // Scene
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(COLORS.sky);
-    scene.fog = new THREE.Fog(COLORS.sky, 8, 25);
+    scene.fog = new THREE.Fog(COLORS.sky, FOG_NEAR, FOG_FAR);
     sceneRef.current = scene;
 
-    // Camera
-    const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 100);
-    if (isSpectator) {
-      camera.position.set(0, 1.5, 0);
-      camera.lookAt(0, 1.5, -20);
-    } else {
-      camera.position.set(0, 0.8, 3); // At crab eye level, close behind
-      camera.lookAt(0, 0.8, -20); // Look at horizon (same Y = level view)
-    }
+    // Camera - elevated third-person view
+    const camera = new THREE.PerspectiveCamera(CAMERA_FOV, width / height, CAMERA_NEAR, CAMERA_FAR);
+    camera.position.set(0, CAMERA_HEIGHT, CAMERA_DISTANCE);
+    camera.lookAt(0, 0, -CAMERA_LOOK_AHEAD);
     cameraRef.current = camera;
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    // Renderer with shadows
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Ground plane
-    const groundGeo = new THREE.PlaneGeometry(100, 100);
-    const groundMat = new THREE.MeshBasicMaterial({ color: COLORS.ground });
+    // ─── Lighting ─────────────────────────────────────────────────────────────
+
+    // Hemisphere light (sky + ground bounce)
+    const hemiLight = new THREE.HemisphereLight(0x88bbff, 0x445522, 0.5);
+    scene.add(hemiLight);
+
+    // Ambient light (fill)
+    const ambientLight = new THREE.AmbientLight(COLORS.ambientColor, 0.3);
+    scene.add(ambientLight);
+
+    // Directional light (sun) with shadows
+    const sunLight = new THREE.DirectionalLight(COLORS.sunColor, 1.2);
+    sunLight.position.set(15, 20, 10);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 0.5;
+    sunLight.shadow.camera.far = 60;
+    sunLight.shadow.camera.left = -20;
+    sunLight.shadow.camera.right = 20;
+    sunLight.shadow.camera.top = 20;
+    sunLight.shadow.camera.bottom = -20;
+    sunLight.shadow.bias = -0.001;
+    scene.add(sunLight);
+    scene.add(sunLight.target);
+
+    // ─── Ground plane ─────────────────────────────────────────────────────────
+
+    const groundGeo = new THREE.PlaneGeometry(120, 120);
+    const groundMat = new THREE.MeshStandardMaterial({ color: COLORS.ground, roughness: 0.9 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = 0;
+    ground.position.y = -0.01;
+    ground.receiveShadow = true;
     scene.add(ground);
 
     // Terrain group
@@ -634,100 +929,105 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     agentGroupRef.current = agentGroup;
     scene.add(agentGroup);
 
+    // Create self agent mesh (for follow mode)
+    if (!isSpectator) {
+      const selfAgent = createCrabMesh(COLORS.agentSelf);
+      selfAgent.position.set(0, 0, 0);
+      agentGroup.add(selfAgent);
+      selfAgentRef.current = selfAgent;
+    }
+
     // Initial load
     fetchTiles(centerX, centerY).then(tiles => {
       buildTerrain(tiles, centerX, centerY);
       setLoading(false);
     });
 
-    // Initialize time ref
     lastTimeRef.current = performance.now();
 
-    // Animation loop
+    // ─── Animation loop ─────────────────────────────────────────────────────────
+
     let animationId: number;
     let lastDisplayUpdateTime = 0;
+    let elapsedTime = 0;
 
     const animate = () => {
       animationId = requestAnimationFrame(animate);
-
       const now = performance.now();
       const dt = Math.min((now - lastTimeRef.current) / 1000, 0.1);
       lastTimeRef.current = now;
+      elapsedTime += dt;
+
+      // Animate water
+      waterMeshesRef.current.forEach(mesh => {
+        mesh.position.y = -0.05 + Math.sin(elapsedTime * 1.5 + mesh.position.x * 2) * 0.015;
+      });
 
       if (isSpectator) {
-        // --- SPECTATOR MODE ---
-        const MOVE_SPEED = 5; // tiles per second
-        const ROTATE_SPEED = 2; // radians per second
+        // ── SPECTATOR MODE ──────────────────────────────────────────────────
+        const MOVE_SPEED = 5;
+        const ROTATE_SPEED = 2;
         const yaw = yawRef.current;
         const keys = keysRef.current;
         const joystick = joystickInputRef.current;
 
-        // Calculate direction vectors
         const forwardX = -Math.sin(yaw);
         const forwardZ = -Math.cos(yaw);
         const rightX = Math.cos(yaw);
         const rightZ = -Math.sin(yaw);
 
         let moveX = 0, moveZ = 0;
-
-        // WASD movement
         if (keys['w'] || keys['arrowup']) { moveX += forwardX; moveZ += forwardZ; }
         if (keys['s'] || keys['arrowdown']) { moveX -= forwardX; moveZ -= forwardZ; }
         if (keys['a']) { moveX -= rightX; moveZ -= rightZ; }
         if (keys['d']) { moveX += rightX; moveZ += rightZ; }
-
-        // Arrow keys left/right for rotation
         if (keys['arrowleft']) yawRef.current += ROTATE_SPEED * dt;
         if (keys['arrowright']) yawRef.current -= ROTATE_SPEED * dt;
 
-        // Joystick input (mobile)
         if (joystick.x !== 0 || joystick.y !== 0) {
           moveX += forwardX * (-joystick.y) + rightX * joystick.x;
           moveZ += forwardZ * (-joystick.y) + rightZ * joystick.x;
         }
 
-        // Apply movement
         const mag = Math.sqrt(moveX * moveX + moveZ * moveZ);
         if (mag > 0) {
           const speed = MOVE_SPEED * dt;
           spectatorPosRef.current.x += (moveX / mag) * speed;
           spectatorPosRef.current.y += (moveZ / mag) * speed;
-
-          // Clamp to world bounds
           spectatorPosRef.current.x = Math.max(0, Math.min(WORLD_SIZE - 1, spectatorPosRef.current.x));
           spectatorPosRef.current.y = Math.max(0, Math.min(WORLD_SIZE - 1, spectatorPosRef.current.y));
         }
 
-        // Throttled display position update
         if (now - lastDisplayUpdateTime > 100) {
           lastDisplayUpdateTime = now;
           const roundedX = Math.round(spectatorPosRef.current.x);
           const roundedY = Math.round(spectatorPosRef.current.y);
-          setDisplayPos(prev =>
-            prev.x !== roundedX || prev.y !== roundedY
-              ? { x: roundedX, y: roundedY }
-              : prev
-          );
+          setDisplayPos(prev => prev.x !== roundedX || prev.y !== roundedY ? { x: roundedX, y: roundedY } : prev);
         }
 
-        // Camera position in local space (relative to terrain center)
         const tc = terrainCenterRef.current;
         const localX = spectatorPosRef.current.x - tc.x;
         const localZ = spectatorPosRef.current.y - tc.y;
         const currentYaw = yawRef.current;
 
-        camera.position.set(localX, 1.5, localZ);
+        // Third-person camera for spectator: elevated, looking down
+        const camOffsetX = Math.sin(currentYaw) * CAMERA_DISTANCE;
+        const camOffsetZ = Math.cos(currentYaw) * CAMERA_DISTANCE;
+        camera.position.set(localX + camOffsetX, CAMERA_HEIGHT, localZ + camOffsetZ);
         camera.lookAt(
-          localX - Math.sin(currentYaw) * 20,
-          1.5,
-          localZ - Math.cos(currentYaw) * 20
+          localX - Math.sin(currentYaw) * CAMERA_LOOK_AHEAD,
+          0,
+          localZ - Math.cos(currentYaw) * CAMERA_LOOK_AHEAD
         );
 
-        // Ground plane follows spectator to avoid seeing edges
+        // Sun follows camera
+        sunLight.position.set(localX + 15, 20, localZ + 10);
+        sunLight.target.position.set(localX, 0, localZ);
+
         ground.position.x = localX;
         ground.position.z = localZ;
 
-        // Check if terrain needs rebuilding
+        // Terrain rebuild check
         const distFromCenter = Math.sqrt(
           (spectatorPosRef.current.x - tc.x) ** 2 +
           (spectatorPosRef.current.y - tc.y) ** 2
@@ -736,15 +1036,12 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         if (distFromCenter > 5 && !isFetchingTerrainRef.current && now - lastTerrainFetchRef.current > 500) {
           lastTerrainFetchRef.current = now;
           isFetchingTerrainRef.current = true;
-
           const newCx = Math.round(spectatorPosRef.current.x);
           const newCy = Math.round(spectatorPosRef.current.y);
           terrainCenterRef.current = { x: newCx, y: newCy };
 
           fetchTiles(newCx, newCy).then(tiles => {
             buildTerrain(tiles, newCx, newCy);
-
-            // Reposition other agents relative to new center
             otherAgentsRef.current.forEach((agentData, agentId) => {
               const relX = agentData.worldX - newCx;
               const relZ = agentData.worldY - newCy;
@@ -757,28 +1054,39 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
                 agentData.mesh.position.set(relX, 0, relZ);
               }
             });
-
             isFetchingTerrainRef.current = false;
           });
         }
       } else {
-        // --- FOLLOW MODE (existing behavior) ---
-        const lerpFactor = 0.7;
+        // ── FOLLOW MODE ─────────────────────────────────────────────────────
+        const lerpFactor = 0.07; // Smooth camera follow
         currentPosRef.current.x += (targetPosRef.current.x - currentPosRef.current.x) * lerpFactor;
         currentPosRef.current.y += (targetPosRef.current.y - currentPosRef.current.y) * lerpFactor;
+
+        // Camera behind and above the agent
+        camera.position.set(0, CAMERA_HEIGHT, CAMERA_DISTANCE);
+        camera.lookAt(0, 0.3, -CAMERA_LOOK_AHEAD);
+
+        // Keep sun tracking
+        sunLight.position.set(15, 20, 10);
+        sunLight.target.position.set(0, 0, 0);
       }
 
-      // Interpolate other agents (both modes)
+      // Interpolate other agents
       otherAgentsRef.current.forEach((agentData) => {
-        agentData.current.lerp(agentData.target, 0.7);
+        agentData.current.lerp(agentData.target, 0.1);
         agentData.mesh.position.copy(agentData.current);
       });
+
+      // Gentle bob for self agent
+      if (selfAgentRef.current) {
+        selfAgentRef.current.position.y = Math.sin(elapsedTime * 2) * 0.02;
+      }
 
       renderer.render(scene, camera);
     };
     animate();
 
-    // Handle resize
     const handleResize = () => {
       if (!container || !camera || !renderer) return;
       const w = container.clientWidth;
@@ -789,52 +1097,37 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     };
     window.addEventListener('resize', handleResize);
 
-    // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationId);
       renderer.dispose();
-      if (container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement);
-      }
+      if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
     };
-  }, [centerX, centerY, isSpectator, fetchTiles, buildTerrain]);
+  }, [centerX, centerY, isSpectator, fetchTiles, buildTerrain, createCrabMesh]);
 
-  // Supabase Realtime subscription for instant position updates
+  // ─── Supabase Realtime subscription ────────────────────────────────────────────
+
   useEffect(() => {
     let isMounted = true;
 
-    // Get the reference position for relative calculations
-    const getCenter = () => {
-      if (isSpectator) {
-        return terrainCenterRef.current;
-      }
-      return targetPosRef.current;
-    };
+    const getCenter = () => isSpectator ? terrainCenterRef.current : targetPosRef.current;
 
-    // Handler for agent position updates
     const handleAgentUpdate = async (payload: { new: { id: string; x: number; y: number; name: string } }) => {
       if (!isMounted) return;
-
       const updatedAgent = payload.new;
 
-      // In follow mode, check if this is our selected agent
       if (!isSpectator && updatedAgent.id === selectedAgentId) {
         const oldX = targetPosRef.current.x;
         const oldY = targetPosRef.current.y;
-
-        // Update target position instantly
         targetPosRef.current.x = updatedAgent.x;
         targetPosRef.current.y = updatedAgent.y;
         setDisplayPos({ x: updatedAgent.x, y: updatedAgent.y });
 
-        // If position changed, refetch terrain
         if (Math.abs(updatedAgent.x - oldX) > 0 || Math.abs(updatedAgent.y - oldY) > 0) {
           const tiles = await fetchTiles(updatedAgent.x, updatedAgent.y);
           buildTerrain(tiles, updatedAgent.x, updatedAgent.y);
         }
       } else {
-        // Update other agent position (both modes)
         const agentGroup = agentGroupRef.current;
         if (!agentGroup) return;
 
@@ -842,9 +1135,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         const relX = updatedAgent.x - center.x;
         const relZ = updatedAgent.y - center.y;
 
-        // Only show nearby agents
         if (Math.abs(relX) > VIEW_RADIUS || Math.abs(relZ) > VIEW_RADIUS) {
-          // Remove if now out of range
           const existing = otherAgentsRef.current.get(updatedAgent.id);
           if (existing) {
             agentGroup.remove(existing.mesh);
@@ -855,12 +1146,10 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
         const existing = otherAgentsRef.current.get(updatedAgent.id);
         if (existing) {
-          // Update target position for smooth lerp
           existing.target.set(relX, 0, relZ);
           existing.worldX = updatedAgent.x;
           existing.worldY = updatedAgent.y;
         } else {
-          // Create new agent mesh
           const mesh = createCrabMesh(COLORS.agentOther);
           mesh.position.set(relX, 0, relZ);
           agentGroup.add(mesh);
@@ -875,40 +1164,31 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
       }
     };
 
-    // Initial fetch to populate state
     const initialFetch = async () => {
       try {
         const response = await fetch('/api/world/status');
         const data = await response.json();
-
         if (data.success && data.data.agents) {
           const allAgents: AgentPublic[] = data.data.agents;
 
           if (!isSpectator) {
-            // Find our agent (follow mode)
             const ourAgent = allAgents.find(a => a.id === selectedAgentId);
             if (ourAgent) {
               targetPosRef.current.x = ourAgent.x;
               targetPosRef.current.y = ourAgent.y;
               setDisplayPos({ x: ourAgent.x, y: ourAgent.y });
-
               const tiles = await fetchTiles(ourAgent.x, ourAgent.y);
               buildTerrain(tiles, ourAgent.x, ourAgent.y);
             }
           }
 
-          // Populate other agents
           const agentGroup = agentGroupRef.current;
           if (agentGroup) {
             const center = getCenter();
-
             allAgents.forEach(agent => {
-              // In follow mode, skip the selected agent. In spectator mode, show all.
               if (!isSpectator && agent.id === selectedAgentId) return;
-
               const relX = agent.x - center.x;
               const relZ = agent.y - center.y;
-
               if (Math.abs(relX) <= VIEW_RADIUS && Math.abs(relZ) <= VIEW_RADIUS) {
                 const mesh = createCrabMesh(COLORS.agentOther);
                 mesh.position.set(relX, 0, relZ);
@@ -929,10 +1209,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
       }
     };
 
-    // Do initial fetch
     initialFetch();
 
-    // Subscribe to realtime updates on agents_realtime table
     const channelName = isSpectator
       ? 'spectator-fpv-' + Math.random().toString(36).slice(2, 8)
       : 'agent-fpv-' + selectedAgentId;
@@ -941,11 +1219,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
       .channel(channelName)
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'agents_realtime',
-        },
+        { event: 'UPDATE', schema: 'public', table: 'agents_realtime' },
         (payload) => {
           handleAgentUpdate(payload as unknown as { new: { id: string; x: number; y: number; name: string } });
         }
@@ -958,28 +1232,24 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     };
   }, [selectedAgentId, isSpectator, fetchTiles, buildTerrain, createCrabMesh]);
 
-  // Joystick touch handlers
+  // ─── Joystick handlers ────────────────────────────────────────────────────────
+
   const handleJoystickTouch = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const pad = joystickPadRef.current;
     if (!pad) return;
-
     const rect = pad.getBoundingClientRect();
     const padCenterX = rect.width / 2;
     const padCenterY = rect.height / 2;
-
     const touch = e.touches[0];
     const dx = touch.clientX - rect.left - padCenterX;
     const dy = touch.clientY - rect.top - padCenterY;
-
     const maxDist = rect.width / 2;
     const dist = Math.min(Math.sqrt(dx * dx + dy * dy), maxDist);
     const angle = Math.atan2(dy, dx);
-
     const normX = (dist / maxDist) * Math.cos(angle);
     const normY = (dist / maxDist) * Math.sin(angle);
-
     setJoystickPos({ x: normX * maxDist * 0.6, y: normY * maxDist * 0.6 });
     joystickInputRef.current = { x: normX, y: normY };
     setJoystickActive(true);
@@ -990,6 +1260,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     joystickInputRef.current = { x: 0, y: 0 };
     setJoystickActive(false);
   }, []);
+
+  // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="relative w-full h-full min-h-[400px] rounded-lg overflow-hidden">
@@ -1095,7 +1367,6 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           onTouchEnd={handleJoystickEnd}
           onTouchCancel={handleJoystickEnd}
         >
-          {/* Inner stick */}
           <div
             className={`absolute w-10 h-10 rounded-full bg-white/40 pointer-events-none ${joystickActive ? '' : 'transition-transform duration-150'}`}
             style={{

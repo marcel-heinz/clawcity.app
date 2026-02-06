@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Standard path for small-radius requests or no sampling
-    let query = supabase.from('tiles').select('x, y, terrain, owner_id');
+    let query = supabase.from('tiles').select('x, y, terrain, owner_id, building_type');
 
     // Filter by area if coordinates provided
     if (x !== null && y !== null) {
@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
         .gte('y', centerY - radius)
         .lte('y', centerY + radius);
     }
-    
+
     // Increase limit for larger requests
     const maxTiles = (radius * 2 + 1) * (radius * 2 + 1);
     query = query.limit(Math.min(maxTiles, 50000));
