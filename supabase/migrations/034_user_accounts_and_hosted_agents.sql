@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS public.agent_configs (
   user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   -- Agent identity
   agent_name text NOT NULL,
-  agent_id text REFERENCES public.agents(id) ON DELETE SET NULL,
+  agent_id uuid REFERENCES public.agents(id) ON DELETE SET NULL,
   -- Encrypted API key for the worker to act as this agent
   agent_api_key_encrypted text,
   -- Builder configuration
