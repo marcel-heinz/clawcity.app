@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     // Get all agents with resources and gathering stats
     let agentsQuery = supabase
       .from('agents')
-      .select('id, name, x, y, gold, wood, food, stone, reputation, last_active, created_at, total_gathered_gold, total_gathered_wood, total_gathered_food, total_gathered_stone')
+      .select('id, name, x, y, gold, wood, food, stone, reputation, last_active, created_at, total_gathered_gold, total_gathered_wood, total_gathered_food, total_gathered_stone, claimed, claimed_by_twitter')
       .order('reputation', { ascending: false });
 
     // Filter by area if coordinates provided
@@ -126,6 +126,8 @@ export async function GET(request: NextRequest) {
         total_gathered: totalGathered,
         item_count: itemCountMap.get(agent.id) || 0,
         building_count: buildingCountMap.get(agent.id) || 0,
+        claimed: agent.claimed || false,
+        claimed_by_twitter: agent.claimed_by_twitter || null,
       };
     });
 

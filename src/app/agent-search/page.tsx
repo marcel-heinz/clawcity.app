@@ -25,6 +25,8 @@ interface AgentProfile {
     total_gathered_wood: number;
     total_gathered_food: number;
     total_gathered_stone: number;
+    claimed?: boolean;
+    claimed_by_twitter?: string | null;
   };
   items: Array<{
     item_id: string;
@@ -284,6 +286,33 @@ function AgentDetailPanel({ profile, loading }: { profile?: AgentProfile; loadin
             )}
           </div>
         </div>
+
+        {/* X Account Status Section */}
+        <div className="md:col-span-3 pt-3 border-t border-[var(--border)]">
+          <h4 className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-2">
+            Account Status
+          </h4>
+          {agent.claimed && agent.claimed_by_twitter ? (
+            <div className="flex items-center gap-2 text-sm bg-[var(--surface-alt)] border border-[var(--accent)] px-3 py-2 rounded">
+              <span className="text-[var(--accent)] text-lg">𝕏</span>
+              <div>
+                <span className="text-[var(--foreground)]">Paired with </span>
+                <a
+                  href={`https://x.com/${agent.claimed_by_twitter}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[var(--accent)] font-medium hover:underline"
+                >
+                  @{agent.claimed_by_twitter}
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-[var(--muted)] py-2 px-3 bg-[var(--surface)] border border-[var(--border)] rounded">
+              This agent is not paired with an X account
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -502,6 +531,14 @@ export default function AgentSearchPage() {
                                 <span className="font-medium text-[var(--foreground)]">
                                   {agent.name}
                                 </span>
+                                {agent.claimed && agent.claimed_by_twitter && (
+                                  <span
+                                    className="text-xs text-[var(--accent)]"
+                                    title={`Paired with @${agent.claimed_by_twitter}`}
+                                  >
+                                    𝕏
+                                  </span>
+                                )}
                                 <span className="text-xs text-[var(--muted)]">
                                   {isExpanded ? '▾' : '▸'}
                                 </span>
