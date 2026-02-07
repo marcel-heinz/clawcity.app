@@ -4,24 +4,31 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState, useRef, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '@/components/AuthProvider';
 
 export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAboutDropdownOpen, setIsAboutDropdownOpen] = useState(false);
   const [isMobileAboutOpen, setIsMobileAboutOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const { user, loading, signOut } = useAuth();
 
   // Hide navbar on admin dashboard pages (it has its own navigation)
   if (pathname?.startsWith('/mrclhnz-dashboard')) {
     return null;
   }
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsAboutDropdownOpen(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -145,6 +152,85 @@ export function Navbar() {
                 {link.label}
               </Link>
             ))}
+
+            {/* Auth: Sign In or User Menu */}
+            {!loading && (
+              user ? (
+                <div className="relative ml-2" ref={userMenuRef}>
+                  <button
+                    onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                    className="flex items-center gap-2 px-3 py-1.5 border-2 border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-alt)] transition-colors"
+                  >
+                    {user.user_metadata?.avatar_url ? (
+                      <Image
+                        src={user.user_metadata.avatar_url}
+                        alt=""
+                        width={24}
+                        height={24}
+                        className="rounded-full"
+                      />
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-[var(--accent)] flex items-center justify-center text-white text-xs font-bold">
+                        {(user.email?.[0] || '?').toUpperCase()}
+                      </div>
+                    )}
+                    <svg
+                      className={`w-3 h-3 transition-transform ${isUserMenuOpen ? 'rotate-180' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {isUserMenuOpen && (
+                    <div className="absolute top-full right-0 mt-1 w-48 bg-[var(--surface)] border-3 border-[var(--foreground)] shadow-[4px_4px_0_var(--foreground)] z-50">
+                      <div className="px-4 py-2 border-b border-[var(--border)] text-xs text-[var(--muted)] truncate">
+                        {user.email}
+                      </div>
+                      <Link
+                        href="/builder"
+                        onClick={() => setIsUserMenuOpen(false)}
+                        className="block px-4 py-2.5 text-sm font-medium hover:bg-[var(--surface-alt)] text-[var(--foreground)]"
+                      >
+                        Agent Builder
+                      </Link>
+                      <Link
+                        href="/dashboard"
+                        onClick={() => setIsUserMenuOpen(false)}
+                        className="block px-4 py-2.5 text-sm font-medium hover:bg-[var(--surface-alt)] text-[var(--foreground)]"
+                      >
+                        Dashboard
+                      </Link>
+                      <Link
+                        href="/pricing"
+                        onClick={() => setIsUserMenuOpen(false)}
+                        className="block px-4 py-2.5 text-sm font-medium hover:bg-[var(--surface-alt)] text-[var(--foreground)] border-b border-[var(--border)]"
+                      >
+                        Pricing
+                      </Link>
+                      <button
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          signOut();
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-[var(--red-light)] text-[var(--red)]"
+                      >
+                        Sign Out
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Link
+                  href="/auth/login"
+                  className="ml-2 px-4 py-2 text-sm font-semibold bg-[var(--accent)] text-white border-2 border-[var(--foreground)] shadow-[3px_3px_0_var(--foreground)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_var(--foreground)] transition-all"
+                >
+                  Sign In
+                </Link>
+              )
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -239,6 +325,47 @@ export function Navbar() {
                   {link.label}
                 </Link>
               ))}
+
+              {/* Mobile Auth */}
+              <div className="mt-2 pt-2 border-t-2 border-[var(--border)]">
+                {!loading && (
+                  user ? (
+                    <>
+                      <Link
+                        href="/builder"
+                        onClick={() => setIsMenuOpen(false)}
+                        className="block px-4 py-3 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--surface-alt)]"
+                      >
+                        Agent Builder
+                      </Link>
+                      <Link
+                        href="/dashboard"
+                        onClick={() => setIsMenuOpen(false)}
+                        className="block px-4 py-3 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--surface-alt)]"
+                      >
+                        Dashboard
+                      </Link>
+                      <button
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          signOut();
+                        }}
+                        className="w-full text-left px-4 py-3 text-sm font-medium text-[var(--red)] hover:bg-[var(--red-light)]"
+                      >
+                        Sign Out ({user.email})
+                      </button>
+                    </>
+                  ) : (
+                    <Link
+                      href="/auth/login"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="block px-4 py-3 text-sm font-semibold text-[var(--accent)]"
+                    >
+                      Sign In
+                    </Link>
+                  )
+                )}
+              </div>
             </div>
           </div>
         )}

@@ -495,3 +495,71 @@ body {
   animation: crab-float 2s ease-in-out infinite;
   animation-delay: var(--float-delay, 0s);
 }
+
+/* ============================================
+   BUILDER / ONBOARDING COMPONENTS
+   ============================================ */
+
+/* Pixel-style input */
+.pixel-input {
+  background: var(--surface-alt);
+  border: 3px solid var(--border);
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--foreground);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.pixel-input:focus {
+  border-color: var(--accent);
+}
+
+.pixel-input::placeholder {
+  color: var(--muted);
+}
+
+/* Pixel-style range slider */
+.pixel-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 12px;
+  background: var(--surface-alt);
+  border: 2px solid var(--border);
+  outline: none;
+  cursor: pointer;
+}
+
+.pixel-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  background: var(--slider-color, var(--accent));
+  border: 3px solid var(--foreground);
+  cursor: pointer;
+}
+
+.pixel-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  background: var(--slider-color, var(--accent));
+  border: 3px solid var(--foreground);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+/* Progress bar track */
+.pixel-progress-track {
+  height: 12px;
+  background: var(--surface-alt);
+  border: 2px solid var(--border);
+  overflow: hidden;
+}
+
+.pixel-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}

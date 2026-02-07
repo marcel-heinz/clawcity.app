@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { JetBrains_Mono, Press_Start_2P } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { Navbar } from "@/components/Navbar";
+import { AuthProvider } from "@/components/AuthProvider";
 import "./globals.css";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -88,8 +89,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${jetbrainsMono.variable} ${pressStart2P.variable} antialiased min-h-screen`}>
-        <Navbar />
-        {children}
+        <AuthProvider>
+          <Navbar />
+          {children}
+        </AuthProvider>
         <Analytics />
       </body>
     </html>
