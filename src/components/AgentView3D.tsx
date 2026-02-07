@@ -677,6 +677,9 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     const offsetX = (seed % 10 - 5) * 0.02;
     const offsetZ = ((seed * 3) % 10 - 5) * 0.02;
 
+    // Store world coordinates for repositioning when center shifts
+    tileGroup.userData.worldX = tile.x;
+    tileGroup.userData.worldY = tile.y;
     // Position group at world position (will be offset by terrainGroup.position)
     tileGroup.position.set(tile.x - worldOffsetX, 0, tile.y - worldOffsetZ);
 
@@ -767,21 +770,24 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
             }
           });
         }
-      } else {
-        // Already loaded - update position relative to new center
-        const existingGroup = loadedTilesRef.current.get(key)!;
-        existingGroup.position.set(tile.x - cx, 0, tile.y - cy);
       }
     });
 
-    // Remove tiles outside UNLOAD_RADIUS (hysteresis: load at VIEW_RADIUS, unload at UNLOAD_RADIUS)
+    // Reposition ALL loaded tiles relative to new center (not just those in current response)
+    // This fixes the bug where tiles between VIEW_RADIUS and UNLOAD_RADIUS
+    // kept stale positions when the center shifted
     const keysToRemove: string[] = [];
     loadedTilesRef.current.forEach((group, key) => {
-      const [tx, ty] = key.split(',').map(Number);
-      if (Math.abs(tx - cx) > UNLOAD_RADIUS || Math.abs(ty - cy) > UNLOAD_RADIUS) {
+      const wx = group.userData.worldX as number;
+      const wy = group.userData.worldY as number;
+      // Remove tiles outside UNLOAD_RADIUS (hysteresis: load at VIEW_RADIUS, unload at UNLOAD_RADIUS)
+      if (Math.abs(wx - cx) > UNLOAD_RADIUS || Math.abs(wy - cy) > UNLOAD_RADIUS) {
         terrainGroup.remove(group);
         keysToRemove.push(key);
         loadedWaterRef.current.delete(key);
+      } else {
+        // Reposition relative to new center
+        group.position.set(wx - cx, 0, wy - cy);
       }
     });
     keysToRemove.forEach(k => loadedTilesRef.current.delete(k));
@@ -1326,44 +1332,45 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
   return (
     <div className="relative w-full h-full min-h-[400px] rounded-lg overflow-hidden">
-      {/* HUD */}
-      <div className="absolute top-0 left-0 right-0 z-10 p-3 pointer-events-none">
-        <div className="flex items-stretch gap-3">
-          <div className="pointer-events-auto bg-black/70 backdrop-blur-sm rounded-lg px-4 py-3" data-spectator-ui>
-            {isSpectator ? (
-              <>
-                <div className="text-white font-bold text-sm">Spectator</div>
-                <div className="text-white/70 text-xs mt-0.5">({displayPos.x}, {displayPos.y})</div>
-                <div className="text-blue-400 text-xs mt-1 flex items-center gap-1">
-                  <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
-                  Free roam
-                </div>
-                <div className="text-white/70 text-xs mt-1">Terrain: {currentTerrain.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</div>
-              </>
-            ) : (
-              <>
-                <div className="text-white font-bold text-sm">{agentName || 'Agent'}</div>
-                <div className="text-white/70 text-xs mt-0.5">({displayPos.x}, {displayPos.y})</div>
-                <div className="text-green-400 text-xs mt-1 flex items-center gap-1">
-                  <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                  Live
-                </div>
-                <div className="text-white/70 text-xs mt-1">Terrain: {currentTerrain.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</div>
-              </>
-            )}
-          </div>
-
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="pointer-events-auto px-4 py-2 bg-black/70 backdrop-blur-sm hover:bg-black/80 rounded-lg text-white font-medium transition-colors"
-              data-spectator-ui
-            >
-              Close
-            </button>
+      {/* HUD - info panel top-left */}
+      <div className="absolute top-3 left-3 z-10 pointer-events-none">
+        <div className="pointer-events-auto bg-black/70 backdrop-blur-sm rounded-lg px-4 py-3" data-spectator-ui>
+          {isSpectator ? (
+            <>
+              <div className="text-white font-bold text-sm">Spectator</div>
+              <div className="text-white/70 text-xs mt-0.5">({displayPos.x}, {displayPos.y})</div>
+              <div className="text-blue-400 text-xs mt-1 flex items-center gap-1">
+                <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+                Free roam
+              </div>
+              <div className="text-white/70 text-xs mt-1">Terrain: {currentTerrain.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</div>
+            </>
+          ) : (
+            <>
+              <div className="text-white font-bold text-sm">{agentName || 'Agent'}</div>
+              <div className="text-white/70 text-xs mt-0.5">({displayPos.x}, {displayPos.y})</div>
+              <div className="text-green-400 text-xs mt-1 flex items-center gap-1">
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                Live
+              </div>
+              <div className="text-white/70 text-xs mt-1">Terrain: {currentTerrain.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</div>
+            </>
           )}
         </div>
       </div>
+
+      {/* Close button - top right, compact */}
+      {onClose && (
+        <div className="absolute top-3 right-3 z-10">
+          <button
+            onClick={onClose}
+            className="pointer-events-auto w-8 h-8 bg-black/60 backdrop-blur-sm hover:bg-black/80 rounded-full text-white/80 hover:text-white text-sm font-bold transition-colors flex items-center justify-center"
+            data-spectator-ui
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Controls hint (spectator mode, desktop) */}
       {isSpectator && (
@@ -1434,9 +1441,9 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         </div>
       )}
 
-      {/* Mobile rotate buttons (spectator mode) - top right, compact */}
+      {/* Mobile rotate buttons (spectator mode) - right above minimap */}
       {isSpectator && (
-        <div className="absolute top-[70px] right-3 z-20 md:hidden flex flex-col gap-2" data-spectator-ui>
+        <div className="absolute right-3 z-20 md:hidden flex gap-2" data-spectator-ui style={{ bottom: `${MINIMAP_SIZE + 24}px` }}>
           <button
             className="w-10 h-10 rounded-full bg-black/50 border border-white/25 flex items-center justify-center text-white/60 text-lg active:bg-white/20 select-none touch-none"
             onTouchStart={() => { mobileRotateRef.current = 1; }}
