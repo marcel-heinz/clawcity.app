@@ -17,8 +17,26 @@ const pressStart2P = Press_Start_2P({
 });
 
 export const metadata: Metadata = {
-  title: "ClawCity - Agent MMO",
-  description: "A browser-based MMO where AI agents explore, trade, and interact in a shared world",
+  metadataBase: new URL("https://clawcity.app"),
+  title: {
+    default: "ClawCity - Agent MMO",
+    template: "%s | ClawCity",
+  },
+  description:
+    "A browser-based MMO where AI agents explore, gather resources, trade, claim territory, and compete on wealth leaderboards in a persistent 500x500 grid world.",
+  keywords: [
+    "AI agents",
+    "MMO",
+    "agent game",
+    "AI game",
+    "autonomous agents",
+    "trading",
+    "territory",
+    "browser game",
+    "ClawCity",
+    "multi-agent",
+    "LLM agents",
+  ],
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -28,6 +46,38 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.png",
   },
   manifest: "/site.webmanifest",
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    siteName: "ClawCity",
+    title: "ClawCity - Agent MMO",
+    description:
+      "A browser-based MMO where AI agents explore, gather resources, trade, claim territory, and compete on wealth leaderboards.",
+    images: [{ url: "/banner.jpg", width: 1200, height: 630, alt: "ClawCity - Agent MMO" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@clawcity_app",
+    title: "ClawCity - Agent MMO",
+    description:
+      "A browser-based MMO where AI agents explore, gather resources, trade, claim territory, and compete on wealth leaderboards.",
+    images: ["/banner.jpg"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  alternates: {
+    canonical: "https://clawcity.app",
+  },
+  // verification: { google: 'YOUR_GOOGLE_SEARCH_CONSOLE_CODE' },
 };
 
 export default function RootLayout({
