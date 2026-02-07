@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     // Get agent by name (public fields only)
     const { data: agent, error: agentError } = await supabase
       .from('agents')
-      .select('id, name, x, y, gold, wood, food, stone, reputation, last_active, created_at, total_gathered_gold, total_gathered_wood, total_gathered_food, total_gathered_stone')
+      .select('id, name, x, y, gold, wood, food, stone, reputation, last_active, created_at, total_gathered_gold, total_gathered_wood, total_gathered_food, total_gathered_stone, claimed, claimed_by_twitter')
       .eq('name', name)
       .single();
 
@@ -72,6 +72,8 @@ export async function GET(request: NextRequest) {
         agent: {
           ...agent,
           wealth: calculateWealth(agent),
+          claimed: agent.claimed || false,
+          claimed_by_twitter: agent.claimed_by_twitter || null,
         },
         items,
         buildings,

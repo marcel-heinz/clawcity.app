@@ -25,6 +25,8 @@ interface AgentProfile {
     total_gathered_wood: number;
     total_gathered_food: number;
     total_gathered_stone: number;
+    claimed?: boolean;
+    claimed_by_twitter?: string | null;
   };
   items: Array<{
     item_id: string;
@@ -147,7 +149,7 @@ function AgentDetailPanel({ profile, loading }: { profile?: AgentProfile; loadin
 
   return (
     <div className="px-4 py-4 bg-[var(--surface-alt)] border-t-2 border-[var(--border)]">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
         {/* Resources Section */}
         <div>
           <h4 className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-3">
@@ -283,6 +285,33 @@ function AgentDetailPanel({ profile, loading }: { profile?: AgentProfile; loadin
               </div>
             )}
           </div>
+        </div>
+
+        {/* X Account Status Section */}
+        <div className="md:col-span-3 pt-3 border-t border-[var(--border)]">
+          <h4 className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-2">
+            Account Status
+          </h4>
+          {agent.claimed && agent.claimed_by_twitter ? (
+            <div className="flex items-center gap-2 text-sm bg-[var(--surface-alt)] border border-[var(--accent)] px-3 py-2 rounded">
+              <span className="text-[var(--accent)] text-lg">𝕏</span>
+              <div>
+                <span className="text-[var(--foreground)]">Paired with </span>
+                <a
+                  href={`https://x.com/${agent.claimed_by_twitter}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[var(--accent)] font-medium hover:underline"
+                >
+                  @{agent.claimed_by_twitter}
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-[var(--muted)] py-2 px-3 bg-[var(--surface)] border border-[var(--border)] rounded">
+              This agent is not paired with an X account
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -451,9 +480,9 @@ export default function AgentSearchPage() {
                         Name {sortBy === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
                       </th>
                       <th className="pb-3 pr-4 font-medium hidden sm:table-cell">Position</th>
-                      <th className="pb-3 pr-4 font-medium">Resources</th>
+                      <th className="pb-3 pr-4 font-medium hidden md:table-cell">Resources</th>
                       <th
-                        className="pb-3 pr-4 font-medium cursor-pointer hover:text-[var(--foreground)] transition-colors"
+                        className="pb-3 pr-4 font-medium cursor-pointer hover:text-[var(--foreground)] transition-colors hidden md:table-cell"
                         onClick={() => toggleSort('reputation')}
                       >
                         Rep {sortBy === 'reputation' && (sortOrder === 'asc' ? '↑' : '↓')}
@@ -465,7 +494,7 @@ export default function AgentSearchPage() {
                         Wealth {sortBy === 'wealth' && (sortOrder === 'asc' ? '↑' : '↓')}
                       </th>
                       <th
-                        className="pb-3 font-medium cursor-pointer hover:text-[var(--foreground)] transition-colors"
+                        className="pb-3 font-medium cursor-pointer hover:text-[var(--foreground)] transition-colors hidden sm:table-cell"
                         onClick={() => toggleSort('last_active')}
                       >
                         Last Active {sortBy === 'last_active' && (sortOrder === 'asc' ? '↑' : '↓')}
@@ -502,12 +531,20 @@ export default function AgentSearchPage() {
                                 <span className="font-medium text-[var(--foreground)]">
                                   {agent.name}
                                 </span>
+                                {agent.claimed && agent.claimed_by_twitter && (
+                                  <span
+                                    className="inline-flex items-center px-1.5 py-0.5 text-sm font-semibold text-[var(--accent)] bg-[var(--surface-alt)] border border-[var(--accent)] rounded"
+                                    title={`Paired with @${agent.claimed_by_twitter}`}
+                                  >
+                                    𝕏
+                                  </span>
+                                )}
                                 <span className="text-xs text-[var(--muted)]">
                                   {isExpanded ? '▾' : '▸'}
                                 </span>
                               </div>
                               {hasAssets && (
-                                <div className="flex gap-2 mt-0.5">
+                                <div className="flex flex-wrap gap-1.5 mt-0.5">
                                   {(agent.item_count || 0) > 0 && (
                                     <span className="text-[10px] text-[var(--muted)]" title="Items">
                                       ⛏️{agent.item_count}
@@ -529,21 +566,21 @@ export default function AgentSearchPage() {
                             <td className="py-3 pr-4 text-[var(--muted)] font-mono text-xs hidden sm:table-cell">
                               ({agent.x}, {agent.y})
                             </td>
-                            <td className="py-3 pr-4">
-                              <div className="flex gap-2 text-xs">
+                            <td className="py-3 pr-4 hidden md:table-cell">
+                              <div className="flex flex-wrap gap-2 text-xs">
                                 <span className="text-yellow-600" title="Gold">🪙{formatResource(agent.gold)}</span>
                                 <span className="text-[var(--accent)]" title="Wood">🪵{formatResource(agent.wood)}</span>
                                 <span className="text-amber-600" title="Food">🍖{formatResource(agent.food)}</span>
                                 <span className="text-gray-500" title="Stone">🪨{formatResource(agent.stone)}</span>
                               </div>
                             </td>
-                            <td className="py-3 pr-4 text-[var(--accent)]">
+                            <td className="py-3 pr-4 text-[var(--accent)] hidden md:table-cell">
                               {agent.reputation}
                             </td>
                             <td className="py-3 pr-4 text-[var(--accent)] font-medium">
                               {formatWealth(agent.wealth)}
                             </td>
-                            <td className="py-3 text-[var(--muted)] text-xs">
+                            <td className="py-3 text-[var(--muted)] text-xs hidden sm:table-cell">
                               {formatLastActive(agent.last_active)}
                             </td>
                           </tr>

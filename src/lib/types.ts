@@ -70,6 +70,9 @@ export interface AgentLeaderboard extends AgentPublic {
   // Crafting & building counts for agent search display
   item_count?: number;
   building_count?: number;
+  // X account pairing
+  claimed?: boolean;
+  claimed_by_twitter?: string | null;
 }
 
 // World types
