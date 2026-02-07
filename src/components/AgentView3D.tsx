@@ -963,7 +963,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
     // ─── Ground plane ─────────────────────────────────────────────────────────
 
-    const groundGeo = new THREE.PlaneGeometry(120, 120);
+    // Ground plane sized to cover full fog range so edges never show
+    const groundGeo = new THREE.PlaneGeometry(200, 200);
     const groundMat = new THREE.MeshStandardMaterial({ color: COLORS.ground, roughness: 0.9 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
@@ -1034,6 +1035,9 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         const joyDamp = 1 - Math.exp(-12 * dt); // fast but smooth input damping
         smoothJoy.x += (rawJoystick.x - smoothJoy.x) * joyDamp;
         smoothJoy.y += (rawJoystick.y - smoothJoy.y) * joyDamp;
+        // Dead zone: kill tiny residual drift when joystick is released
+        if (Math.abs(smoothJoy.x) < 0.01) smoothJoy.x = 0;
+        if (Math.abs(smoothJoy.y) < 0.01) smoothJoy.y = 0;
 
         const forwardX = -Math.sin(yaw);
         const forwardZ = -Math.cos(yaw);
@@ -1151,6 +1155,17 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           const newCy = Math.round(spectatorPosRef.current.y);
 
           fetchTiles(newCx, newCy).then(tiles => {
+            // Compute delta before updating center - offset smooth camera
+            // positions so the camera doesn't visually jump when center shifts
+            const oldCx = terrainCenterRef.current.x;
+            const oldCy = terrainCenterRef.current.y;
+            const dx = oldCx - newCx;
+            const dz = oldCy - newCy;
+            smoothCamPosRef.current.x += dx;
+            smoothCamPosRef.current.z += dz;
+            smoothCamLookRef.current.x += dx;
+            smoothCamLookRef.current.z += dz;
+
             terrainCenterRef.current = { x: newCx, y: newCy };
             // Use incremental streaming instead of full rebuild
             streamTerrain(tiles, newCx, newCy);
@@ -1375,6 +1390,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   const handleJoystickEnd = useCallback(() => {
     setJoystickPos({ x: 0, y: 0 });
     joystickInputRef.current = { x: 0, y: 0 };
+    smoothedJoystickRef.current = { x: 0, y: 0 }; // immediately kill drift
     setJoystickActive(false);
   }, []);
 
