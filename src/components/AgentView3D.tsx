@@ -125,6 +125,9 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   const joystickInputRef = useRef({ x: 0, y: 0 });
   const lastTimeRef = useRef(0);
   const waterMeshesRef = useRef<THREE.Mesh[]>([]);
+  const smoothCamPosRef = useRef(new THREE.Vector3());
+  const smoothCamLookRef = useRef(new THREE.Vector3());
+  const mobileRotateRef = useRef(0); // -1 = left, 0 = none, 1 = right
 
   // Joystick visual state
   const [joystickPos, setJoystickPos] = useState({ x: 0, y: 0 });
@@ -211,53 +214,56 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
   const createMountain = useCallback((seed: number) => {
     const group = new THREE.Group();
-    const height = 2.2 + (seed % 30) * 0.04;
-    const baseRadius = 0.65 + (seed % 20) * 0.01;
+    const height = 1.2 + (seed % 30) * 0.025;
+    const baseRadius = 0.55 + (seed % 20) * 0.008;
 
-    // Main mountain body
-    const mountainGeo = new THREE.ConeGeometry(baseRadius, height * 0.85, 7);
+    // Main mountain body - wider, shorter cone
+    const mountainGeo = new THREE.ConeGeometry(baseRadius, height, 6);
+    // Vary color between dark and mid grey based on seed
+    const mountainColor = seed % 3 === 0 ? COLORS.mountainDark : seed % 3 === 1 ? COLORS.mountainMid : 0x686868;
     const mountainMat = new THREE.MeshStandardMaterial({
-      color: COLORS.mountainMid,
-      roughness: 0.9,
+      color: mountainColor,
+      roughness: 0.92,
       metalness: 0.05,
       flatShading: true,
     });
     const mountain = new THREE.Mesh(mountainGeo, mountainMat);
-    mountain.position.y = height * 0.425;
+    mountain.position.y = height * 0.5;
     mountain.castShadow = true;
     mountain.receiveShadow = true;
     group.add(mountain);
 
-    // Snow cap
-    const snowGeo = new THREE.ConeGeometry(baseRadius * 0.3, height * 0.22, 7);
-    const snowMat = new THREE.MeshStandardMaterial({
-      color: COLORS.mountainSnow,
-      roughness: 0.4,
-      metalness: 0.0,
-    });
-    const snow = new THREE.Mesh(snowGeo, snowMat);
-    snow.position.y = height * 0.76;
-    group.add(snow);
+    // Small snow cap only on taller mountains
+    if (height > 1.35) {
+      const snowGeo = new THREE.ConeGeometry(baseRadius * 0.2, height * 0.12, 6);
+      const snowMat = new THREE.MeshStandardMaterial({
+        color: 0xdce4e8,
+        roughness: 0.6,
+      });
+      const snow = new THREE.Mesh(snowGeo, snowMat);
+      snow.position.y = height * 0.88;
+      group.add(snow);
+    }
 
     // Rocky base
-    const baseGeo = new THREE.CylinderGeometry(baseRadius * 1.05, baseRadius * 1.15, 0.25, 8);
+    const baseGeo = new THREE.CylinderGeometry(baseRadius * 1.1, baseRadius * 1.2, 0.15, 6);
     const baseMat = new THREE.MeshStandardMaterial({
       color: COLORS.mountainDark,
       roughness: 0.95,
       flatShading: true,
     });
     const base = new THREE.Mesh(baseGeo, baseMat);
-    base.position.y = 0.12;
+    base.position.y = 0.07;
     base.receiveShadow = true;
     group.add(base);
 
-    // Add a couple small rocks around base
-    const rockGeo = new THREE.DodecahedronGeometry(0.12, 0);
+    // Small scattered rocks
+    const rockGeo = new THREE.DodecahedronGeometry(0.08, 0);
     const rockMat = new THREE.MeshStandardMaterial({ color: COLORS.mountainDark, roughness: 0.95, flatShading: true });
     for (let i = 0; i < 2; i++) {
       const rock = new THREE.Mesh(rockGeo, rockMat);
-      const angle = (seed + i * 137) % 360 * Math.PI / 180;
-      rock.position.set(Math.cos(angle) * baseRadius * 0.9, 0.08, Math.sin(angle) * baseRadius * 0.9);
+      const angle = ((seed + i * 137) % 360) * Math.PI / 180;
+      rock.position.set(Math.cos(angle) * baseRadius * 0.95, 0.05, Math.sin(angle) * baseRadius * 0.95);
       rock.rotation.set(seed * 0.1, seed * 0.2, 0);
       rock.castShadow = true;
       group.add(rock);
@@ -706,43 +712,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         terrainGroup.add(border);
       }
 
-      let obj: THREE.Object3D | null = null;
-
-      switch (tile.terrain) {
-        case 'mountain':
-          obj = createMountain(seed);
-          break;
-        case 'forest':
-          obj = createTree(seed);
-          break;
-        case 'market':
-          obj = createMarket(seed);
-          break;
-        case 'water':
-          obj = createWater();
-          if (obj instanceof THREE.Mesh) waterMeshesRef.current.push(obj);
-          break;
-        case 'rocky':
-          obj = createRocky(seed);
-          break;
-        case 'sand':
-          obj = createSand(seed);
-          break;
-        case 'deep_water':
-          obj = createDeepWater();
-          if (obj instanceof THREE.Mesh) waterMeshesRef.current.push(obj);
-          break;
-        case 'marsh':
-          obj = createMarsh(seed);
-          break;
-      }
-
-      if (obj) {
-        obj.position.set(x + offsetX, 0, z + offsetZ);
-        terrainGroup.add(obj);
-      }
-
-      // Render building on this tile
+      // If tile has a building, render building INSTEAD of terrain object
       if (tile.building_type) {
         let building: THREE.Object3D | null = null;
         switch (tile.building_type) {
@@ -759,6 +729,43 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         if (building) {
           building.position.set(x, 0, z);
           terrainGroup.add(building);
+        }
+      } else {
+        // No building - render terrain object
+        let obj: THREE.Object3D | null = null;
+
+        switch (tile.terrain) {
+          case 'mountain':
+            obj = createMountain(seed);
+            break;
+          case 'forest':
+            obj = createTree(seed);
+            break;
+          case 'market':
+            obj = createMarket(seed);
+            break;
+          case 'water':
+            obj = createWater();
+            if (obj instanceof THREE.Mesh) waterMeshesRef.current.push(obj);
+            break;
+          case 'rocky':
+            obj = createRocky(seed);
+            break;
+          case 'sand':
+            obj = createSand(seed);
+            break;
+          case 'deep_water':
+            obj = createDeepWater();
+            if (obj instanceof THREE.Mesh) waterMeshesRef.current.push(obj);
+            break;
+          case 'marsh':
+            obj = createMarsh(seed);
+            break;
+        }
+
+        if (obj) {
+          obj.position.set(x + offsetX, 0, z + offsetZ);
+          terrainGroup.add(obj);
         }
       }
     });
@@ -929,6 +936,10 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     agentGroupRef.current = agentGroup;
     scene.add(agentGroup);
 
+    // Initialize smooth camera positions
+    smoothCamPosRef.current.set(0, CAMERA_HEIGHT, CAMERA_DISTANCE);
+    smoothCamLookRef.current.set(0, 0, -CAMERA_LOOK_AHEAD);
+
     // Create self agent mesh (for follow mode)
     if (!isSpectator) {
       const selfAgent = createCrabMesh(COLORS.agentSelf);
@@ -984,9 +995,20 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         if (keys['arrowleft']) yawRef.current += ROTATE_SPEED * dt;
         if (keys['arrowright']) yawRef.current -= ROTATE_SPEED * dt;
 
+        // Joystick input (mobile) - moves forward/back/strafe + auto-rotates camera
         if (joystick.x !== 0 || joystick.y !== 0) {
           moveX += forwardX * (-joystick.y) + rightX * joystick.x;
           moveZ += forwardZ * (-joystick.y) + rightZ * joystick.x;
+          // Auto-rotate toward movement direction when joystick pushed sideways
+          if (Math.abs(joystick.x) > 0.3) {
+            yawRef.current -= joystick.x * ROTATE_SPEED * dt * 0.7;
+          }
+        }
+
+        // Mobile rotate buttons
+        const mobileRotate = mobileRotateRef.current;
+        if (mobileRotate !== 0) {
+          yawRef.current += mobileRotate * ROTATE_SPEED * dt;
         }
 
         const mag = Math.sqrt(moveX * moveX + moveZ * moveZ);
@@ -1010,15 +1032,20 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         const localZ = spectatorPosRef.current.y - tc.y;
         const currentYaw = yawRef.current;
 
-        // Third-person camera for spectator: elevated, looking down
+        // Third-person camera for spectator: elevated, looking down (smooth lerp)
         const camOffsetX = Math.sin(currentYaw) * CAMERA_DISTANCE;
         const camOffsetZ = Math.cos(currentYaw) * CAMERA_DISTANCE;
-        camera.position.set(localX + camOffsetX, CAMERA_HEIGHT, localZ + camOffsetZ);
-        camera.lookAt(
+        const targetCamPos = new THREE.Vector3(localX + camOffsetX, CAMERA_HEIGHT, localZ + camOffsetZ);
+        const targetLookAt = new THREE.Vector3(
           localX - Math.sin(currentYaw) * CAMERA_LOOK_AHEAD,
           0,
           localZ - Math.cos(currentYaw) * CAMERA_LOOK_AHEAD
         );
+        const camLerp = 1 - Math.pow(0.02, dt); // frame-rate independent smoothing
+        smoothCamPosRef.current.lerp(targetCamPos, camLerp);
+        smoothCamLookRef.current.lerp(targetLookAt, camLerp);
+        camera.position.copy(smoothCamPosRef.current);
+        camera.lookAt(smoothCamLookRef.current);
 
         // Sun follows camera
         sunLight.position.set(localX + 15, 20, localZ + 10);
@@ -1027,20 +1054,21 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         ground.position.x = localX;
         ground.position.z = localZ;
 
-        // Terrain rebuild check
+        // Terrain rebuild check - use larger threshold to reduce rebuilds
         const distFromCenter = Math.sqrt(
           (spectatorPosRef.current.x - tc.x) ** 2 +
           (spectatorPosRef.current.y - tc.y) ** 2
         );
 
-        if (distFromCenter > 5 && !isFetchingTerrainRef.current && now - lastTerrainFetchRef.current > 500) {
+        if (distFromCenter > 8 && !isFetchingTerrainRef.current && now - lastTerrainFetchRef.current > 800) {
           lastTerrainFetchRef.current = now;
           isFetchingTerrainRef.current = true;
           const newCx = Math.round(spectatorPosRef.current.x);
           const newCy = Math.round(spectatorPosRef.current.y);
-          terrainCenterRef.current = { x: newCx, y: newCy };
 
           fetchTiles(newCx, newCy).then(tiles => {
+            // Update center AFTER building, so camera offset stays consistent
+            terrainCenterRef.current = { x: newCx, y: newCy };
             buildTerrain(tiles, newCx, newCy);
             otherAgentsRef.current.forEach((agentData, agentId) => {
               const relX = agentData.worldX - newCx;
@@ -1219,9 +1247,11 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
       .channel(channelName)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'agents_realtime' },
+        { event: '*', schema: 'public', table: 'agents_realtime' },
         (payload) => {
-          handleAgentUpdate(payload as unknown as { new: { id: string; x: number; y: number; name: string } });
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            handleAgentUpdate(payload as unknown as { new: { id: string; x: number; y: number; name: string } });
+          }
         }
       )
       .subscribe();
@@ -1378,12 +1408,25 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         </div>
       )}
 
-      {/* Mobile rotate hint (spectator mode) */}
+      {/* Mobile rotate buttons (spectator mode) */}
       {isSpectator && (
-        <div className="absolute bottom-20 right-4 z-20 md:hidden" data-spectator-ui>
-          <div className="bg-black/50 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-white/50 text-center">
-            Drag to<br />look around
-          </div>
+        <div className="absolute bottom-20 right-4 z-20 md:hidden flex gap-3" data-spectator-ui>
+          <button
+            className="w-14 h-14 rounded-full bg-white/15 border-2 border-white/30 flex items-center justify-center text-white/70 text-2xl active:bg-white/30 select-none touch-none"
+            onTouchStart={() => { mobileRotateRef.current = 1; }}
+            onTouchEnd={() => { mobileRotateRef.current = 0; }}
+            onTouchCancel={() => { mobileRotateRef.current = 0; }}
+          >
+            &#x21B6;
+          </button>
+          <button
+            className="w-14 h-14 rounded-full bg-white/15 border-2 border-white/30 flex items-center justify-center text-white/70 text-2xl active:bg-white/30 select-none touch-none"
+            onTouchStart={() => { mobileRotateRef.current = -1; }}
+            onTouchEnd={() => { mobileRotateRef.current = 0; }}
+            onTouchCancel={() => { mobileRotateRef.current = 0; }}
+          >
+            &#x21B7;
+          </button>
         </div>
       )}
     </div>

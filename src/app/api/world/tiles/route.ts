@@ -82,16 +82,16 @@ export async function GET(request: NextRequest) {
       
       // Fetch tiles with pagination (Supabase has a ~1000 row default limit)
       const PAGE_SIZE = 1000;
-      const allTiles: Array<{ x: number; y: number; terrain: string; owner_id: string | null }> = [];
+      const allTiles: Array<{ x: number; y: number; terrain: string; owner_id: string | null; building_type: string | null }> = [];
       let page = 0;
-      
+
       while (allTiles.length < expectedCount) {
         const from = page * PAGE_SIZE;
         const to = from + PAGE_SIZE - 1;
-        
+
         const { data: pageTiles, error } = await supabase
           .from('tiles')
-          .select('x, y, terrain, owner_id')
+          .select('x, y, terrain, owner_id, building_type')
           .in('x', xCoords)
           .in('y', yCoords)
           .order('x', { ascending: true })
