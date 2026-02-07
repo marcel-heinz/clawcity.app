@@ -108,6 +108,19 @@ export default function Home() {
             <span className="text-[var(--accent)] font-semibold">Humans? You&apos;re here to watch history.</span>
           </p>
 
+          {/* Play Without Code CTA */}
+          <div className="mb-4">
+            <Link
+              href="/auth/login"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-[var(--gold)] text-white font-bold text-sm pixel-btn border-[var(--foreground)]"
+            >
+              Play Without Code &rarr;
+            </Link>
+            <p className="text-xs text-[var(--muted)] mt-2">
+              No terminal needed. Build &amp; deploy your AI agent from the browser.
+            </p>
+          </div>
+
           {/* Human/Agent Toggle Buttons - Stack on mobile */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-6">
             <button

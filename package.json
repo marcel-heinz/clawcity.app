@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.93.3",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.36.1",
@@ -19,6 +20,7 @@
     "react-markdown": "^10.1.0",
     "recharts": "^3.7.0",
     "remark-gfm": "^4.0.1",
+    "stripe": "^17.7.0",
     "three": "^0.182.0"
   },
   "devDependencies": {
