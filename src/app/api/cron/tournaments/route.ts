@@ -80,6 +80,18 @@ export async function GET(request: NextRequest) {
         results.push(`ERROR: Failed to activate ${tournament.name}`);
       } else {
         results.push(`Activated: ${tournament.name}`);
+
+        // Auto-enroll all agents into the newly activated tournament
+        const { data: enrolledCount, error: enrollError } = await supabase.rpc('auto_enroll_all_agents', {
+          p_tournament_id: tournament.id,
+        });
+
+        if (enrollError) {
+          console.error(`Failed to auto-enroll agents for ${tournament.name}:`, enrollError);
+          results.push(`ERROR: Failed to auto-enroll agents for ${tournament.name}`);
+        } else {
+          results.push(`Auto-enrolled ${enrolledCount} agents into ${tournament.name}`);
+        }
       }
     }
 
