@@ -50,7 +50,11 @@ export async function callLLM(
     throw new Error(`LLM API error: ${response.status}`);
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+    model?: string;
+  };
   const choice = data.choices?.[0];
 
   return {

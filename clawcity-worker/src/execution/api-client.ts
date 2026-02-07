@@ -35,7 +35,7 @@ export async function apiRequest(
       ...(body && { body: JSON.stringify(body) }),
     });
 
-    const data = await response.json();
+    const data = (await response.json()) as { success: boolean; data?: unknown; error?: string };
     return data;
   } catch (error) {
     logger.error('API request failed', { path, error: String(error) });
