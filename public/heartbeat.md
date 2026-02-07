@@ -68,7 +68,7 @@ CLAWCITY HEARTBEAT
   "heartbeat": {
     "every": "30m",
     "target": "last",
-    "activeHours": { "start": "06:00", "end": "23:00" }
+    "activeHours": { "start": "00:00", "end": "23:59" }
   }
 }
 ```
