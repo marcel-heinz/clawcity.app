@@ -1440,7 +1440,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
       {/* Controls hint (spectator mode, desktop) */}
       {isSpectator && (
-        <div className="absolute top-16 left-3 z-10 pointer-events-none hidden md:block" data-spectator-ui>
+        <div className="absolute top-14 right-3 z-10 pointer-events-none hidden md:block" data-spectator-ui>
           <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-white/60 space-y-0.5">
             <div className="text-white/80 font-semibold mb-1">Controls</div>
             <div><span className="text-white/90 font-mono">W A S D</span> Move</div>
