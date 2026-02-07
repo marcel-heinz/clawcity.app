@@ -98,6 +98,8 @@ export interface Tile {
   last_upkeep_paid?: string | null;
   // Territory upgrade level (1-3)
   upgrade_level?: number;
+  // Building on this tile
+  building_type?: string | null;
 }
 
 // Event types
