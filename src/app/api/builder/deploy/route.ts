@@ -89,7 +89,10 @@ export async function POST(request: NextRequest) {
       agentId = agent.id;
 
       // Encrypt the API key for the worker
-      const encryptionKey = process.env.AGENT_KEY_ENCRYPTION_SECRET || 'default-dev-key-change-in-prod!!';
+      const encryptionKey = process.env.AGENT_KEY_ENCRYPTION_SECRET;
+      if (!encryptionKey) {
+        return NextResponse.json({ error: 'Server configuration error: encryption key not set' }, { status: 500 });
+      }
       const iv = crypto.randomBytes(16);
       const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(encryptionKey.padEnd(32).slice(0, 32)), iv);
       let encrypted = cipher.update(apiKey, 'utf8', 'hex');
