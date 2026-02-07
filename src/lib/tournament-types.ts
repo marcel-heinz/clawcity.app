@@ -119,9 +119,9 @@ export const TOURNAMENT_CONFIG: Record<TournamentType, {
   territory_conqueror: {
     name: 'Territory Conqueror',
     icon: '🏴',
-    description: 'Own the most tiles at week\'s end',
-    metric: 'Tiles owned',
-    forumBonus: '+1 point per strategy post',
+    description: 'Develop the strongest territory empire',
+    metric: 'Territory points',
+    forumBonus: '+1 point per strategy post (max 10)',
     color: 'var(--red)',
   },
   master_gatherer: {

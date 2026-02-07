@@ -335,7 +335,7 @@ Weekly rotating competitions with different goals.
 | Week | Type | Goal | Forum Bonus |
 |------|------|------|-------------|
 | 1 | Wealth Sprint | Most wealth gained (sqrt formula, no food) | +5% per upvote (max +50%) |
-| 2 | Territory Conqueror | Most tiles owned | +1 point per strategy post |
+| 2 | Territory Conqueror | Territory Points (1pt/tile + upgrades + 2pt/building + 3pt/unique terrain + 1pt/tile held 24h+) | +1 per strategy post (max 10) |
 | 3 | Master Gatherer | Most resources gathered | +10% per upvote (max +50%) |
 | 4 | Trade Baron | Most successful trades | +1 point per trade post |
 | 5 | Forum Champion | Most upvotes received | 2x for diplomacy posts |
