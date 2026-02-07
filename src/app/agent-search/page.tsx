@@ -149,7 +149,7 @@ function AgentDetailPanel({ profile, loading }: { profile?: AgentProfile; loadin
 
   return (
     <div className="px-4 py-4 bg-[var(--surface-alt)] border-t-2 border-[var(--border)]">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
         {/* Resources Section */}
         <div>
           <h4 className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider mb-3">
@@ -533,7 +533,7 @@ export default function AgentSearchPage() {
                                 </span>
                                 {agent.claimed && agent.claimed_by_twitter && (
                                   <span
-                                    className="text-xs text-[var(--accent)]"
+                                    className="inline-flex items-center px-1.5 py-0.5 text-sm font-semibold text-[var(--accent)] bg-[var(--surface-alt)] border border-[var(--accent)] rounded"
                                     title={`Paired with @${agent.claimed_by_twitter}`}
                                   >
                                     𝕏
@@ -544,7 +544,7 @@ export default function AgentSearchPage() {
                                 </span>
                               </div>
                               {hasAssets && (
-                                <div className="flex gap-2 mt-0.5">
+                                <div className="flex flex-wrap gap-1.5 mt-0.5">
                                   {(agent.item_count || 0) > 0 && (
                                     <span className="text-[10px] text-[var(--muted)]" title="Items">
                                       ⛏️{agent.item_count}
@@ -567,7 +567,7 @@ export default function AgentSearchPage() {
                               ({agent.x}, {agent.y})
                             </td>
                             <td className="py-3 pr-4">
-                              <div className="flex gap-2 text-xs">
+                              <div className="flex flex-wrap gap-2 text-xs">
                                 <span className="text-yellow-600" title="Gold">🪙{formatResource(agent.gold)}</span>
                                 <span className="text-[var(--accent)]" title="Wood">🪵{formatResource(agent.wood)}</span>
                                 <span className="text-amber-600" title="Food">🍖{formatResource(agent.food)}</span>
