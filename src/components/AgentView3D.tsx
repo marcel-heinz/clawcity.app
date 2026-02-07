@@ -128,6 +128,9 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   const smoothCamPosRef = useRef(new THREE.Vector3());
   const smoothCamLookRef = useRef(new THREE.Vector3());
   const mobileRotateRef = useRef(0); // -1 = left, 0 = none, 1 = right
+  // Per-tile chunk tracking for smooth streaming (no clear-and-rebuild)
+  const loadedTilesRef = useRef<Map<string, THREE.Group>>(new Map());
+  const loadedWaterRef = useRef<Map<string, THREE.Mesh>>(new Map());
 
   // Joystick visual state
   const [joystickPos, setJoystickPos] = useState({ x: 0, y: 0 });
@@ -141,7 +144,9 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   const [worldTiles, setWorldTiles] = useState<Tile[]>([]);
   const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const VIEW_RADIUS = 16;
+  const VIEW_RADIUS = 20;        // Tiles to load
+  const UNLOAD_RADIUS = 24;      // Tiles before removal (hysteresis)
+  const FETCH_THRESHOLD = 4;     // Refetch when player moves this far from last fetch center
   const MINIMAP_SIZE = 120;
 
   const isSpectator = mode === 'spectator';
@@ -664,112 +669,141 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
   useEffect(() => { fetchWorldTiles(); }, [fetchWorldTiles]);
 
-  // ─── Build terrain from tiles ─────────────────────────────────────────────────
+  // ─── Create single tile group (used by streaming system) ───────────────────────
 
+  const createTileGroup = useCallback((tile: Tile, worldOffsetX: number, worldOffsetZ: number) => {
+    const tileGroup = new THREE.Group();
+    const seed = (tile.x * 7 + tile.y * 13) % 100;
+    const offsetX = (seed % 10 - 5) * 0.02;
+    const offsetZ = ((seed * 3) % 10 - 5) * 0.02;
+
+    // Position group at world position (will be offset by terrainGroup.position)
+    tileGroup.position.set(tile.x - worldOffsetX, 0, tile.y - worldOffsetZ);
+
+    // Ground tile
+    const groundGeo = new THREE.PlaneGeometry(BLOCK_SIZE * 1.01, BLOCK_SIZE * 1.01);
+    const groundColor = tile.terrain === 'plains' ? (seed % 2 === 0 ? COLORS.ground : COLORS.groundDark) : COLORS.ground;
+    const groundMat = new THREE.MeshStandardMaterial({ color: groundColor, roughness: 0.9 });
+    const groundTile = new THREE.Mesh(groundGeo, groundMat);
+    groundTile.rotation.x = -Math.PI / 2;
+    groundTile.receiveShadow = true;
+    tileGroup.add(groundTile);
+
+    // Territory owner indicator
+    if (tile.owner_id) {
+      const borderGeo = new THREE.PlaneGeometry(BLOCK_SIZE * 0.95, BLOCK_SIZE * 0.95);
+      const borderMat = new THREE.MeshStandardMaterial({
+        color: 0x44ff44, transparent: true, opacity: 0.12, roughness: 0.5,
+      });
+      const border = new THREE.Mesh(borderGeo, borderMat);
+      border.rotation.x = -Math.PI / 2;
+      border.position.y = 0.005;
+      tileGroup.add(border);
+    }
+
+    // Building replaces terrain object
+    if (tile.building_type) {
+      let building: THREE.Object3D | null = null;
+      switch (tile.building_type) {
+        case 'storage': building = createStorageBuilding(seed); break;
+        case 'workshop': building = createWorkshopBuilding(seed); break;
+        case 'fortification': building = createFortificationBuilding(seed); break;
+      }
+      if (building) tileGroup.add(building);
+    } else {
+      let obj: THREE.Object3D | null = null;
+      switch (tile.terrain) {
+        case 'mountain': obj = createMountain(seed); break;
+        case 'forest': obj = createTree(seed); break;
+        case 'market': obj = createMarket(seed); break;
+        case 'water':
+          obj = createWater();
+          break;
+        case 'rocky': obj = createRocky(seed); break;
+        case 'sand': obj = createSand(seed); break;
+        case 'deep_water':
+          obj = createDeepWater();
+          break;
+        case 'marsh': obj = createMarsh(seed); break;
+      }
+      if (obj) {
+        obj.position.set(offsetX, 0, offsetZ);
+        tileGroup.add(obj);
+      }
+    }
+
+    return tileGroup;
+  }, [createMountain, createTree, createMarket, createWater, createRocky, createSand, createDeepWater, createMarsh, createStorageBuilding, createWorkshopBuilding, createFortificationBuilding]);
+
+  // ─── Incremental terrain streaming (add new tiles, remove far tiles) ──────────
+
+  const streamTerrain = useCallback((tiles: Tile[], cx: number, cy: number) => {
+    const terrainGroup = terrainGroupRef.current;
+    if (!terrainGroup) return;
+
+    // Find current tile for terrain display
+    const currentTile = tiles.find(t => t.x === Math.floor(cx) && t.y === Math.floor(cy));
+    if (currentTile) setCurrentTerrain(currentTile.terrain);
+
+    // Track which tiles are in the new set
+    const newTileKeys = new Set<string>();
+    const newWaterMeshes: THREE.Mesh[] = [];
+
+    // Add tiles that aren't already loaded
+    tiles.forEach(tile => {
+      const key = `${tile.x},${tile.y}`;
+      newTileKeys.add(key);
+
+      if (!loadedTilesRef.current.has(key)) {
+        const tileGroup = createTileGroup(tile, cx, cy);
+        terrainGroup.add(tileGroup);
+        loadedTilesRef.current.set(key, tileGroup);
+
+        // Track water meshes for animation
+        if (tile.terrain === 'water' || tile.terrain === 'deep_water') {
+          tileGroup.children.forEach(child => {
+            if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial && child.material.transparent) {
+              loadedWaterRef.current.set(key, child);
+            }
+          });
+        }
+      } else {
+        // Already loaded - update position relative to new center
+        const existingGroup = loadedTilesRef.current.get(key)!;
+        existingGroup.position.set(tile.x - cx, 0, tile.y - cy);
+      }
+    });
+
+    // Remove tiles outside UNLOAD_RADIUS (hysteresis: load at VIEW_RADIUS, unload at UNLOAD_RADIUS)
+    const keysToRemove: string[] = [];
+    loadedTilesRef.current.forEach((group, key) => {
+      const [tx, ty] = key.split(',').map(Number);
+      if (Math.abs(tx - cx) > UNLOAD_RADIUS || Math.abs(ty - cy) > UNLOAD_RADIUS) {
+        terrainGroup.remove(group);
+        keysToRemove.push(key);
+        loadedWaterRef.current.delete(key);
+      }
+    });
+    keysToRemove.forEach(k => loadedTilesRef.current.delete(k));
+
+    // Update water mesh list for animation
+    waterMeshesRef.current = Array.from(loadedWaterRef.current.values());
+  }, [createTileGroup, UNLOAD_RADIUS]);
+
+  // Legacy buildTerrain for initial load / follow mode (full rebuild)
   const buildTerrain = useCallback((tiles: Tile[], cx: number, cy: number) => {
     const terrainGroup = terrainGroupRef.current;
     if (!terrainGroup) return;
 
-    // Clear existing terrain
-    while (terrainGroup.children.length > 0) {
-      terrainGroup.remove(terrainGroup.children[0]);
-    }
+    // Clear all tracked tiles
+    loadedTilesRef.current.forEach(group => terrainGroup.remove(group));
+    loadedTilesRef.current.clear();
+    loadedWaterRef.current.clear();
     waterMeshesRef.current = [];
 
-    // Find current tile
-    const currentTile = tiles.find(t => t.x === Math.floor(cx) && t.y === Math.floor(cy));
-    if (currentTile) setCurrentTerrain(currentTile.terrain);
-
-    tiles.forEach((tile) => {
-      const x = tile.x - cx;
-      const z = tile.y - cy;
-      const seed = (tile.x * 7 + tile.y * 13) % 100;
-      const offsetX = (seed % 10 - 5) * 0.02;
-      const offsetZ = ((seed * 3) % 10 - 5) * 0.02;
-
-      // Ground tile for every terrain type
-      const groundGeo = new THREE.PlaneGeometry(BLOCK_SIZE * 1.01, BLOCK_SIZE * 1.01);
-      const groundColor = tile.terrain === 'plains' ? (seed % 2 === 0 ? COLORS.ground : COLORS.groundDark) : COLORS.ground;
-      const groundMat = new THREE.MeshStandardMaterial({ color: groundColor, roughness: 0.9 });
-      const groundTile = new THREE.Mesh(groundGeo, groundMat);
-      groundTile.rotation.x = -Math.PI / 2;
-      groundTile.position.set(x, 0, z);
-      groundTile.receiveShadow = true;
-      terrainGroup.add(groundTile);
-
-      // Territory owner indicator (subtle border highlight)
-      if (tile.owner_id) {
-        const borderGeo = new THREE.PlaneGeometry(BLOCK_SIZE * 0.95, BLOCK_SIZE * 0.95);
-        const borderMat = new THREE.MeshStandardMaterial({
-          color: 0x44ff44,
-          transparent: true,
-          opacity: 0.12,
-          roughness: 0.5,
-        });
-        const border = new THREE.Mesh(borderGeo, borderMat);
-        border.rotation.x = -Math.PI / 2;
-        border.position.set(x, 0.005, z);
-        terrainGroup.add(border);
-      }
-
-      // If tile has a building, render building INSTEAD of terrain object
-      if (tile.building_type) {
-        let building: THREE.Object3D | null = null;
-        switch (tile.building_type) {
-          case 'storage':
-            building = createStorageBuilding(seed);
-            break;
-          case 'workshop':
-            building = createWorkshopBuilding(seed);
-            break;
-          case 'fortification':
-            building = createFortificationBuilding(seed);
-            break;
-        }
-        if (building) {
-          building.position.set(x, 0, z);
-          terrainGroup.add(building);
-        }
-      } else {
-        // No building - render terrain object
-        let obj: THREE.Object3D | null = null;
-
-        switch (tile.terrain) {
-          case 'mountain':
-            obj = createMountain(seed);
-            break;
-          case 'forest':
-            obj = createTree(seed);
-            break;
-          case 'market':
-            obj = createMarket(seed);
-            break;
-          case 'water':
-            obj = createWater();
-            if (obj instanceof THREE.Mesh) waterMeshesRef.current.push(obj);
-            break;
-          case 'rocky':
-            obj = createRocky(seed);
-            break;
-          case 'sand':
-            obj = createSand(seed);
-            break;
-          case 'deep_water':
-            obj = createDeepWater();
-            if (obj instanceof THREE.Mesh) waterMeshesRef.current.push(obj);
-            break;
-          case 'marsh':
-            obj = createMarsh(seed);
-            break;
-        }
-
-        if (obj) {
-          obj.position.set(x + offsetX, 0, z + offsetZ);
-          terrainGroup.add(obj);
-        }
-      }
-    });
-  }, [createMountain, createTree, createMarket, createWater, createRocky, createSand, createDeepWater, createMarsh, createStorageBuilding, createWorkshopBuilding, createFortificationBuilding]);
+    // Use streaming to add all tiles
+    streamTerrain(tiles, cx, cy);
+  }, [streamTerrain]);
 
   // ─── Update minimap ───────────────────────────────────────────────────────────
 
@@ -995,14 +1029,10 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         if (keys['arrowleft']) yawRef.current += ROTATE_SPEED * dt;
         if (keys['arrowright']) yawRef.current -= ROTATE_SPEED * dt;
 
-        // Joystick input (mobile) - moves forward/back/strafe + auto-rotates camera
+        // Joystick input (mobile) - forward/back + strafe left/right (like WASD)
         if (joystick.x !== 0 || joystick.y !== 0) {
           moveX += forwardX * (-joystick.y) + rightX * joystick.x;
           moveZ += forwardZ * (-joystick.y) + rightZ * joystick.x;
-          // Auto-rotate toward movement direction when joystick pushed sideways
-          if (Math.abs(joystick.x) > 0.3) {
-            yawRef.current -= joystick.x * ROTATE_SPEED * dt * 0.7;
-          }
         }
 
         // Mobile rotate buttons
@@ -1054,26 +1084,27 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         ground.position.x = localX;
         ground.position.z = localZ;
 
-        // Terrain rebuild check - use larger threshold to reduce rebuilds
+        // Streaming terrain check - fetch early, stream incrementally
         const distFromCenter = Math.sqrt(
           (spectatorPosRef.current.x - tc.x) ** 2 +
           (spectatorPosRef.current.y - tc.y) ** 2
         );
 
-        if (distFromCenter > 8 && !isFetchingTerrainRef.current && now - lastTerrainFetchRef.current > 800) {
+        if (distFromCenter > FETCH_THRESHOLD && !isFetchingTerrainRef.current && now - lastTerrainFetchRef.current > 300) {
           lastTerrainFetchRef.current = now;
           isFetchingTerrainRef.current = true;
           const newCx = Math.round(spectatorPosRef.current.x);
           const newCy = Math.round(spectatorPosRef.current.y);
 
           fetchTiles(newCx, newCy).then(tiles => {
-            // Update center AFTER building, so camera offset stays consistent
             terrainCenterRef.current = { x: newCx, y: newCy };
-            buildTerrain(tiles, newCx, newCy);
+            // Use incremental streaming instead of full rebuild
+            streamTerrain(tiles, newCx, newCy);
+            // Reposition agents
             otherAgentsRef.current.forEach((agentData, agentId) => {
               const relX = agentData.worldX - newCx;
               const relZ = agentData.worldY - newCy;
-              if (Math.abs(relX) > VIEW_RADIUS || Math.abs(relZ) > VIEW_RADIUS) {
+              if (Math.abs(relX) > UNLOAD_RADIUS || Math.abs(relZ) > UNLOAD_RADIUS) {
                 agentGroupRef.current?.remove(agentData.mesh);
                 otherAgentsRef.current.delete(agentId);
               } else {
@@ -1131,7 +1162,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
       renderer.dispose();
       if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
     };
-  }, [centerX, centerY, isSpectator, fetchTiles, buildTerrain, createCrabMesh]);
+  }, [centerX, centerY, isSpectator, fetchTiles, buildTerrain, streamTerrain, createCrabMesh]);
 
   // ─── Supabase Realtime subscription ────────────────────────────────────────────
 
@@ -1403,11 +1434,11 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         </div>
       )}
 
-      {/* Mobile rotate buttons (spectator mode) */}
+      {/* Mobile rotate buttons (spectator mode) - top right, compact */}
       {isSpectator && (
-        <div className="absolute bottom-20 right-4 z-20 md:hidden flex gap-3" data-spectator-ui>
+        <div className="absolute top-[70px] right-3 z-20 md:hidden flex flex-col gap-2" data-spectator-ui>
           <button
-            className="w-14 h-14 rounded-full bg-white/15 border-2 border-white/30 flex items-center justify-center text-white/70 text-2xl active:bg-white/30 select-none touch-none"
+            className="w-10 h-10 rounded-full bg-black/50 border border-white/25 flex items-center justify-center text-white/60 text-lg active:bg-white/20 select-none touch-none"
             onTouchStart={() => { mobileRotateRef.current = 1; }}
             onTouchEnd={() => { mobileRotateRef.current = 0; }}
             onTouchCancel={() => { mobileRotateRef.current = 0; }}
@@ -1415,7 +1446,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
             &#x21B6;
           </button>
           <button
-            className="w-14 h-14 rounded-full bg-white/15 border-2 border-white/30 flex items-center justify-center text-white/70 text-2xl active:bg-white/30 select-none touch-none"
+            className="w-10 h-10 rounded-full bg-black/50 border border-white/25 flex items-center justify-center text-white/60 text-lg active:bg-white/20 select-none touch-none"
             onTouchStart={() => { mobileRotateRef.current = -1; }}
             onTouchEnd={() => { mobileRotateRef.current = 0; }}
             onTouchCancel={() => { mobileRotateRef.current = 0; }}
