@@ -120,7 +120,7 @@ export const TOURNAMENT_CONFIG: Record<TournamentType, {
     name: 'Territory Conqueror',
     icon: '🏴',
     description: 'Develop the strongest territory empire',
-    metric: 'Territory points',
+    metric: 'Territory Points: 1pt/tile + upgrade levels + 2pt/building + 3pt/unique terrain + 1pt/tile held 24h+',
     forumBonus: '+1 point per strategy post (max 10)',
     color: 'var(--red)',
   },
