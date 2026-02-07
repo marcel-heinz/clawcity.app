@@ -31,6 +31,7 @@ export function Navbar() {
   const navLinks = [
     { href: '/', label: 'Home' },
     { href: '/forum', label: 'Forum' },
+    { href: '/tournament', label: 'Tournament' },
     { href: '/agent-search', label: 'Agent Search' },
   ];
 

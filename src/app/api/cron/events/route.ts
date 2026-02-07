@@ -8,7 +8,6 @@ import {
   pickWeightedEventType,
   generateMicroEvent,
   insertEvent,
-  postEventAnnouncement,
   markEventAnnounced,
 } from '@/lib/micro-events';
 
@@ -20,7 +19,7 @@ import {
  * 1. Expire events that have passed their expires_at time
  * 2. Roll to spawn a new event (75% chance per hour)
  * 3. Pick event type via weighted random selection
- * 4. Post forum announcement for the new event
+ * 4. Mark event as announced (shown on Tournament page)
  *
  * Called every hour at minute 30 via Vercel Cron: "30 * * * *"
  * (Offset from upkeep cron at minute 0)
@@ -75,14 +74,8 @@ export async function GET(request: NextRequest) {
           spawnMessage += ` +${Math.round((spawnedEvent.bonus_multiplier - 1) * 100)}% for ${spawnedEvent.duration_minutes}min`;
           results.push(spawnMessage);
 
-          // 4. Post forum announcement
-          const announced = await postEventAnnouncement(spawnedEvent);
-          if (announced) {
-            await markEventAnnounced(spawnedEvent.id);
-            results.push(`Announced event on forum`);
-          } else {
-            results.push(`Failed to announce event (ClawCity_Admin may not exist)`);
-          }
+          // 4. Mark event as announced (events now shown on Tournament page)
+          await markEventAnnounced(spawnedEvent.id);
         } else {
           results.push('Failed to insert event');
         }

@@ -37,12 +37,64 @@ interface HistoryData {
   recent_winners: (TournamentWinner & { tournament_name: string })[];
 }
 
+interface RecentEvent {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  location: { x: number; y: number; radius: number } | 'global';
+  bonus_type: string;
+  bonus_multiplier: number;
+  bonus_percent: number;
+  affected_resources: string[] | null;
+  affected_terrains: string[] | null;
+  active_from: string;
+  expires_at: string;
+  duration_minutes: number;
+  is_active: boolean;
+  minutes_remaining: number;
+  expired_ago_minutes: number;
+  created_at: string;
+}
+
+interface EventsData {
+  events: RecentEvent[];
+  count: number;
+  active_count: number;
+}
+
+const EVENT_TYPE_COLORS: Record<string, string> = {
+  resource_boost: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50',
+  terrain_bonus: 'bg-blue-500/20 text-blue-400 border-blue-500/50',
+  global_bonus: 'bg-purple-500/20 text-purple-400 border-purple-500/50',
+  danger_zone: 'bg-red-500/20 text-red-400 border-red-500/50',
+  rare_spawn: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50',
+};
+
+function formatTimeAgo(minutes: number): string {
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatTimeRemaining(minutes: number): string {
+  if (minutes < 1) return '<1m left';
+  if (minutes < 60) return `${minutes}m left`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return mins > 0 ? `${hours}h ${mins}m left` : `${hours}h left`;
+}
+
 export default function TournamentPage() {
   const [tournamentsData, setTournamentsData] = useState<TournamentsData | null>(null);
   const [detailData, setDetailData] = useState<TournamentDetailData | null>(null);
   const [historyData, setHistoryData] = useState<HistoryData | null>(null);
+  const [eventsData, setEventsData] = useState<EventsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'leaderboard' | 'rules' | 'history'>('leaderboard');
+  const [activeTab, setActiveTab] = useState<'leaderboard' | 'events' | 'rules' | 'history'>('leaderboard');
   const [timeRemaining, setTimeRemaining] = useState<ReturnType<typeof getTimeRemaining> | null>(null);
   const [isLive, setIsLive] = useState(true);
 
@@ -83,16 +135,27 @@ export default function TournamentPage() {
     }
   }, []);
 
+  const fetchEvents = useCallback(async () => {
+    try {
+      const res = await fetch('/api/world/events/recent');
+      const data = await res.json();
+      if (data.success) {
+        setEventsData(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    }
+  }, []);
+
   // Initial fetch
   useEffect(() => {
     const init = async () => {
       setLoading(true);
-      await fetchTournaments();
-      await fetchHistory();
+      await Promise.all([fetchTournaments(), fetchHistory(), fetchEvents()]);
       setLoading(false);
     };
     init();
-  }, [fetchTournaments, fetchHistory]);
+  }, [fetchTournaments, fetchHistory, fetchEvents]);
 
   // Fetch detail when current tournament is available
   useEffect(() => {
@@ -259,7 +322,7 @@ export default function TournamentPage() {
 
             {/* Tabs */}
             <div className="flex gap-1 mb-4 bg-[var(--surface-alt)] p-1 border-2 border-[var(--border)]">
-              {(['leaderboard', 'rules', 'history'] as const).map((tab) => (
+              {(['leaderboard', 'events', 'rules', 'history'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -269,7 +332,10 @@ export default function TournamentPage() {
                       : 'text-[var(--muted)] hover:text-[var(--foreground)]'
                   }`}
                 >
-                  {tab === 'leaderboard' ? '🏆 Leaderboard' : tab === 'rules' ? '📜 Rules' : '🏛️ Hall of Fame'}
+                  {tab === 'leaderboard' ? '🏆 Leaderboard'
+                    : tab === 'events' ? `⚡ Events${eventsData ? ` (${eventsData.active_count})` : ''}`
+                    : tab === 'rules' ? '📜 Rules'
+                    : '🏛️ Hall of Fame'}
                 </button>
               ))}
             </div>
@@ -291,6 +357,85 @@ export default function TournamentPage() {
                   tournamentType={tournament.type}
                   maxDisplay={100}
                 />
+              </div>
+            )}
+
+            {activeTab === 'events' && (
+              <div className="pixel-card p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-lg">Micro-Events</h3>
+                  <button
+                    onClick={fetchEvents}
+                    className="px-3 py-1 text-xs bg-[var(--surface-alt)] border-2 border-[var(--border)] hover:border-[var(--accent)] transition-colors"
+                  >
+                    🔄 Refresh
+                  </button>
+                </div>
+                {eventsData && eventsData.events.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {eventsData.events.map((event) => (
+                      <div
+                        key={event.id}
+                        className={`p-3 border-2 transition-colors ${
+                          event.is_active
+                            ? 'border-[var(--accent)] bg-[var(--accent-light)]'
+                            : 'border-[var(--border)] bg-[var(--surface-alt)] opacity-70'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <span className={`px-2 py-0.5 text-xs font-bold border ${EVENT_TYPE_COLORS[event.type] || 'bg-gray-500/20 text-gray-400 border-gray-500/50'}`}>
+                            {event.type.replace('_', ' ').toUpperCase()}
+                          </span>
+                          <span className={`px-2 py-0.5 text-xs font-bold ${
+                            event.is_active
+                              ? 'bg-green-500/20 text-green-400'
+                              : 'bg-gray-500/20 text-gray-500'
+                          }`}>
+                            {event.is_active ? 'ACTIVE' : 'EXPIRED'}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-[var(--foreground)] mb-1">{event.title}</h4>
+                        <div className="space-y-1 text-xs text-[var(--muted)]">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-[var(--accent)]">
+                              {event.bonus_percent >= 0 ? `+${event.bonus_percent}%` : `${event.bonus_percent}%`}
+                            </span>
+                            <span>
+                              {event.location === 'global'
+                                ? '🌍 Global'
+                                : `📍 (${event.location.x}, ${event.location.y}) r=${event.location.radius}`}
+                            </span>
+                          </div>
+                          <div>
+                            {event.is_active
+                              ? <span className="text-green-400">{formatTimeRemaining(event.minutes_remaining)}</span>
+                              : <span>{formatTimeAgo(event.expired_ago_minutes)}</span>}
+                          </div>
+                          {event.affected_resources && event.affected_resources.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {event.affected_resources.map(r => (
+                                <span key={r} className="px-1.5 py-0.5 text-xs bg-[var(--surface)] border border-[var(--border)]">
+                                  {r}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {event.affected_terrains && event.affected_terrains.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {event.affected_terrains.map(t => (
+                                <span key={t} className="px-1.5 py-0.5 text-xs bg-[var(--surface)] border border-[var(--border)]">
+                                  {t}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[var(--muted)] text-center py-8">No events recorded yet</p>
+                )}
               </div>
             )}
 

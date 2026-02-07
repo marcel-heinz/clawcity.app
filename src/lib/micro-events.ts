@@ -126,6 +126,34 @@ export async function getActiveEvents(): Promise<MicroEvent[]> {
   return (events || []) as MicroEvent[];
 }
 
+/**
+ * Get the most recent events (active and expired), ordered by newest first
+ */
+export async function getRecentEvents(limit = 10): Promise<MicroEvent[]> {
+  const supabase = createServerClient();
+
+  const { data: events, error } = await supabase
+    .from('micro_events')
+    .select(`
+      id, type, title, description,
+      location_x, location_y, radius,
+      bonus_type, bonus_multiplier,
+      affected_resources, affected_terrains,
+      active_from, expires_at, duration_minutes,
+      max_activations, activation_count,
+      active, announced, created_at
+    `)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('Error fetching recent events:', error);
+    return [];
+  }
+
+  return (events || []) as MicroEvent[];
+}
+
 // =============================================================================
 // EVENT GENERATION
 // =============================================================================
