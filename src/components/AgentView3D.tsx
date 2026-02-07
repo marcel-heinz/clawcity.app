@@ -117,17 +117,22 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   const yawRef = useRef(0);
   const keysRef = useRef<Record<string, boolean>>({});
   const spectatorPosRef = useRef({ x: centerX, y: centerY });
+  const spectatorVelRef = useRef({ x: 0, y: 0 }); // velocity for smooth boundary damping
   const terrainCenterRef = useRef({ x: Math.round(centerX), y: Math.round(centerY) });
   const isFetchingTerrainRef = useRef(false);
   const lastTerrainFetchRef = useRef(0);
   const isDraggingRef = useRef(false);
   const lastPointerRef = useRef({ x: 0, y: 0 });
   const joystickInputRef = useRef({ x: 0, y: 0 });
+  const smoothedJoystickRef = useRef({ x: 0, y: 0 }); // smoothed joystick for mobile
   const lastTimeRef = useRef(0);
   const waterMeshesRef = useRef<THREE.Mesh[]>([]);
   const smoothCamPosRef = useRef(new THREE.Vector3());
   const smoothCamLookRef = useRef(new THREE.Vector3());
   const mobileRotateRef = useRef(0); // -1 = left, 0 = none, 1 = right
+  // Pre-allocated Vector3s to avoid GC pressure in render loop
+  const tmpTargetCamPos = useRef(new THREE.Vector3());
+  const tmpTargetLookAt = useRef(new THREE.Vector3());
   // Per-tile chunk tracking for smooth streaming (no clear-and-rebuild)
   const loadedTilesRef = useRef<Map<string, THREE.Group>>(new Map());
   const loadedWaterRef = useRef<Map<string, THREE.Mesh>>(new Map());
@@ -1018,9 +1023,17 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         // ── SPECTATOR MODE ──────────────────────────────────────────────────
         const MOVE_SPEED = 5;
         const ROTATE_SPEED = 2;
+        const BOUNDARY_MARGIN = 15;       // Soft zone width (tiles) before world edge
+        const BOUNDARY_MIN_SPEED = 0.05;  // Minimum speed multiplier at the very edge
         const yaw = yawRef.current;
         const keys = keysRef.current;
-        const joystick = joystickInputRef.current;
+
+        // Smooth joystick input to avoid jerky mobile movement
+        const rawJoystick = joystickInputRef.current;
+        const smoothJoy = smoothedJoystickRef.current;
+        const joyDamp = 1 - Math.exp(-12 * dt); // fast but smooth input damping
+        smoothJoy.x += (rawJoystick.x - smoothJoy.x) * joyDamp;
+        smoothJoy.y += (rawJoystick.y - smoothJoy.y) * joyDamp;
 
         const forwardX = -Math.sin(yaw);
         const forwardZ = -Math.cos(yaw);
@@ -1036,9 +1049,9 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         if (keys['arrowright']) yawRef.current -= ROTATE_SPEED * dt;
 
         // Joystick input (mobile) - forward/back + strafe left/right (like WASD)
-        if (joystick.x !== 0 || joystick.y !== 0) {
-          moveX += forwardX * (-joystick.y) + rightX * joystick.x;
-          moveZ += forwardZ * (-joystick.y) + rightZ * joystick.x;
+        if (smoothJoy.x !== 0 || smoothJoy.y !== 0) {
+          moveX += forwardX * (-smoothJoy.y) + rightX * smoothJoy.x;
+          moveZ += forwardZ * (-smoothJoy.y) + rightZ * smoothJoy.x;
         }
 
         // Mobile rotate buttons
@@ -1049,11 +1062,44 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
         const mag = Math.sqrt(moveX * moveX + moveZ * moveZ);
         if (mag > 0) {
+          // Compute per-axis boundary damping: smoothly reduce speed as we approach edges
+          const pos = spectatorPosRef.current;
+          const edgeMax = WORLD_SIZE - 1;
+
+          // How much speed to allow along each axis based on proximity to boundary
+          const dampAxis = (p: number, dir: number): number => {
+            if (dir > 0) {
+              // Moving toward max edge
+              const dist = edgeMax - p;
+              if (dist <= 0) return 0;
+              if (dist < BOUNDARY_MARGIN) {
+                const t = dist / BOUNDARY_MARGIN; // 0 at edge, 1 at margin
+                return BOUNDARY_MIN_SPEED + (1 - BOUNDARY_MIN_SPEED) * (t * t * (3 - 2 * t)); // smoothstep
+              }
+            } else if (dir < 0) {
+              // Moving toward min edge
+              const dist = p;
+              if (dist <= 0) return 0;
+              if (dist < BOUNDARY_MARGIN) {
+                const t = dist / BOUNDARY_MARGIN;
+                return BOUNDARY_MIN_SPEED + (1 - BOUNDARY_MIN_SPEED) * (t * t * (3 - 2 * t));
+              }
+            }
+            return 1;
+          };
+
+          const dirX = moveX / mag;
+          const dirZ = moveZ / mag;
+          const dampX = dampAxis(pos.x, dirX);
+          const dampZ = dampAxis(pos.y, dirZ);
+
           const speed = MOVE_SPEED * dt;
-          spectatorPosRef.current.x += (moveX / mag) * speed;
-          spectatorPosRef.current.y += (moveZ / mag) * speed;
-          spectatorPosRef.current.x = Math.max(0, Math.min(WORLD_SIZE - 1, spectatorPosRef.current.x));
-          spectatorPosRef.current.y = Math.max(0, Math.min(WORLD_SIZE - 1, spectatorPosRef.current.y));
+          pos.x += dirX * speed * dampX;
+          pos.y += dirZ * speed * dampZ;
+
+          // Absolute hard clamp as safety net (should rarely engage due to damping)
+          pos.x = Math.max(0, Math.min(edgeMax, pos.x));
+          pos.y = Math.max(0, Math.min(edgeMax, pos.y));
         }
 
         if (now - lastDisplayUpdateTime > 100) {
@@ -1068,18 +1114,20 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         const localZ = spectatorPosRef.current.y - tc.y;
         const currentYaw = yawRef.current;
 
-        // Third-person camera for spectator: elevated, looking down (smooth lerp)
+        // Third-person camera for spectator: elevated, looking down
+        // Use pre-allocated Vector3s to avoid GC pressure on mobile
         const camOffsetX = Math.sin(currentYaw) * CAMERA_DISTANCE;
         const camOffsetZ = Math.cos(currentYaw) * CAMERA_DISTANCE;
-        const targetCamPos = new THREE.Vector3(localX + camOffsetX, CAMERA_HEIGHT, localZ + camOffsetZ);
-        const targetLookAt = new THREE.Vector3(
+        tmpTargetCamPos.current.set(localX + camOffsetX, CAMERA_HEIGHT, localZ + camOffsetZ);
+        tmpTargetLookAt.current.set(
           localX - Math.sin(currentYaw) * CAMERA_LOOK_AHEAD,
           0,
           localZ - Math.cos(currentYaw) * CAMERA_LOOK_AHEAD
         );
-        const camLerp = 1 - Math.pow(0.02, dt); // frame-rate independent smoothing
-        smoothCamPosRef.current.lerp(targetCamPos, camLerp);
-        smoothCamLookRef.current.lerp(targetLookAt, camLerp);
+        // Frame-rate independent smoothing: lambda=6 gives snappy but smooth follow
+        const camLerp = 1 - Math.exp(-6 * dt);
+        smoothCamPosRef.current.lerp(tmpTargetCamPos.current, camLerp);
+        smoothCamLookRef.current.lerp(tmpTargetLookAt.current, camLerp);
         camera.position.copy(smoothCamPosRef.current);
         camera.lookAt(smoothCamLookRef.current);
 
@@ -1124,9 +1172,10 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         }
       } else {
         // ── FOLLOW MODE ─────────────────────────────────────────────────────
-        const lerpFactor = 0.07; // Smooth camera follow
-        currentPosRef.current.x += (targetPosRef.current.x - currentPosRef.current.x) * lerpFactor;
-        currentPosRef.current.y += (targetPosRef.current.y - currentPosRef.current.y) * lerpFactor;
+        // Frame-rate independent smoothing (lambda=4 for smooth camera follow)
+        const followLerp = 1 - Math.exp(-4 * dt);
+        currentPosRef.current.x += (targetPosRef.current.x - currentPosRef.current.x) * followLerp;
+        currentPosRef.current.y += (targetPosRef.current.y - currentPosRef.current.y) * followLerp;
 
         // Camera behind and above the agent
         camera.position.set(0, CAMERA_HEIGHT, CAMERA_DISTANCE);
@@ -1137,9 +1186,10 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         sunLight.target.position.set(0, 0, 0);
       }
 
-      // Interpolate other agents
+      // Interpolate other agents (frame-rate independent)
+      const agentLerp = 1 - Math.exp(-5 * dt);
       otherAgentsRef.current.forEach((agentData) => {
-        agentData.current.lerp(agentData.target, 0.1);
+        agentData.current.lerp(agentData.target, agentLerp);
         agentData.mesh.position.copy(agentData.current);
       });
 
