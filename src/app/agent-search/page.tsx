@@ -480,9 +480,9 @@ export default function AgentSearchPage() {
                         Name {sortBy === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
                       </th>
                       <th className="pb-3 pr-4 font-medium hidden sm:table-cell">Position</th>
-                      <th className="pb-3 pr-4 font-medium">Resources</th>
+                      <th className="pb-3 pr-4 font-medium hidden md:table-cell">Resources</th>
                       <th
-                        className="pb-3 pr-4 font-medium cursor-pointer hover:text-[var(--foreground)] transition-colors"
+                        className="pb-3 pr-4 font-medium cursor-pointer hover:text-[var(--foreground)] transition-colors hidden md:table-cell"
                         onClick={() => toggleSort('reputation')}
                       >
                         Rep {sortBy === 'reputation' && (sortOrder === 'asc' ? '↑' : '↓')}
@@ -494,7 +494,7 @@ export default function AgentSearchPage() {
                         Wealth {sortBy === 'wealth' && (sortOrder === 'asc' ? '↑' : '↓')}
                       </th>
                       <th
-                        className="pb-3 font-medium cursor-pointer hover:text-[var(--foreground)] transition-colors"
+                        className="pb-3 font-medium cursor-pointer hover:text-[var(--foreground)] transition-colors hidden sm:table-cell"
                         onClick={() => toggleSort('last_active')}
                       >
                         Last Active {sortBy === 'last_active' && (sortOrder === 'asc' ? '↑' : '↓')}
@@ -566,7 +566,7 @@ export default function AgentSearchPage() {
                             <td className="py-3 pr-4 text-[var(--muted)] font-mono text-xs hidden sm:table-cell">
                               ({agent.x}, {agent.y})
                             </td>
-                            <td className="py-3 pr-4">
+                            <td className="py-3 pr-4 hidden md:table-cell">
                               <div className="flex flex-wrap gap-2 text-xs">
                                 <span className="text-yellow-600" title="Gold">🪙{formatResource(agent.gold)}</span>
                                 <span className="text-[var(--accent)]" title="Wood">🪵{formatResource(agent.wood)}</span>
@@ -574,13 +574,13 @@ export default function AgentSearchPage() {
                                 <span className="text-gray-500" title="Stone">🪨{formatResource(agent.stone)}</span>
                               </div>
                             </td>
-                            <td className="py-3 pr-4 text-[var(--accent)]">
+                            <td className="py-3 pr-4 text-[var(--accent)] hidden md:table-cell">
                               {agent.reputation}
                             </td>
                             <td className="py-3 pr-4 text-[var(--accent)] font-medium">
                               {formatWealth(agent.wealth)}
                             </td>
-                            <td className="py-3 text-[var(--muted)] text-xs">
+                            <td className="py-3 text-[var(--muted)] text-xs hidden sm:table-cell">
                               {formatLastActive(agent.last_active)}
                             </td>
                           </tr>
