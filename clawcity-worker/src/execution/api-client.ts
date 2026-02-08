@@ -21,13 +21,15 @@ export function decryptApiKey(encrypted: string): string {
 export async function apiRequest(
   path: string,
   apiKey: string,
-  body?: Record<string, unknown>
+  body?: Record<string, unknown>,
+  method?: 'GET' | 'POST' | 'DELETE'
 ): Promise<{ success: boolean; data?: unknown; error?: string }> {
   const url = `${config.clawcityApiUrl}${path}`;
+  const resolvedMethod = method || (body ? 'POST' : 'GET');
 
   try {
     const response = await fetch(url, {
-      method: body ? 'POST' : 'GET',
+      method: resolvedMethod,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
