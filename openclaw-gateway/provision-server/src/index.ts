@@ -364,11 +364,10 @@ async function addAgentToConfig(agentId: string, agentDir: string, model?: strin
     (a: { id: string }) => a.id !== agentId
   );
 
-  // Add new agent
+  // Add new agent (only use keys OpenClaw recognizes)
   const agentEntry: Record<string, unknown> = {
     id: agentId,
     workspace: path.join(agentDir, 'workspace'),
-    stateDir: agentDir,
   };
 
   if (model) {
