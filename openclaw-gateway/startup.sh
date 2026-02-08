@@ -36,9 +36,10 @@ cleanup() {
 
 trap cleanup SIGTERM SIGINT
 
-# Railway routes to target port 18800 — override PORT to match
-export PORT=18800
+# Use Railway's PORT env var (auto-assigned for healthcheck routing)
+# Falls back to PROVISION_PORT or 18800 if not set
+LISTEN_PORT="${PORT:-${PROVISION_PORT:-18800}}"
 
 # Start provisioning server as node user (foreground, main process for healthcheck)
-echo "[startup] Starting provisioning server on :${PORT}..."
-exec su -s /bin/bash node -c "PORT=${PORT} exec node /home/node/provision-server/dist/index.js"
+echo "[startup] Starting provisioning server on :${LISTEN_PORT}..."
+exec su -s /bin/bash node -c "PORT=${LISTEN_PORT} exec node /home/node/provision-server/dist/index.js"
