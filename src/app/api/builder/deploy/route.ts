@@ -3,6 +3,7 @@ import { createAuthServerClient } from '@/lib/supabase-auth-server';
 import { createServerClient } from '@/lib/supabase';
 import { generateApiKey, hashToken } from '@/lib/game-logic';
 import { WORLD_SIZE, STARTING_GOLD, STARTING_FOOD } from '@/lib/types';
+import { provisionAgent, deprovisionAgent, updateAgent, isOpenClawConfigured } from '@/lib/openclaw';
 import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
@@ -57,10 +58,12 @@ export async function POST(request: NextRequest) {
     }
 
     let agentId = config.agent_id;
+    let plainApiKey: string | null = null;
 
     // Create agent in the game if not already linked
     if (!agentId) {
       const apiKey = generateApiKey();
+      plainApiKey = apiKey;
       const apiKeyHash = hashToken(apiKey);
       const startX = Math.floor(Math.random() * WORLD_SIZE);
       const startY = Math.floor(Math.random() * WORLD_SIZE);
@@ -88,7 +91,7 @@ export async function POST(request: NextRequest) {
 
       agentId = agent.id;
 
-      // Encrypt the API key for the worker
+      // Encrypt the API key for the worker (kept for backward compatibility)
       const encryptionKey = process.env.AGENT_KEY_ENCRYPTION_SECRET;
       if (!encryptionKey) {
         return NextResponse.json({ error: 'Server configuration error: encryption key not set' }, { status: 500 });
@@ -123,13 +126,64 @@ export async function POST(request: NextRequest) {
         });
     }
 
+    // Provision OpenClaw agent (if gateway is configured)
+    let openclawProvisioned = false;
+    if (isOpenClawConfigured()) {
+      // For existing agents, we need to decrypt the API key for OpenClaw
+      if (!plainApiKey && config.agent_api_key_encrypted) {
+        const encryptionKey = process.env.AGENT_KEY_ENCRYPTION_SECRET;
+        if (encryptionKey) {
+          try {
+            const [ivHex, encryptedHex] = config.agent_api_key_encrypted.split(':');
+            const ivBuf = Buffer.from(ivHex, 'hex');
+            const decipher = crypto.createDecipheriv(
+              'aes-256-cbc',
+              Buffer.from(encryptionKey.padEnd(32).slice(0, 32)),
+              ivBuf
+            );
+            let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
+            decrypted += decipher.final('utf8');
+            plainApiKey = decrypted;
+          } catch (e) {
+            console.error('Failed to decrypt API key for OpenClaw:', e);
+          }
+        }
+      }
+
+      if (plainApiKey) {
+        const openclawResult = await provisionAgent({
+          agentId: config_id, // Use config ID as the OpenClaw agent ID
+          agentName: config.agent_name,
+          apiKey: plainApiKey,
+          personalityPreset: config.personality_preset || 'explorer',
+          strategyExploration: config.strategy_exploration ?? 50,
+          strategyTrading: config.strategy_trading ?? 50,
+          strategyAggression: config.strategy_aggression ?? 50,
+          strategySocial: config.strategy_social ?? 50,
+          customInstructions: config.custom_instructions || '',
+        });
+
+        openclawProvisioned = openclawResult.success;
+        if (!openclawResult.success) {
+          console.error('OpenClaw provisioning failed:', openclawResult.error, openclawResult.details);
+        }
+      }
+    }
+
     // Activate
     await supabase
       .from('agent_configs')
-      .update({ is_active: true })
+      .update({
+        is_active: true,
+        ...(openclawProvisioned ? { engine: 'openclaw' } : {}),
+      })
       .eq('id', config_id);
 
-    return NextResponse.json({ success: true, agent_id: agentId });
+    return NextResponse.json({
+      success: true,
+      agent_id: agentId,
+      engine: openclawProvisioned ? 'openclaw' : 'worker',
+    });
   } catch (error) {
     console.error('Deploy error:', error);
     return NextResponse.json({ error: 'Deployment failed' }, { status: 500 });
@@ -152,6 +206,14 @@ export async function DELETE(request: NextRequest) {
 
     const supabase = createServerClient();
 
+    // Deprovision from OpenClaw if configured
+    if (isOpenClawConfigured()) {
+      const result = await deprovisionAgent(config_id);
+      if (!result.success) {
+        console.error('OpenClaw deprovision failed:', result.error);
+      }
+    }
+
     await supabase
       .from('agent_configs')
       .update({ is_active: false })
@@ -162,5 +224,42 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     console.error('Stop error:', error);
     return NextResponse.json({ error: 'Failed to stop agent' }, { status: 500 });
+  }
+}
+
+// Update agent personality/strategy on OpenClaw when config changes
+export async function PUT(request: NextRequest) {
+  try {
+    const authSupabase = await createAuthServerClient();
+    const { data: { user } } = await authSupabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const configId = body.config_id;
+
+    if (!configId) {
+      return NextResponse.json({ error: 'Missing config_id' }, { status: 400 });
+    }
+
+    // Sync personality updates to OpenClaw
+    if (isOpenClawConfigured() && body.is_active) {
+      await updateAgent(configId, {
+        agentName: body.agent_name,
+        personalityPreset: body.personality_preset,
+        strategyExploration: body.strategy_exploration,
+        strategyTrading: body.strategy_trading,
+        strategyAggression: body.strategy_aggression,
+        strategySocial: body.strategy_social,
+        customInstructions: body.custom_instructions,
+      });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Deploy PUT error:', error);
+    return NextResponse.json({ error: 'Update failed' }, { status: 500 });
   }
 }
