@@ -3,24 +3,19 @@ set -e
 
 echo "[startup] Starting OpenClaw Gateway + Provisioning Server"
 
-# Railway provides PORT env var — provisioning server binds to it for healthcheck
-# Gateway runs on internal port only (proxied through provisioning server)
+# Fix Railway volume permissions (volume may mount as root-owned)
+chown -R node:node /home/node/.openclaw 2>/dev/null || true
+
 GATEWAY_PORT=18789
 export OPENCLAW_GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
 
-# Give the gateway more heap space (default V8 limit is too low for OpenClaw)
-export NODE_OPTIONS="--max-old-space-size=4096"
-
-# Start the OpenClaw gateway in background (non-critical — may fail if API keys missing)
+# Start gateway with increased heap as node user (background, non-critical)
 echo "[startup] Starting OpenClaw gateway on :${GATEWAY_PORT}..."
-openclaw gateway \
-  --bind lan \
-  --port ${GATEWAY_PORT} \
-  --allow-unconfigured &
+su -s /bin/bash node -c "NODE_OPTIONS='--max-old-space-size=4096' openclaw gateway --bind lan --port ${GATEWAY_PORT} --allow-unconfigured" &
 GATEWAY_PID=$!
 
 # Give gateway a moment to boot (or fail)
-sleep 2
+sleep 3
 
 # Check if gateway is still running
 if kill -0 $GATEWAY_PID 2>/dev/null; then
@@ -41,9 +36,9 @@ cleanup() {
 
 trap cleanup SIGTERM SIGINT
 
-# Unset NODE_OPTIONS so the provision server uses default heap (it's lightweight)
-unset NODE_OPTIONS
+# Railway routes to target port 18800 — override PORT to match
+export PORT=18800
 
-# Start provisioning server in foreground (this is the main process for Railway healthcheck)
-echo "[startup] Starting provisioning server on :${PORT:-18800}..."
-exec node /home/node/provision-server/dist/index.js
+# Start provisioning server as node user (foreground, main process for healthcheck)
+echo "[startup] Starting provisioning server on :${PORT}..."
+exec su -s /bin/bash node -c "PORT=${PORT} exec node /home/node/provision-server/dist/index.js"

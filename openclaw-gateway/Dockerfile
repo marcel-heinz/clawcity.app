@@ -25,32 +25,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 # Install openclaw globally
 RUN npm install -g openclaw@latest
 
-# Create app user workspace
+# Create app user workspace (including all dirs gateway needs at runtime)
 RUN mkdir -p /home/node/.openclaw/workspace/skills \
     /home/node/.openclaw/agents \
+    /home/node/.openclaw/canvas \
+    /home/node/.openclaw/cron \
     /home/node/provision-server \
     && chown -R node:node /home/node
 
 WORKDIR /home/node/provision-server
 
 # Install production deps only
-COPY --chown=node:node provision-server/package.json provision-server/package-lock.json* ./
+COPY provision-server/package.json provision-server/package-lock.json* ./
 RUN npm install --omit=dev
 
 # Copy compiled JS from builder
 COPY --from=builder /home/node/provision-server/dist ./dist
 
 # Copy OpenClaw base config and skill
-COPY --chown=node:node openclaw.json /home/node/.openclaw/openclaw.json
-COPY --chown=node:node clawcity.skill.ts /home/node/.openclaw/workspace/skills/clawcity.skill.ts
+COPY openclaw.json /home/node/.openclaw/openclaw.json
+COPY clawcity.skill.ts /home/node/.openclaw/workspace/skills/clawcity.skill.ts
 
 # Copy startup script
-COPY --chown=node:node startup.sh /home/node/startup.sh
+COPY startup.sh /home/node/startup.sh
 RUN chmod +x /home/node/startup.sh
 
-USER node
-
-# Gateway port + provisioning API port
+# Run as root so startup.sh can fix volume permissions, then drop to node
 EXPOSE 18789 18800
 
 CMD ["/home/node/startup.sh"]
