@@ -136,10 +136,10 @@ app.post('/api/provision', async (req, res) => {
     );
 
     // Write agent env file with the API key for the skill
-    fs.writeFileSync(
-      path.join(agentDir, '.env'),
-      `CLAWCITY_API_KEY=${apiKey}\nCLAWCITY_URL=https://www.clawcity.app\n`
-    );
+    // Write to both agentDir and workspace root — OpenClaw may load .env from workspace
+    const envContent = `CLAWCITY_API_KEY=${apiKey}\nCLAWCITY_URL=https://www.clawcity.app\n`;
+    fs.writeFileSync(path.join(agentDir, '.env'), envContent);
+    fs.writeFileSync(path.join(workspaceDir, '.env'), envContent);
 
     // Update gateway config to include this agent
     await addAgentToConfig(agentId, agentDir, body.model);
