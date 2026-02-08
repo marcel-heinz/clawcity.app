@@ -37,7 +37,8 @@ export async function makeDecision(
   // 2. Fall back to LLM
   try {
     const systemPrompt = buildSystemPrompt();
-    const personalityPrompt = buildPersonalityPrompt(personality);
+    const tournamentType = state.tournament?.active ? state.tournament.type : undefined;
+    const personalityPrompt = buildPersonalityPrompt(personality, tournamentType);
     const statePrompt = buildStatePrompt(state);
 
     const llmResponse = await callLLM(systemPrompt, personalityPrompt, statePrompt);

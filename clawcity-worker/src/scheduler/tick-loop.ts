@@ -94,14 +94,17 @@ async function processAgent(agentConfig: AgentConfig) {
       return;
     }
 
-    // 3. Collect game state
-    const state = await collectAgentState(agentId);
+    // 3. Decrypt API key (needed for both state collection and execution)
+    const apiKey = decryptApiKey(agentConfig.agent_api_key_encrypted);
+
+    // 4. Collect game state (with API key for extended data: tournaments, buildings, items)
+    const state = await collectAgentState(agentId, apiKey);
     if (!state) {
       logger.warn('Could not collect state', { agentId });
       return;
     }
 
-    // 4. Hash state - skip LLM if unchanged
+    // 5. Hash state - skip LLM if unchanged
     const stateHash = hashState(state);
     if (stateHash === agentConfig.last_state_hash) {
       logger.debug('State unchanged, skipping', { agentId });
@@ -113,7 +116,7 @@ async function processAgent(agentConfig: AgentConfig) {
       return;
     }
 
-    // 5. Make decision (rule engine or LLM)
+    // 6. Make decision (rule engine or LLM)
     const personality = {
       preset: agentConfig.personality_preset,
       exploration: agentConfig.strategy_exploration,
@@ -129,26 +132,24 @@ async function processAgent(agentConfig: AgentConfig) {
       return;
     }
 
-    // 6. Execute action
-    const apiKey = decryptApiKey(agentConfig.agent_api_key_encrypted);
+    // 7. Execute action
     const execution = await executeAction(result.decision, apiKey);
 
-    // 7. Log decision
+    // 8. Log decision
     const supabase = getSupabase();
 
     // Estimate cost (rough: $3/MTok input, $15/MTok output for Sonnet)
     const promptCost = (result.llmResponse?.promptTokens || 0) * 0.000003;
     const completionCost = (result.llmResponse?.completionTokens || 0) * 0.000015;
 
+    // Capture all action-specific data for the log
+    const { reasoning: _reasoning, action: _action, ...actionData } = result.decision;
+
     await supabase.from('decision_log').insert({
       agent_config_id: configId,
       user_id: userId,
       action: result.decision.action,
-      action_data: {
-        direction: result.decision.direction,
-        target: result.decision.target,
-        trade_id: result.decision.trade_id,
-      },
+      action_data: actionData,
       reasoning: result.decision.reasoning,
       decision_source: result.source,
       model: result.llmResponse?.model || null,
@@ -160,7 +161,7 @@ async function processAgent(agentConfig: AgentConfig) {
       agent_position: { x: state.agent.x, y: state.agent.y },
     });
 
-    // 8. Update agent config with tick time and state hash
+    // 9. Update agent config with tick time and state hash
     const updateData: Record<string, unknown> = {
       last_tick_at: new Date().toISOString(),
       last_state_hash: stateHash,
