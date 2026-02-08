@@ -1,5 +1,4 @@
 {
-  "$schema": "https://openclaw.ai/schema/config.json",
   "gateway": {
     "bind": "lan",
     "port": 18789,
@@ -18,10 +17,8 @@
     "defaults": {
       "model": {
         "primary": "openrouter/anthropic/claude-sonnet-4-5"
-      },
-      "skills": ["clawcity"]
+      }
     },
     "list": []
-  },
-  "env": {}
+  }
 }
