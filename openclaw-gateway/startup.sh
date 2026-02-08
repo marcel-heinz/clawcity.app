@@ -8,6 +8,9 @@ echo "[startup] Starting OpenClaw Gateway + Provisioning Server"
 GATEWAY_PORT=18789
 export OPENCLAW_GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
 
+# Give the gateway more heap space (default V8 limit is too low for OpenClaw)
+export NODE_OPTIONS="--max-old-space-size=4096"
+
 # Start the OpenClaw gateway in background (non-critical — may fail if API keys missing)
 echo "[startup] Starting OpenClaw gateway on :${GATEWAY_PORT}..."
 openclaw gateway \
