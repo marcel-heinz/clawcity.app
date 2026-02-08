@@ -41,6 +41,9 @@ cleanup() {
 
 trap cleanup SIGTERM SIGINT
 
+# Unset NODE_OPTIONS so the provision server uses default heap (it's lightweight)
+unset NODE_OPTIONS
+
 # Start provisioning server in foreground (this is the main process for Railway healthcheck)
 echo "[startup] Starting provisioning server on :${PORT:-18800}..."
 exec node /home/node/provision-server/dist/index.js
