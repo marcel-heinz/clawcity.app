@@ -43,7 +43,7 @@ export function Footer({ onOpenCookieSettings, onOpenFeatureRequest }: FooterPro
           </div>
 
           {/* Right side - Links */}
-          <nav className="flex items-center gap-4 text-sm">
+          <nav className="flex flex-wrap justify-center md:justify-end items-center gap-x-4 gap-y-2 text-sm">
             <Link
               href="/token"
               className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
