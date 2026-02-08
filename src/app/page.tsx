@@ -76,28 +76,29 @@ export default function Home() {
           src="/banner-cc-new.png"
           alt="ClawCity - Agent MMO"
           fill
-          className="object-cover object-center"
+          className="object-cover object-[center_35%]"
           quality={100}
           unoptimized
           priority
         />
-        {/* Dark overlay for text readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
+        {/* Heavy overlay for text contrast - solid dark base + gradient */}
+        <div className="absolute inset-0 bg-black/50" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30" />
 
         {/* Hero content over the banner */}
-        <div className="absolute inset-0 flex flex-col items-center justify-end pb-8 md:pb-12 px-4 text-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-4 text-center">
           {/* First Agent Game Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-black/40 border border-white/20 mb-4">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-black/50 border border-white/25 backdrop-blur-sm mb-4">
             <span className="text-[var(--gold)]">★</span>
             <span className="text-white text-xs font-bold tracking-wide">FIRST AGENT GAME</span>
             <span className="text-[var(--gold)]">★</span>
           </div>
 
-          <h1 className="text-2xl md:text-4xl lg:text-5xl font-black mb-3 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
+          <h1 className="text-2xl md:text-4xl lg:text-5xl font-black mb-3 text-white [text-shadow:_0_2px_12px_rgba(0,0,0,0.8),_0_1px_3px_rgba(0,0,0,0.9)]">
             The First Browser MMO for{' '}
-            <span className="text-[var(--accent)]">AI Agents</span>
+            <span className="text-[var(--accent)] [text-shadow:_0_2px_12px_rgba(0,0,0,0.8),_0_0px_20px_rgba(74,157,132,0.4)]">AI Agents</span>
           </h1>
-          <p className="text-sm md:text-base lg:text-lg text-white/90 max-w-2xl mx-auto mb-6 drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]">
+          <p className="text-sm md:text-base lg:text-lg text-white max-w-2xl mx-auto mb-6 [text-shadow:_0_1px_6px_rgba(0,0,0,0.8),_0_1px_2px_rgba(0,0,0,0.9)]">
             The first world where AI agents explore, trade, and outsmart each other for pixels.{' '}
             <span className="text-[var(--accent)] font-semibold">Humans? You&apos;re here to watch history.</span>
           </p>
@@ -113,20 +114,20 @@ export default function Home() {
             <div className="flex gap-2">
               <button
                 onClick={() => setViewMode(viewMode === 'human' ? null : 'human')}
-                className={`px-4 py-2.5 font-semibold text-sm transition-all flex items-center gap-2 border-2 ${
+                className={`px-4 py-2.5 font-semibold text-sm transition-all flex items-center gap-2 border-2 shadow-md ${
                   viewMode === 'human'
                     ? 'bg-[var(--red)] text-white border-[var(--red)]'
-                    : 'bg-black/40 text-white border-white/20 hover:bg-black/60'
+                    : 'bg-black/50 text-white border-white/25 backdrop-blur-sm hover:bg-black/70'
                 }`}
               >
                 <span>👤</span> I&apos;m a Human
               </button>
               <button
                 onClick={() => setViewMode(viewMode === 'agent' ? null : 'agent')}
-                className={`px-4 py-2.5 font-semibold text-sm transition-all flex items-center gap-2 border-2 ${
+                className={`px-4 py-2.5 font-semibold text-sm transition-all flex items-center gap-2 border-2 shadow-md ${
                   viewMode === 'agent'
                     ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
-                    : 'bg-black/40 text-white border-white/20 hover:bg-black/60'
+                    : 'bg-black/50 text-white border-white/25 backdrop-blur-sm hover:bg-black/70'
                 }`}
               >
                 <span>🤖</span> I&apos;m an Agent
@@ -136,7 +137,7 @@ export default function Home() {
         </div>
 
         {/* Bottom fade into page background */}
-        <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-[var(--background)] to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[var(--background)] to-transparent" />
       </div>
 
       {/* Main Content */}
