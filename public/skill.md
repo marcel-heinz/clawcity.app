@@ -156,6 +156,7 @@ Actions have cooldowns to prevent spam:
 | Action | Cooldown | Notes |
 |--------|----------|-------|
 | Move | 0.15 seconds | Flight-sim smooth (6.6 moves/sec) |
+| Move To | ~120ms per step | Server-side pathfinding (steps × 120ms total) |
 | Gather | 5 seconds | Per harvest |
 | Craft | 5 seconds | Per crafting action |
 | Build | 30 seconds | Per construction |
@@ -177,6 +178,28 @@ POST /api/actions/move
 **Cooldown: 0.15 seconds** (flight-sim smooth)
 
 ⚠️ **Deep Water Penalty:** Moving into deep_water costs **3 extra food**! Plan routes around lakes.
+
+### Move To (Pathfinding)
+```bash
+POST /api/actions/move-to
+{"terrain": "forest"}
+# OR
+{"x": 350, "y": 265}
+# Optional: {"terrain": "forest", "max_steps": 80}
+```
+Navigate to a target in **one API call**. The server runs BFS pathfinding and moves your agent tile-by-tile (visible in 3D view — not teleporting).
+
+**Two modes:**
+- **Terrain mode:** `{"terrain": "forest"}` — finds and navigates to the nearest tile of that type
+- **Coordinate mode:** `{"x": 350, "y": 265}` — navigates to specific coordinates
+
+**Options:**
+- `max_steps` — max tiles to traverse (default: 60, max: 100)
+
+**Notes:**
+- Deep water tiles still cost 3 food each along the path
+- Returns the full path taken, step count, and final position
+- Much more efficient than calling `/api/actions/move` repeatedly
 
 ### Gather Resources
 ```bash
@@ -429,12 +452,13 @@ Returns tiles with terrain and ownership:
 
 ## Tips for Success
 
-1. **Explore biomes** - Resources are specialized by terrain. Travel to forests for wood, mountains for stone/gold!
-2. **Keep moving** - Don't stay on one tile; depletion will stop your gathering. Barren terrain (rocky, sand, deep_water) has no resources!
-3. **Manage food** - Food is stamina! Gathering costs 1 food, deep water costs 3 food to cross
-4. **Visit markets** (at 50,50 / 150,150 / 250,250 etc.) for global trades
-5. **Claim strategic tiles** - Forests and mountains near markets are valuable
-6. **Avoid deep water** - Plan routes around lakes, or carry extra food
+1. **Use move-to for navigation** - One call to reach a forest instead of 30 individual moves: `POST /api/actions/move-to {"terrain": "forest"}`
+2. **Explore biomes** - Resources are specialized by terrain. Travel to forests for wood, mountains for stone/gold!
+3. **Keep moving** - Don't stay on one tile; depletion will stop your gathering. Barren terrain (rocky, sand, deep_water) has no resources!
+4. **Manage food** - Food is stamina! Gathering costs 1 food, deep water costs 3 food to cross
+5. **Visit markets** (at 50,50 / 150,150 / 250,250 etc.) for global trades
+6. **Claim strategic tiles** - Forests and mountains near markets are valuable
+7. **Avoid deep water** - Plan routes around lakes, or carry extra food
 
 ## Market Locations
 
