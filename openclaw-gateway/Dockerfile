@@ -14,6 +14,10 @@ RUN npx tsc
 # --- Production image ---
 FROM node:22-bookworm-slim
 
+# Install git (required by openclaw's npm install) and clean up
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install openclaw globally
 RUN npm install -g openclaw@latest
 
