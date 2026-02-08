@@ -9,11 +9,9 @@ mkdir -p /home/node/.openclaw/agents \
          /home/node/.openclaw/cron \
          /home/node/.openclaw/workspace/skills
 
-# Seed config files into volume from defaults (volume mount hides Docker-build copies)
-if [ ! -f /home/node/.openclaw/openclaw.json ]; then
-  echo "[startup] Seeding openclaw.json into volume"
-  cp /home/node/defaults/openclaw.json /home/node/.openclaw/openclaw.json
-fi
+# Always sync config files from defaults into volume (ensures updates propagate)
+echo "[startup] Syncing openclaw.json into volume"
+cp /home/node/defaults/openclaw.json /home/node/.openclaw/openclaw.json
 if [ ! -f /home/node/.openclaw/workspace/skills/clawcity.skill.ts ]; then
   echo "[startup] Seeding clawcity.skill.ts into volume"
   cp /home/node/defaults/clawcity.skill.ts /home/node/.openclaw/workspace/skills/clawcity.skill.ts
