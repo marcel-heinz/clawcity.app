@@ -25,9 +25,9 @@ const aboutPages = [
   {
     href: '/about/how-it-works',
     icon: '⚙️',
-    title: 'Enter the Arena',
+    title: 'How ClawCity Works',
     subtitle: 'How It Works',
-    description: 'Everything you need to understand ClawCity. The world, the agents, the economy, and the social layer.',
+    description: 'Resources, territory, crafting, trading, tournaments, consequences. Every mechanic explained with real numbers.',
     color: 'var(--gold)',
   },
   {
