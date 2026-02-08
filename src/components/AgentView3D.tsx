@@ -1260,18 +1260,20 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         const ch = container.clientHeight;
         const projVec = tmpProjectVec.current;
 
-        const positionLabel = (label: HTMLDivElement, x3d: number, y3d: number, z3d: number): void => {
+        // Returns screen {x,y} or null if behind camera
+        const projectToScreen = (x3d: number, y3d: number, z3d: number): { sx: number; sy: number } | null => {
           projVec.set(x3d, y3d, z3d);
           projVec.project(camera);
-          if (projVec.z > 1) {
-            label.style.display = 'none';
-            return;
-          }
-          const sx = (projVec.x * 0.5 + 0.5) * cw;
-          const sy = (-projVec.y * 0.5 + 0.5) * ch;
+          if (projVec.z > 1) return null;
+          return { sx: (projVec.x * 0.5 + 0.5) * cw, sy: (-projVec.y * 0.5 + 0.5) * ch };
+        };
+
+        const positionLabel = (label: HTMLDivElement, x3d: number, y3d: number, z3d: number): void => {
+          const pos = projectToScreen(x3d, y3d, z3d);
+          if (!pos) { label.style.display = 'none'; return; }
           label.style.display = '';
-          label.style.left = `${sx}px`;
-          label.style.top = `${sy}px`;
+          label.style.left = `${pos.sx}px`;
+          label.style.top = `${pos.sy}px`;
         };
 
         // Self agent label (follow mode)
@@ -1359,32 +1361,75 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           positionLabel(label, agentData.mesh.position.x, 0.8, agentData.mesh.position.z);
         });
 
-        // Building labels
+        // Building labels — distance-based visibility + de-overlap
+        const BUILDING_LABEL_MAX_DIST = 15;  // Hide labels beyond this 3D distance
+        const BUILDING_LABEL_FADE_START = 8; // Start fading at this distance
+        const buildingScreenPositions: { sx: number; sy: number; label: HTMLDivElement }[] = [];
+
         buildingDataRef.current.forEach((info, key) => {
           const tileGroup = loadedTilesRef.current.get(key);
           if (!tileGroup) return;
+
+          // Distance check (3D distance from camera to building)
+          const dx = tileGroup.position.x - camera.position.x;
+          const dz = tileGroup.position.z - camera.position.z;
+          const dist = Math.sqrt(dx * dx + dz * dz);
+
           let label = buildingLabelElsRef.current.get(key);
+
+          if (dist > BUILDING_LABEL_MAX_DIST) {
+            if (label) label.style.display = 'none';
+            return;
+          }
+
           if (!label) {
             label = document.createElement('div');
             const typeName = info.building_type.charAt(0).toUpperCase() + info.building_type.slice(1);
-            // Resolve owner name from agents data using owner_id
             const ownerAgent = info.owner_id ? agentsDataRef.current.find(a => a.id === info.owner_id) : null;
             const ownerName = ownerAgent?.name || null;
-            label.style.cssText = 'position:absolute;pointer-events:none;padding:1px 6px;border-radius:3px;font-size:10px;text-align:center;white-space:nowrap;background:rgba(0,0,0,0.6);transform:translate(-50%,-100%);font-family:monospace;line-height:1.3;';
+            label.style.cssText = 'position:absolute;pointer-events:none;padding:1px 6px;border-radius:3px;font-size:10px;text-align:center;white-space:nowrap;background:rgba(0,0,0,0.6);transform:translate(-50%,-100%);font-family:monospace;line-height:1.3;transition:opacity 0.3s;';
             label.innerHTML = `<span style="color:#ffd700;font-weight:600;">${typeName}</span>${ownerName ? `<br/><span style="color:#aaa;font-size:9px;">${ownerName}</span>` : ''}`;
             label.dataset.ownerId = info.owner_id || '';
             overlay.appendChild(label);
             buildingLabelElsRef.current.set(key, label);
           } else if (info.owner_id && !label.querySelector('[data-resolved]') && label.childElementCount < 2) {
-            // Re-check owner name if it wasn't resolved initially (agents data may have loaded later)
             const ownerAgent = agentsDataRef.current.find(a => a.id === info.owner_id);
             if (ownerAgent) {
               const typeName = info.building_type.charAt(0).toUpperCase() + info.building_type.slice(1);
               label.innerHTML = `<span style="color:#ffd700;font-weight:600;">${typeName}</span><br/><span style="color:#aaa;font-size:9px;" data-resolved="1">${ownerAgent.name}</span>`;
             }
           }
-          positionLabel(label, tileGroup.position.x, 1.4, tileGroup.position.z);
+
+          const pos = projectToScreen(tileGroup.position.x, 1.4, tileGroup.position.z);
+          if (!pos) { label.style.display = 'none'; return; }
+
+          // Fade based on distance
+          const opacity = dist > BUILDING_LABEL_FADE_START
+            ? 1 - (dist - BUILDING_LABEL_FADE_START) / (BUILDING_LABEL_MAX_DIST - BUILDING_LABEL_FADE_START)
+            : 1;
+          label.style.opacity = `${opacity}`;
+          label.style.display = '';
+          label.style.left = `${pos.sx}px`;
+          label.style.top = `${pos.sy}px`;
+          buildingScreenPositions.push({ sx: pos.sx, sy: pos.sy, label });
         });
+
+        // De-overlap: nudge building labels that are too close on screen
+        const LABEL_MIN_GAP = 18; // minimum vertical pixels between label centers
+        buildingScreenPositions.sort((a, b) => a.sy - b.sy);
+        for (let i = 1; i < buildingScreenPositions.length; i++) {
+          const prev = buildingScreenPositions[i - 1];
+          const curr = buildingScreenPositions[i];
+          const hDist = Math.abs(curr.sx - prev.sx);
+          if (hDist < 60) { // only de-overlap labels that are horizontally close
+            const vDist = curr.sy - prev.sy;
+            if (vDist < LABEL_MIN_GAP) {
+              const nudge = LABEL_MIN_GAP - vDist;
+              curr.sy += nudge;
+              curr.label.style.top = `${curr.sy}px`;
+            }
+          }
+        }
 
         // Clean up stale agent labels
         agentLabelElsRef.current.forEach((label, id) => {
