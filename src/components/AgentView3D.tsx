@@ -153,7 +153,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   const overlayRef = useRef<HTMLDivElement>(null);
   const agentLabelElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const buildingLabelElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  const buildingDataRef = useRef<Map<string, { worldX: number; worldY: number; building_type: string; owner_name: string | null }>>(new Map());
+  const buildingDataRef = useRef<Map<string, { worldX: number; worldY: number; building_type: string; owner_id: string | null }>>(new Map());
   const [hoveredAgent, setHoveredAgent] = useState<{
     id: string;
     screenX: number;
@@ -806,7 +806,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
             worldX: tile.x,
             worldY: tile.y,
             building_type: tile.building_type,
-            owner_name: tile.owner_name || null,
+            owner_id: tile.owner_id || null,
           });
         }
       }
@@ -1279,8 +1279,36 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           let selfLabel = agentLabelElsRef.current.get('__self__');
           if (!selfLabel) {
             selfLabel = document.createElement('div');
-            selfLabel.style.cssText = 'position:absolute;pointer-events:none;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;background:rgba(0,0,0,0.7);color:#ff6666;border:1px solid rgba(255,68,68,0.4);transform:translate(-50%,-100%);font-family:monospace;';
+            selfLabel.style.cssText = 'position:absolute;pointer-events:auto;cursor:pointer;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;background:rgba(0,0,0,0.7);color:#ff6666;border:1px solid rgba(255,68,68,0.4);transform:translate(-50%,-100%);font-family:monospace;transition:background 0.15s;';
             selfLabel.textContent = agentNameRef.current || 'Agent';
+            const selfLbl = selfLabel;
+            selfLabel.addEventListener('mouseenter', () => {
+              const overlayEl = overlayRef.current;
+              if (overlayEl) {
+                const rect = overlayEl.getBoundingClientRect();
+                const lblRect = selfLbl.getBoundingClientRect();
+                const selfId = selectedAgentId || '__self__';
+                const ap = agentsDataRef.current.find(a => a.id === selfId);
+                setHoveredAgent({
+                  id: selfId,
+                  screenX: lblRect.left - rect.left + lblRect.width / 2,
+                  screenY: lblRect.top - rect.top,
+                  name: ap?.name || agentNameRef.current || 'Agent',
+                  worldX: ap?.x ?? targetPosRef.current.x,
+                  worldY: ap?.y ?? targetPosRef.current.y,
+                  reputation: ap?.reputation,
+                  wealth: ap?.wealth,
+                  territory_count: ap?.territory_count,
+                });
+              }
+              selfLbl.style.background = 'rgba(0,0,0,0.9)';
+              selfLbl.style.color = '#ff8888';
+            });
+            selfLabel.addEventListener('mouseleave', () => {
+              setHoveredAgent(null);
+              selfLbl.style.background = 'rgba(0,0,0,0.7)';
+              selfLbl.style.color = '#ff6666';
+            });
             overlay.appendChild(selfLabel);
             agentLabelElsRef.current.set('__self__', selfLabel);
           }
@@ -1339,10 +1367,21 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           if (!label) {
             label = document.createElement('div');
             const typeName = info.building_type.charAt(0).toUpperCase() + info.building_type.slice(1);
+            // Resolve owner name from agents data using owner_id
+            const ownerAgent = info.owner_id ? agentsDataRef.current.find(a => a.id === info.owner_id) : null;
+            const ownerName = ownerAgent?.name || null;
             label.style.cssText = 'position:absolute;pointer-events:none;padding:1px 6px;border-radius:3px;font-size:10px;text-align:center;white-space:nowrap;background:rgba(0,0,0,0.6);transform:translate(-50%,-100%);font-family:monospace;line-height:1.3;';
-            label.innerHTML = `<span style="color:#ffd700;font-weight:600;">${typeName}</span>${info.owner_name ? `<br/><span style="color:#aaa;font-size:9px;">${info.owner_name}</span>` : ''}`;
+            label.innerHTML = `<span style="color:#ffd700;font-weight:600;">${typeName}</span>${ownerName ? `<br/><span style="color:#aaa;font-size:9px;">${ownerName}</span>` : ''}`;
+            label.dataset.ownerId = info.owner_id || '';
             overlay.appendChild(label);
             buildingLabelElsRef.current.set(key, label);
+          } else if (info.owner_id && !label.querySelector('[data-resolved]') && label.childElementCount < 2) {
+            // Re-check owner name if it wasn't resolved initially (agents data may have loaded later)
+            const ownerAgent = agentsDataRef.current.find(a => a.id === info.owner_id);
+            if (ownerAgent) {
+              const typeName = info.building_type.charAt(0).toUpperCase() + info.building_type.slice(1);
+              label.innerHTML = `<span style="color:#ffd700;font-weight:600;">${typeName}</span><br/><span style="color:#aaa;font-size:9px;" data-resolved="1">${ownerAgent.name}</span>`;
+            }
           }
           positionLabel(label, tileGroup.position.x, 1.4, tileGroup.position.z);
         });
