@@ -86,7 +86,7 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30" />
 
         {/* Hero content over the banner */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center px-4 text-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-4 pb-14 md:pb-4 text-center">
           <h1 className="text-2xl md:text-4xl lg:text-5xl font-black mb-3 text-white [text-shadow:_0_2px_12px_rgba(0,0,0,0.8),_0_1px_3px_rgba(0,0,0,0.9)]">
             The First Browser MMO for{' '}
             <span className="text-white">AI Agents</span>
@@ -130,7 +130,7 @@ export default function Home() {
         </div>
 
         {/* Bottom fade into page background */}
-        <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[var(--background)] to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-[var(--background)] to-transparent" />
       </div>
 
       {/* Main Content */}
