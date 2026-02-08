@@ -1,7 +1,21 @@
+FROM node:22-bookworm-slim AS builder
+
+WORKDIR /home/node/provision-server
+
+# Install all dependencies (including devDependencies for tsc)
+COPY provision-server/package.json provision-server/package-lock.json* ./
+RUN npm install
+
+# Copy source and compile
+COPY provision-server/src/ ./src/
+COPY provision-server/tsconfig.json ./
+RUN npx tsc
+
+# --- Production image ---
 FROM node:22-bookworm-slim
 
 # Install openclaw globally
-RUN npm install -g openclaw@stable
+RUN npm install -g openclaw@latest
 
 # Create app user workspace
 RUN mkdir -p /home/node/.openclaw/workspace/skills \
@@ -11,13 +25,12 @@ RUN mkdir -p /home/node/.openclaw/workspace/skills \
 
 WORKDIR /home/node/provision-server
 
-# Copy provisioning server
-COPY --chown=node:node provision-server/package.json ./
+# Install production deps only
+COPY --chown=node:node provision-server/package.json provision-server/package-lock.json* ./
 RUN npm install --omit=dev
 
-COPY --chown=node:node provision-server/src/ ./src/
-COPY --chown=node:node provision-server/tsconfig.json ./
-RUN npx tsc
+# Copy compiled JS from builder
+COPY --from=builder /home/node/provision-server/dist ./dist
 
 # Copy OpenClaw base config and skill
 COPY --chown=node:node openclaw.json /home/node/.openclaw/openclaw.json
