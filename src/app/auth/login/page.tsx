@@ -11,6 +11,7 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/builder';
+  const signupEnabled = searchParams.get('access') === 'granted';
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
@@ -60,14 +61,16 @@ function LoginForm() {
         {/* Sign In Card */}
         <div className="pixel-card p-6">
           {/* Signups disabled notice */}
-          <div className="mb-4 p-4 bg-[var(--surface)] border-2 border-[var(--yellow)] text-center">
-            <p className="text-sm font-semibold text-[var(--yellow)] mb-1">
-              Signups Currently Disabled
-            </p>
-            <p className="text-xs text-[var(--muted)]">
-              We&apos;re running public testing right now. Signups will be opened for everyone soon. Stay tuned!
-            </p>
-          </div>
+          {!signupEnabled && (
+            <div className="mb-4 p-4 bg-[var(--surface)] border-2 border-[var(--yellow)] text-center">
+              <p className="text-sm font-semibold text-[var(--yellow)] mb-1">
+                Signups Currently Disabled
+              </p>
+              <p className="text-xs text-[var(--muted)]">
+                We&apos;re running public testing right now. Signups will be opened for everyone soon. Stay tuned!
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 bg-[var(--red-light)] border-2 border-[var(--red)] text-[var(--red)] text-sm">
@@ -76,8 +79,9 @@ function LoginForm() {
           )}
 
           <button
-            disabled
-            className="w-full pixel-btn px-4 py-3 bg-[var(--surface)] text-[var(--foreground)] font-semibold text-sm flex items-center justify-center gap-3 opacity-50 cursor-not-allowed"
+            onClick={signupEnabled ? handleGoogleSignIn : undefined}
+            disabled={!signupEnabled || loading}
+            className={`w-full pixel-btn px-4 py-3 bg-[var(--surface)] text-[var(--foreground)] font-semibold text-sm flex items-center justify-center gap-3 ${!signupEnabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[var(--surface-hover)]'}`}
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
