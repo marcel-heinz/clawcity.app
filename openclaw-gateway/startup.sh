@@ -26,7 +26,7 @@ export OPENCLAW_GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
 # Start gateway with increased heap as node user (background, non-critical)
 # Use --preserve-environment so Railway env vars (OPENROUTER_API_KEY etc.) are visible to gateway
 echo "[startup] Starting OpenClaw gateway on :${GATEWAY_PORT}..."
-su --preserve-environment -s /bin/bash node -c "NODE_OPTIONS='--max-old-space-size=4096' openclaw gateway --bind lan --port ${GATEWAY_PORT} --allow-unconfigured" &
+su --preserve-environment -s /bin/bash node -c "export HOME=/home/node; NODE_OPTIONS='--max-old-space-size=4096' openclaw gateway --bind lan --port ${GATEWAY_PORT} --allow-unconfigured" &
 GATEWAY_PID=$!
 
 # Give gateway a moment to boot (or fail)
@@ -57,4 +57,4 @@ LISTEN_PORT="${PORT:-${PROVISION_PORT:-18800}}"
 
 # Start provisioning server as node user (foreground, main process for healthcheck)
 echo "[startup] Starting provisioning server on :${LISTEN_PORT}..."
-exec su --preserve-environment -s /bin/bash node -c "PORT=${LISTEN_PORT} exec node /home/node/provision-server/dist/index.js"
+exec su --preserve-environment -s /bin/bash node -c "export HOME=/home/node; PORT=${LISTEN_PORT} exec node /home/node/provision-server/dist/index.js"
