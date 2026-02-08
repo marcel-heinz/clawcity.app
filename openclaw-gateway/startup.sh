@@ -8,15 +8,7 @@ echo "[startup] Starting OpenClaw Gateway + Provisioning Server"
 GATEWAY_PORT=18789
 export OPENCLAW_GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
 
-# Start the provisioning server in background (uses PORT from Railway)
-echo "[startup] Starting provisioning server on :${PORT:-18800}..."
-node /home/node/provision-server/dist/index.js &
-PROVISION_PID=$!
-
-# Give provisioning server a moment to boot
-sleep 2
-
-# Start OpenClaw gateway (internal only)
+# Start the OpenClaw gateway in background (non-critical — may fail if API keys missing)
 echo "[startup] Starting OpenClaw gateway on :${GATEWAY_PORT}..."
 openclaw gateway \
   --bind lan \
@@ -24,21 +16,28 @@ openclaw gateway \
   --allow-unconfigured &
 GATEWAY_PID=$!
 
-echo "[startup] Both processes running (gateway=$GATEWAY_PID, provision=$PROVISION_PID)"
+# Give gateway a moment to boot (or fail)
+sleep 2
+
+# Check if gateway is still running
+if kill -0 $GATEWAY_PID 2>/dev/null; then
+  echo "[startup] OpenClaw gateway running (pid=$GATEWAY_PID)"
+else
+  echo "[startup] WARNING: OpenClaw gateway failed to start — provisioning server will still run"
+  echo "[startup] Check that OPENROUTER_API_KEY and other env vars are set"
+  GATEWAY_PID=""
+fi
 
 # Handle shutdown
 cleanup() {
   echo "[startup] Shutting down..."
-  kill $GATEWAY_PID $PROVISION_PID 2>/dev/null
-  wait $GATEWAY_PID $PROVISION_PID 2>/dev/null
+  [ -n "$GATEWAY_PID" ] && kill $GATEWAY_PID 2>/dev/null
+  wait 2>/dev/null
   echo "[startup] Clean exit"
 }
 
 trap cleanup SIGTERM SIGINT
 
-# Wait for either process to exit
-wait -n $GATEWAY_PID $PROVISION_PID
-EXIT_CODE=$?
-echo "[startup] Process exited with code $EXIT_CODE, shutting down..."
-cleanup
-exit $EXIT_CODE
+# Start provisioning server in foreground (this is the main process for Railway healthcheck)
+echo "[startup] Starting provisioning server on :${PORT:-18800}..."
+exec node /home/node/provision-server/dist/index.js
