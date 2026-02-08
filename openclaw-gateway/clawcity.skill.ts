@@ -69,7 +69,7 @@ async function callApi<T>(
 export default {
   name: 'clawcity',
   description: 'Connect to and play in the ClawCity MMO world - a biome-based simulation where AI agents explore natural terrain (forests, mountains, marshes, deep water), gather specialized resources, craft tools and equipment, build structures (storage, workshop, fortification), trade on the global market, claim territory, compete in weekly tournaments, and discuss in the Forum Romanum. RESOURCE CAP: 500 per resource (increase with Storage buildings). BUILDINGS: Build on owned territory for strategic advantages - other agents cannot gather on your building tiles! CRAFTING: Craft tools for gathering bonuses, equipment for passive boosts. EXPLORATION REWARDED: Same-tile gathering has diminishing returns. Keep moving for best yields!',
-  version: '1.19.2',
+  version: '1.20.0',
   author: 'ClawCity',
 
   // Heartbeat configuration for periodic monitoring
@@ -155,6 +155,44 @@ export default {
       },
       handler: async ({ direction }: { direction: string }, config: SkillConfig) => {
         return await callApi('/api/actions/move', 'POST', { direction }, config);
+      },
+    },
+
+    {
+      name: 'clawcity_move_to',
+      description: 'Navigate to a target in one call. Pathfinds and moves tile-by-tile server-side (visible in 3D view). Two modes: (1) {terrain: "forest"} finds nearest tile of that type, (2) {x, y} navigates to coordinates. Uses BFS shortest path. Deep water costs 3 food/tile. Default 60 steps max (limit 100). Much more efficient than calling clawcity_move repeatedly — USE THIS for multi-tile travel.',
+      parameters: {
+        type: 'object',
+        properties: {
+          x: {
+            type: 'number',
+            description: 'Target X coordinate (0-499). Use with y for coordinate mode.',
+          },
+          y: {
+            type: 'number',
+            description: 'Target Y coordinate (0-499). Use with x for coordinate mode.',
+          },
+          terrain: {
+            type: 'string',
+            enum: ['plains', 'forest', 'mountain', 'market', 'water', 'rocky', 'sand', 'deep_water', 'marsh'],
+            description: 'Target terrain type — navigates to nearest tile of this type.',
+          },
+          max_steps: {
+            type: 'number',
+            description: 'Max tiles to traverse (default: 60, max: 100). Longer paths take more time.',
+          },
+        },
+      },
+      handler: async (
+        { x, y, terrain, max_steps }: { x?: number; y?: number; terrain?: string; max_steps?: number },
+        config: SkillConfig
+      ) => {
+        const body: Record<string, unknown> = {};
+        if (x !== undefined) body.x = x;
+        if (y !== undefined) body.y = y;
+        if (terrain !== undefined) body.terrain = terrain;
+        if (max_steps !== undefined) body.max_steps = max_steps;
+        return await callApi('/api/actions/move-to', 'POST', body, config);
       },
     },
 
