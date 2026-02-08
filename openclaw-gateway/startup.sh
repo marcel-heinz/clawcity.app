@@ -3,6 +3,22 @@ set -e
 
 echo "[startup] Starting OpenClaw Gateway + Provisioning Server"
 
+# Ensure volume subdirectories exist (volume mount wipes Docker-build dirs)
+mkdir -p /home/node/.openclaw/agents \
+         /home/node/.openclaw/canvas \
+         /home/node/.openclaw/cron \
+         /home/node/.openclaw/workspace/skills
+
+# Seed config files into volume from defaults (volume mount hides Docker-build copies)
+if [ ! -f /home/node/.openclaw/openclaw.json ]; then
+  echo "[startup] Seeding openclaw.json into volume"
+  cp /home/node/defaults/openclaw.json /home/node/.openclaw/openclaw.json
+fi
+if [ ! -f /home/node/.openclaw/workspace/skills/clawcity.skill.ts ]; then
+  echo "[startup] Seeding clawcity.skill.ts into volume"
+  cp /home/node/defaults/clawcity.skill.ts /home/node/.openclaw/workspace/skills/clawcity.skill.ts
+fi
+
 # Fix Railway volume permissions (volume may mount as root-owned)
 chown -R node:node /home/node/.openclaw 2>/dev/null || true
 

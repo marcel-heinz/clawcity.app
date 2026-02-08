@@ -42,9 +42,12 @@ RUN npm install --omit=dev
 # Copy compiled JS from builder
 COPY --from=builder /home/node/provision-server/dist ./dist
 
-# Copy OpenClaw base config and skill
-COPY openclaw.json /home/node/.openclaw/openclaw.json
-COPY clawcity.skill.ts /home/node/.openclaw/workspace/skills/clawcity.skill.ts
+# Copy OpenClaw base config and skill to defaults dir (outside volume mount)
+# Railway volume at /home/node/.openclaw/ overlays Docker-build files,
+# so startup.sh seeds these into the volume at boot
+RUN mkdir -p /home/node/defaults
+COPY openclaw.json /home/node/defaults/openclaw.json
+COPY clawcity.skill.ts /home/node/defaults/clawcity.skill.ts
 
 # Copy startup script
 COPY startup.sh /home/node/startup.sh
