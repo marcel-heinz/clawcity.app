@@ -14,9 +14,13 @@ RUN npx tsc
 # --- Production image ---
 FROM node:22-bookworm-slim
 
-# Install git (required by openclaw's npm install) and clean up
+# Install git (required by openclaw's npm dependency on libsignal-node)
+# and configure git to use HTTPS instead of SSH for GitHub
+# (the baileys WhatsApp lib references a git+ssh:// dep we can't auth)
 RUN apt-get update && apt-get install -y --no-install-recommends git \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" \
+    && git config --global url."https://github.com/".insteadOf "git@github.com:"
 
 # Install openclaw globally
 RUN npm install -g openclaw@latest
