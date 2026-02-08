@@ -17,7 +17,7 @@ FROM node:22-bookworm-slim
 # Install git (required by openclaw's npm dependency on libsignal-node)
 # and configure git to use HTTPS instead of SSH for GitHub
 # (the baileys WhatsApp lib references a git+ssh:// dep we can't auth)
-RUN apt-get update && apt-get install -y --no-install-recommends git \
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && git config --system url."https://github.com/".insteadOf "ssh://git@github.com/" \
     && git config --system --add url."https://github.com/".insteadOf "git@github.com:"
