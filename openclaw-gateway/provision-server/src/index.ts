@@ -47,12 +47,12 @@ function authenticate(
   next();
 }
 
-app.use(authenticate);
-
-// Health check
+// Health check (before auth — Railway healthcheck sends no auth header)
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', agents: listAgentIds() });
 });
+
+app.use(authenticate);
 
 // List all provisioned agents
 app.get('/api/provision', (_req, res) => {
