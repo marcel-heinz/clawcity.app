@@ -51,6 +51,116 @@ function getLastNDays(n: number): string[] {
   return days;
 }
 
+interface EventsSummary {
+  events_per_day: Array<{ date: string; count: number }> | null;
+  active_agents_per_day: Array<{ date: string; count: number }> | null;
+  events_per_hour: Array<{ hour: number; count: number }> | null;
+  top_agents: Array<{ agent_id: string; event_count: number }> | null;
+  total_events: number;
+}
+
+// Try to use the RPC function for efficient aggregated analytics.
+// Falls back to paginated row fetching if the RPC function doesn't exist yet.
+async function getEventsSummary(
+  supabase: ReturnType<typeof createServerClient>,
+  thirtyDaysAgo: Date,
+): Promise<EventsSummary | null> {
+  const { data, error } = await supabase.rpc('analytics_events_summary', {
+    since_date: thirtyDaysAgo.toISOString(),
+  });
+
+  if (error || !data) return null;
+  return data as EventsSummary;
+}
+
+// Fallback: fetch events with pagination and aggregate in JS
+async function getEventsSummaryFallback(
+  supabase: ReturnType<typeof createServerClient>,
+  thirtyDaysAgo: Date,
+  last30Days: string[],
+): Promise<{
+  eventsPerDay: DailyMetric[];
+  activeAgentsPerDay: DailyMetric[];
+  hourlyActivityHeatmap: Array<{ hour: number; count: number }>;
+  topAgentsByActivity: Array<{ agent_id: string; event_count: number }>;
+}> {
+  // Paginate to fetch ALL events (avoids PostgREST 1000-row default limit)
+  const PAGE_SIZE = 1000;
+  const allEvents: Array<{ id: string; agent_id: string; created_at: string }> = [];
+  let offset = 0;
+
+  while (true) {
+    const { data } = await supabase
+      .from('events')
+      .select('id, agent_id, created_at')
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .order('created_at', { ascending: true })
+      .range(offset, offset + PAGE_SIZE - 1);
+
+    if (!data || data.length === 0) break;
+    allEvents.push(...data);
+    if (data.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  // Calculate events per day
+  const eventsMap: Record<string, number> = {};
+  last30Days.forEach(day => { eventsMap[day] = 0; });
+
+  allEvents.forEach(event => {
+    const day = formatDateKey(new Date(event.created_at));
+    if (eventsMap[day] !== undefined) {
+      eventsMap[day]++;
+    }
+  });
+
+  const eventsPerDay: DailyMetric[] = last30Days.map(date => ({
+    date,
+    count: eventsMap[date] || 0,
+  }));
+
+  // Calculate unique active agents per day
+  const activeAgentsMap: Record<string, Set<string>> = {};
+  last30Days.forEach(day => { activeAgentsMap[day] = new Set(); });
+
+  allEvents.forEach(event => {
+    const day = formatDateKey(new Date(event.created_at));
+    if (activeAgentsMap[day]) {
+      activeAgentsMap[day].add(event.agent_id);
+    }
+  });
+
+  const activeAgentsPerDay: DailyMetric[] = last30Days.map(date => ({
+    date,
+    count: activeAgentsMap[date]?.size || 0,
+  }));
+
+  // Hourly activity heatmap
+  const hourlyActivity: number[] = Array(24).fill(0);
+  allEvents.forEach(event => {
+    const hour = new Date(event.created_at).getUTCHours();
+    hourlyActivity[hour]++;
+  });
+
+  const hourlyActivityHeatmap = hourlyActivity.map((count, hour) => ({
+    hour,
+    count,
+  }));
+
+  // Top agents by activity
+  const agentEventCounts: Record<string, number> = {};
+  allEvents.forEach(event => {
+    agentEventCounts[event.agent_id] = (agentEventCounts[event.agent_id] || 0) + 1;
+  });
+
+  const topAgentsByActivity = Object.entries(agentEventCounts)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 10)
+    .map(([agent_id, event_count]) => ({ agent_id, event_count }));
+
+  return { eventsPerDay, activeAgentsPerDay, hourlyActivityHeatmap, topAgentsByActivity };
+}
+
 // GET - Fetch analytics data
 export async function GET(request: NextRequest) {
   if (!isAdminConfigured()) {
@@ -93,11 +203,12 @@ export async function GET(request: NextRequest) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // Fetch all agents (we need created_at and last_active for multiple metrics)
+    // Fetch all agents created in last 30 days (for new agents metric)
     const { data: agents } = await supabase
       .from('agents')
       .select('id, name, created_at, last_active, gold, wood, food, stone')
-      .gte('created_at', thirtyDaysAgo.toISOString());
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .limit(10000);
 
     // Calculate new agents per day
     const newAgentsMap: Record<string, number> = {};
@@ -115,10 +226,11 @@ export async function GET(request: NextRequest) {
       count: newAgentsMap[date] || 0,
     }));
 
-    // Fetch all agents for resource distribution and active tracking
+    // Fetch all agents for resource distribution and name mapping
     const { data: allAgents } = await supabase
       .from('agents')
-      .select('id, name, gold, wood, food, stone, last_active');
+      .select('id, name, gold, wood, food, stone, last_active')
+      .limit(10000);
 
     // Calculate resource distribution
     const resourceDistribution = {
@@ -134,77 +246,76 @@ export async function GET(request: NextRequest) {
       resourceDistribution.totalStone += agent.stone || 0;
     });
 
-    // Fetch events for activity metrics
-    const { data: events } = await supabase
-      .from('events')
-      .select('id, agent_id, created_at')
-      .gte('created_at', thirtyDaysAgo.toISOString());
-
-    // Calculate events per day
-    const eventsMap: Record<string, number> = {};
-    last30Days.forEach(day => { eventsMap[day] = 0; });
-
-    (events || []).forEach(event => {
-      const day = formatDateKey(new Date(event.created_at));
-      if (eventsMap[day] !== undefined) {
-        eventsMap[day]++;
-      }
-    });
-
-    const eventsPerDay: DailyMetric[] = last30Days.map(date => ({
-      date,
-      count: eventsMap[date] || 0,
-    }));
-
-    // Calculate unique active agents per day (agents with at least one event)
-    const activeAgentsMap: Record<string, Set<string>> = {};
-    last30Days.forEach(day => { activeAgentsMap[day] = new Set(); });
-
-    (events || []).forEach(event => {
-      const day = formatDateKey(new Date(event.created_at));
-      if (activeAgentsMap[day]) {
-        activeAgentsMap[day].add(event.agent_id);
-      }
-    });
-
-    const activeAgentsPerDay: DailyMetric[] = last30Days.map(date => ({
-      date,
-      count: activeAgentsMap[date]?.size || 0,
-    }));
-
-    // Hourly activity heatmap
-    const hourlyActivity: number[] = Array(24).fill(0);
-    (events || []).forEach(event => {
-      const hour = new Date(event.created_at).getUTCHours();
-      hourlyActivity[hour]++;
-    });
-
-    const hourlyActivityHeatmap = hourlyActivity.map((count, hour) => ({
-      hour,
-      count,
-    }));
-
-    // Top agents by activity
-    const agentEventCounts: Record<string, number> = {};
-    (events || []).forEach(event => {
-      agentEventCounts[event.agent_id] = (agentEventCounts[event.agent_id] || 0) + 1;
-    });
-
     const agentNameMap = new Map((allAgents || []).map(a => [a.id, a.name]));
-    const topAgentsByActivity = Object.entries(agentEventCounts)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 10)
-      .map(([id, count]) => ({
-        name: agentNameMap.get(id) || 'Unknown',
-        eventCount: count,
+
+    // ========================================
+    // EVENT-BASED METRICS
+    // Use RPC aggregate function (efficient, no row limit)
+    // Falls back to paginated fetch if migration not applied yet
+    // ========================================
+    let eventsPerDay: DailyMetric[];
+    let activeAgentsPerDay: DailyMetric[];
+    let hourlyActivityHeatmap: Array<{ hour: number; count: number }>;
+    let topAgentsByActivity: Array<{ name: string; eventCount: number }>;
+
+    const rpcResult = await getEventsSummary(supabase, thirtyDaysAgo);
+
+    if (rpcResult) {
+      // RPC function available — use aggregated DB results
+      const rpcEventsPerDay = rpcResult.events_per_day || [];
+      const rpcActivePerDay = rpcResult.active_agents_per_day || [];
+      const rpcHourly = rpcResult.events_per_hour || [];
+      const rpcTopAgents = rpcResult.top_agents || [];
+
+      // Merge RPC results into the full 30-day array (fill gaps with 0)
+      const eventsMap: Record<string, number> = {};
+      last30Days.forEach(day => { eventsMap[day] = 0; });
+      rpcEventsPerDay.forEach(row => {
+        const key = String(row.date); // comes as YYYY-MM-DD from DB
+        if (eventsMap[key] !== undefined) eventsMap[key] = row.count;
+      });
+      eventsPerDay = last30Days.map(date => ({ date, count: eventsMap[date] || 0 }));
+
+      const activeMap: Record<string, number> = {};
+      last30Days.forEach(day => { activeMap[day] = 0; });
+      rpcActivePerDay.forEach(row => {
+        const key = String(row.date);
+        if (activeMap[key] !== undefined) activeMap[key] = row.count;
+      });
+      activeAgentsPerDay = last30Days.map(date => ({ date, count: activeMap[date] || 0 }));
+
+      // Fill all 24 hours (DB only returns hours with events)
+      const hourMap: Record<number, number> = {};
+      for (let i = 0; i < 24; i++) hourMap[i] = 0;
+      rpcHourly.forEach(row => { hourMap[row.hour] = row.count; });
+      hourlyActivityHeatmap = Array.from({ length: 24 }, (_, i) => ({
+        hour: i,
+        count: hourMap[i] || 0,
       }));
+
+      topAgentsByActivity = rpcTopAgents.map(row => ({
+        name: agentNameMap.get(row.agent_id) || 'Unknown',
+        eventCount: row.event_count,
+      }));
+    } else {
+      // Fallback: paginated fetch (works without migration)
+      const fallback = await getEventsSummaryFallback(supabase, thirtyDaysAgo, last30Days);
+      eventsPerDay = fallback.eventsPerDay;
+      activeAgentsPerDay = fallback.activeAgentsPerDay;
+      hourlyActivityHeatmap = fallback.hourlyActivityHeatmap;
+      topAgentsByActivity = fallback.topAgentsByActivity.map(row => ({
+        name: agentNameMap.get(row.agent_id) || 'Unknown',
+        eventCount: row.event_count,
+      }));
+    }
 
     // Fetch trades for the last 30 days
     const { data: trades } = await supabase
       .from('trades')
       .select('id, created_at')
       .eq('status', 'accepted')
-      .gte('created_at', thirtyDaysAgo.toISOString());
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .limit(10000);
 
     // Calculate trades per day
     const tradesMap: Record<string, number> = {};
@@ -226,7 +337,8 @@ export async function GET(request: NextRequest) {
     const { data: threads } = await supabase
       .from('forum_threads')
       .select('id, created_at')
-      .gte('created_at', thirtyDaysAgo.toISOString());
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .limit(10000);
 
     // Calculate forum threads per day
     const threadsMap: Record<string, number> = {};
@@ -248,7 +360,8 @@ export async function GET(request: NextRequest) {
     const { data: posts } = await supabase
       .from('forum_posts')
       .select('id, created_at')
-      .gte('created_at', thirtyDaysAgo.toISOString());
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .limit(10000);
 
     // Calculate forum posts per day
     const postsMap: Record<string, number> = {};
@@ -267,13 +380,10 @@ export async function GET(request: NextRequest) {
     }));
 
     // Calculate retention rates
-    // Day 1 retention: agents who joined more than 1 day ago and were active within their first 24 hours
-    // Day 7 retention: agents who joined more than 7 days ago and were active within their first 7 days
-    // Day 30 retention: agents who joined more than 30 days ago and were active within their first 30 days
-
     const { data: allAgentsForRetention } = await supabase
       .from('agents')
-      .select('id, created_at, last_active');
+      .select('id, created_at, last_active')
+      .limit(10000);
 
     const now = Date.now();
     const oneDayMs = 24 * 60 * 60 * 1000;

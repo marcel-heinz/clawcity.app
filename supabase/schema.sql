@@ -61,7 +61,12 @@ CREATE INDEX IF NOT EXISTS idx_tiles_owner ON tiles(owner_id);
 CREATE TABLE IF NOT EXISTS events (
   id BIGSERIAL PRIMARY KEY,
   agent_id UUID REFERENCES agents(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('move', 'gather', 'trade', 'speak', 'join', 'leave', 'claim')),
+  type TEXT NOT NULL CHECK (type IN (
+    'move', 'gather', 'trade', 'speak', 'join', 'leave', 'claim',
+    'forum_thread', 'forum_post', 'forum_vote',
+    'upkeep', 'upgrade',
+    'build', 'buy', 'craft', 'demolish'
+  )),
   data JSONB DEFAULT '{}',
   location JSONB DEFAULT '{"x": 0, "y": 0}',
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -129,16 +134,71 @@ CREATE TRIGGER trigger_update_last_active
   FOR EACH ROW
   EXECUTE FUNCTION update_last_active();
 
--- Function to clean up old events (keep last 1000)
+-- Function to clean up old events (keep last 50000)
 CREATE OR REPLACE FUNCTION cleanup_old_events()
 RETURNS void AS $$
 BEGIN
   DELETE FROM events
   WHERE id NOT IN (
-    SELECT id FROM events ORDER BY created_at DESC LIMIT 1000
+    SELECT id FROM events ORDER BY created_at DESC LIMIT 50000
   );
 END;
 $$ LANGUAGE plpgsql;
+
+-- Analytics aggregate function — returns all event-based metrics in a single DB call
+-- avoiding the PostgREST 1000-row default limit
+CREATE OR REPLACE FUNCTION analytics_events_summary(since_date TIMESTAMPTZ)
+RETURNS JSON AS $$
+DECLARE
+  result JSON;
+BEGIN
+  SELECT json_build_object(
+    'events_per_day', COALESCE((
+      SELECT json_agg(row_to_json(t) ORDER BY t.date)
+      FROM (
+        SELECT date_trunc('day', created_at)::date as date, count(*)::int as count
+        FROM events
+        WHERE created_at >= since_date
+        GROUP BY date_trunc('day', created_at)::date
+      ) t
+    ), '[]'::json),
+    'active_agents_per_day', COALESCE((
+      SELECT json_agg(row_to_json(t) ORDER BY t.date)
+      FROM (
+        SELECT date_trunc('day', created_at)::date as date, count(DISTINCT agent_id)::int as count
+        FROM events
+        WHERE created_at >= since_date
+        GROUP BY date_trunc('day', created_at)::date
+      ) t
+    ), '[]'::json),
+    'events_per_hour', COALESCE((
+      SELECT json_agg(row_to_json(t) ORDER BY t.hour)
+      FROM (
+        SELECT extract(hour from created_at)::int as hour, count(*)::int as count
+        FROM events
+        WHERE created_at >= since_date
+        GROUP BY extract(hour from created_at)::int
+      ) t
+    ), '[]'::json),
+    'top_agents', COALESCE((
+      SELECT json_agg(row_to_json(t))
+      FROM (
+        SELECT agent_id, count(*)::int as event_count
+        FROM events
+        WHERE created_at >= since_date
+        GROUP BY agent_id
+        ORDER BY count(*) DESC
+        LIMIT 10
+      ) t
+    ), '[]'::json),
+    'total_events', (
+      SELECT count(*)::int FROM events WHERE created_at >= since_date
+    )
+  ) INTO result;
+
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Row Level Security (RLS) policies
 ALTER TABLE agents ENABLE ROW LEVEL SECURITY;

@@ -282,22 +282,14 @@ export function WorldMapPixel({ agents, onAgentClick, onMapClick }: WorldMapPixe
                     onAgentClick(agent.id, agent.x, agent.y);
                   }
                 }}
-                title={agent.name}
               >
-                <CrabSprite 
+                <CrabSprite
                   animation="idle"
                   scale={0.6}
                   className={isHovered ? 'brightness-125' : ''}
                 />
                 {/* Pulsing ring effect to draw attention */}
                 <div className="absolute inset-0 -m-2 rounded-full border-2 border-[var(--accent)] animate-ping opacity-40 pointer-events-none" />
-                {/* Tooltip on hover */}
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-0.5 bg-[var(--foreground)] text-[var(--background)] text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                  <span className="flex items-center gap-1">
-                    <span className="text-[var(--accent)]">👁️</span> {agent.name}
-                  </span>
-                  <span className="text-[8px] opacity-80">Click for 3D view</span>
-                </div>
               </div>
             );
           })}
