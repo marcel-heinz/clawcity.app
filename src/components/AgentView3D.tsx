@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { AgentPublic, Tile, TerrainType, WORLD_SIZE } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
-import { CrabSprite } from '@/components/CrabSprite';
 
 // ─── Color palette ───────────────────────────────────────────────────────────
 const COLORS = {
@@ -75,6 +74,7 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
 interface OtherAgentData {
   worldX: number;
   worldY: number;
+  name: string;
   current: THREE.Vector3;
   target: THREE.Vector3;
   mesh: THREE.Group;
@@ -149,6 +149,26 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   const [worldTiles, setWorldTiles] = useState<Tile[]>([]);
   const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Label overlay system for floating names/building labels
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const agentLabelElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const buildingLabelElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const buildingDataRef = useRef<Map<string, { worldX: number; worldY: number; building_type: string; owner_id: string | null }>>(new Map());
+  const [hoveredAgent, setHoveredAgent] = useState<{
+    id: string;
+    screenX: number;
+    screenY: number;
+    name: string;
+    worldX: number;
+    worldY: number;
+    reputation?: number;
+    wealth?: number;
+    territory_count?: number;
+  } | null>(null);
+  const tmpProjectVec = useRef(new THREE.Vector3());
+  const agentNameRef = useRef('');
+  const agentsDataRef = useRef<AgentPublic[]>(agents);
+
   const VIEW_RADIUS = 20;        // Tiles to load
   const UNLOAD_RADIUS = 24;      // Tiles before removal (hysteresis)
   const FETCH_THRESHOLD = 4;     // Refetch when player moves this far from last fetch center
@@ -163,6 +183,10 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
       if (agent) setAgentName(agent.name);
     }
   }, [agents, selectedAgentId, isSpectator]);
+
+  // Sync refs for animation loop access
+  useEffect(() => { agentNameRef.current = agentName; }, [agentName]);
+  useEffect(() => { agentsDataRef.current = agents; }, [agents]);
 
   // ─── Mesh Creators ───────────────────────────────────────────────────────────
 
@@ -775,6 +799,16 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
             }
           });
         }
+
+        // Track buildings for floating labels
+        if (tile.building_type) {
+          buildingDataRef.current.set(key, {
+            worldX: tile.x,
+            worldY: tile.y,
+            building_type: tile.building_type,
+            owner_id: tile.owner_id || null,
+          });
+        }
       }
     });
 
@@ -790,6 +824,9 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         terrainGroup.remove(group);
         keysToRemove.push(key);
         loadedWaterRef.current.delete(key);
+        buildingDataRef.current.delete(key);
+        const bLabel = buildingLabelElsRef.current.get(key);
+        if (bLabel) { bLabel.remove(); buildingLabelElsRef.current.delete(key); }
       } else {
         // Reposition relative to new center
         group.position.set(wx - cx, 0, wy - cy);
@@ -811,6 +848,9 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     loadedTilesRef.current.clear();
     loadedWaterRef.current.clear();
     waterMeshesRef.current = [];
+    buildingDataRef.current.clear();
+    buildingLabelElsRef.current.forEach(label => label.remove());
+    buildingLabelElsRef.current.clear();
 
     // Use streaming to add all tiles
     streamTerrain(tiles, cx, cy);
@@ -1213,6 +1253,201 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         selfAgentRef.current.position.y = Math.sin(elapsedTime * 2) * 0.02;
       }
 
+      // ── Update floating labels ──────────────────────────────────────────
+      const overlay = overlayRef.current;
+      if (overlay) {
+        const cw = container.clientWidth;
+        const ch = container.clientHeight;
+        const projVec = tmpProjectVec.current;
+
+        // Returns screen {x,y} or null if behind camera
+        const projectToScreen = (x3d: number, y3d: number, z3d: number): { sx: number; sy: number } | null => {
+          projVec.set(x3d, y3d, z3d);
+          projVec.project(camera);
+          if (projVec.z > 1) return null;
+          return { sx: (projVec.x * 0.5 + 0.5) * cw, sy: (-projVec.y * 0.5 + 0.5) * ch };
+        };
+
+        const positionLabel = (label: HTMLDivElement, x3d: number, y3d: number, z3d: number): void => {
+          const pos = projectToScreen(x3d, y3d, z3d);
+          if (!pos) { label.style.display = 'none'; return; }
+          label.style.display = '';
+          label.style.left = `${pos.sx}px`;
+          label.style.top = `${pos.sy}px`;
+        };
+
+        // Self agent label (follow mode)
+        if (!isSpectator && selfAgentRef.current) {
+          let selfLabel = agentLabelElsRef.current.get('__self__');
+          if (!selfLabel) {
+            selfLabel = document.createElement('div');
+            selfLabel.style.cssText = 'position:absolute;pointer-events:auto;cursor:pointer;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;background:rgba(0,0,0,0.7);color:#ff6666;border:1px solid rgba(255,68,68,0.4);transform:translate(-50%,-100%);font-family:monospace;transition:background 0.15s;';
+            selfLabel.textContent = agentNameRef.current || 'Agent';
+            const selfLbl = selfLabel;
+            selfLabel.addEventListener('mouseenter', () => {
+              const overlayEl = overlayRef.current;
+              if (overlayEl) {
+                const rect = overlayEl.getBoundingClientRect();
+                const lblRect = selfLbl.getBoundingClientRect();
+                const selfId = selectedAgentId || '__self__';
+                const ap = agentsDataRef.current.find(a => a.id === selfId);
+                setHoveredAgent({
+                  id: selfId,
+                  screenX: lblRect.left - rect.left + lblRect.width / 2,
+                  screenY: lblRect.top - rect.top,
+                  name: ap?.name || agentNameRef.current || 'Agent',
+                  worldX: ap?.x ?? targetPosRef.current.x,
+                  worldY: ap?.y ?? targetPosRef.current.y,
+                  reputation: ap?.reputation,
+                  wealth: ap?.wealth,
+                  territory_count: ap?.territory_count,
+                });
+              }
+              selfLbl.style.background = 'rgba(0,0,0,0.9)';
+              selfLbl.style.color = '#ff8888';
+            });
+            selfLabel.addEventListener('mouseleave', () => {
+              setHoveredAgent(null);
+              selfLbl.style.background = 'rgba(0,0,0,0.7)';
+              selfLbl.style.color = '#ff6666';
+            });
+            overlay.appendChild(selfLabel);
+            agentLabelElsRef.current.set('__self__', selfLabel);
+          }
+          const curName = agentNameRef.current || 'Agent';
+          if (selfLabel.textContent !== curName) selfLabel.textContent = curName;
+          positionLabel(selfLabel, 0, 0.8, 0);
+        }
+
+        // Other agent labels
+        otherAgentsRef.current.forEach((agentData, agentId) => {
+          let label = agentLabelElsRef.current.get(agentId);
+          if (!label) {
+            label = document.createElement('div');
+            label.style.cssText = 'position:absolute;pointer-events:auto;cursor:pointer;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;background:rgba(0,0,0,0.7);color:#ffaa66;border:1px solid rgba(255,136,68,0.3);transform:translate(-50%,-100%);font-family:monospace;transition:background 0.15s;';
+            label.textContent = agentData.name;
+            const lbl = label;
+            label.addEventListener('mouseenter', () => {
+              const overlayEl = overlayRef.current;
+              if (overlayEl) {
+                const rect = overlayEl.getBoundingClientRect();
+                const lblRect = lbl.getBoundingClientRect();
+                const ad = otherAgentsRef.current.get(agentId);
+                const ap = agentsDataRef.current.find(a => a.id === agentId);
+                setHoveredAgent({
+                  id: agentId,
+                  screenX: lblRect.left - rect.left + lblRect.width / 2,
+                  screenY: lblRect.top - rect.top,
+                  name: ap?.name || ad?.name || '?',
+                  worldX: ap?.x ?? ad?.worldX ?? 0,
+                  worldY: ap?.y ?? ad?.worldY ?? 0,
+                  reputation: ap?.reputation,
+                  wealth: ap?.wealth,
+                  territory_count: ap?.territory_count,
+                });
+              }
+              lbl.style.background = 'rgba(0,0,0,0.9)';
+              lbl.style.color = '#ffcc88';
+            });
+            label.addEventListener('mouseleave', () => {
+              setHoveredAgent(null);
+              lbl.style.background = 'rgba(0,0,0,0.7)';
+              lbl.style.color = '#ffaa66';
+            });
+            overlay.appendChild(label);
+            agentLabelElsRef.current.set(agentId, label);
+          }
+          if (label.textContent !== agentData.name) label.textContent = agentData.name;
+          positionLabel(label, agentData.mesh.position.x, 0.8, agentData.mesh.position.z);
+        });
+
+        // Building labels — distance-based visibility + de-overlap
+        const BUILDING_LABEL_MAX_DIST = 15;  // Hide labels beyond this 3D distance
+        const BUILDING_LABEL_FADE_START = 8; // Start fading at this distance
+        const buildingScreenPositions: { sx: number; sy: number; label: HTMLDivElement }[] = [];
+
+        buildingDataRef.current.forEach((info, key) => {
+          const tileGroup = loadedTilesRef.current.get(key);
+          if (!tileGroup) return;
+
+          // Distance check (3D distance from camera to building)
+          const dx = tileGroup.position.x - camera.position.x;
+          const dz = tileGroup.position.z - camera.position.z;
+          const dist = Math.sqrt(dx * dx + dz * dz);
+
+          let label = buildingLabelElsRef.current.get(key);
+
+          if (dist > BUILDING_LABEL_MAX_DIST) {
+            if (label) label.style.display = 'none';
+            return;
+          }
+
+          if (!label) {
+            label = document.createElement('div');
+            const typeName = info.building_type.charAt(0).toUpperCase() + info.building_type.slice(1);
+            const ownerAgent = info.owner_id ? agentsDataRef.current.find(a => a.id === info.owner_id) : null;
+            const ownerName = ownerAgent?.name || null;
+            label.style.cssText = 'position:absolute;pointer-events:none;padding:1px 6px;border-radius:3px;font-size:10px;text-align:center;white-space:nowrap;background:rgba(0,0,0,0.6);transform:translate(-50%,-100%);font-family:monospace;line-height:1.3;transition:opacity 0.3s;';
+            label.innerHTML = `<span style="color:#ffd700;font-weight:600;">${typeName}</span>${ownerName ? `<br/><span style="color:#aaa;font-size:9px;">${ownerName}</span>` : ''}`;
+            label.dataset.ownerId = info.owner_id || '';
+            overlay.appendChild(label);
+            buildingLabelElsRef.current.set(key, label);
+          } else if (info.owner_id && !label.querySelector('[data-resolved]') && label.childElementCount < 2) {
+            const ownerAgent = agentsDataRef.current.find(a => a.id === info.owner_id);
+            if (ownerAgent) {
+              const typeName = info.building_type.charAt(0).toUpperCase() + info.building_type.slice(1);
+              label.innerHTML = `<span style="color:#ffd700;font-weight:600;">${typeName}</span><br/><span style="color:#aaa;font-size:9px;" data-resolved="1">${ownerAgent.name}</span>`;
+            }
+          }
+
+          const pos = projectToScreen(tileGroup.position.x, 1.4, tileGroup.position.z);
+          if (!pos) { label.style.display = 'none'; return; }
+
+          // Fade based on distance
+          const opacity = dist > BUILDING_LABEL_FADE_START
+            ? 1 - (dist - BUILDING_LABEL_FADE_START) / (BUILDING_LABEL_MAX_DIST - BUILDING_LABEL_FADE_START)
+            : 1;
+          label.style.opacity = `${opacity}`;
+          label.style.display = '';
+          label.style.left = `${pos.sx}px`;
+          label.style.top = `${pos.sy}px`;
+          buildingScreenPositions.push({ sx: pos.sx, sy: pos.sy, label });
+        });
+
+        // De-overlap: nudge building labels that are too close on screen
+        const LABEL_MIN_GAP = 18; // minimum vertical pixels between label centers
+        buildingScreenPositions.sort((a, b) => a.sy - b.sy);
+        for (let i = 1; i < buildingScreenPositions.length; i++) {
+          const prev = buildingScreenPositions[i - 1];
+          const curr = buildingScreenPositions[i];
+          const hDist = Math.abs(curr.sx - prev.sx);
+          if (hDist < 60) { // only de-overlap labels that are horizontally close
+            const vDist = curr.sy - prev.sy;
+            if (vDist < LABEL_MIN_GAP) {
+              const nudge = LABEL_MIN_GAP - vDist;
+              curr.sy += nudge;
+              curr.label.style.top = `${curr.sy}px`;
+            }
+          }
+        }
+
+        // Clean up stale agent labels
+        agentLabelElsRef.current.forEach((label, id) => {
+          if (id !== '__self__' && !otherAgentsRef.current.has(id)) {
+            label.remove();
+            agentLabelElsRef.current.delete(id);
+          }
+        });
+
+        // Clean up stale building labels
+        buildingLabelElsRef.current.forEach((label, key) => {
+          if (!buildingDataRef.current.has(key) || !loadedTilesRef.current.has(key)) {
+            label.remove();
+            buildingLabelElsRef.current.delete(key);
+          }
+        });
+      }
+
       renderer.render(scene, camera);
     };
     animate();
@@ -1227,11 +1462,20 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     };
     window.addEventListener('resize', handleResize);
 
+    // Capture refs for cleanup
+    const agentLabels = agentLabelElsRef.current;
+    const buildingLabels = buildingLabelElsRef.current;
+
     return () => {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationId);
       renderer.dispose();
       if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
+      // Clean up labels
+      agentLabels.forEach(label => label.remove());
+      agentLabels.clear();
+      buildingLabels.forEach(label => label.remove());
+      buildingLabels.clear();
     };
   }, [centerX, centerY, isSpectator, fetchTiles, buildTerrain, streamTerrain, createCrabMesh]);
 
@@ -1270,6 +1514,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           if (existing) {
             agentGroup.remove(existing.mesh);
             otherAgentsRef.current.delete(updatedAgent.id);
+            const lbl = agentLabelElsRef.current.get(updatedAgent.id);
+            if (lbl) { lbl.remove(); agentLabelElsRef.current.delete(updatedAgent.id); }
           }
           return;
         }
@@ -1286,6 +1532,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           otherAgentsRef.current.set(updatedAgent.id, {
             worldX: updatedAgent.x,
             worldY: updatedAgent.y,
+            name: updatedAgent.name,
             current: new THREE.Vector3(relX, 0, relZ),
             target: new THREE.Vector3(relX, 0, relZ),
             mesh
@@ -1326,6 +1573,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
                 otherAgentsRef.current.set(agent.id, {
                   worldX: agent.x,
                   worldY: agent.y,
+                  name: agent.name,
                   current: new THREE.Vector3(relX, 0, relZ),
                   target: new THREE.Vector3(relX, 0, relZ),
                   mesh
@@ -1478,10 +1726,26 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         />
       </div>
 
-      {/* Bottom center - Crab indicator (follow mode only) */}
-      {!isSpectator && (
-        <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 translate-y-1/4 z-10 pointer-events-none">
-          <CrabSprite animation="idle" scale={2.5} />
+      {/* 3D label overlay for agent names and building labels */}
+      <div
+        ref={overlayRef}
+        className="absolute inset-0 pointer-events-none overflow-hidden"
+        style={{ zIndex: 3 }}
+      />
+
+      {/* Agent stats tooltip on hover */}
+      {hoveredAgent && (
+        <div
+          className="absolute z-30 bg-black/90 backdrop-blur-sm rounded-lg px-3 py-2 text-xs border border-white/20 pointer-events-none"
+          style={{ left: hoveredAgent.screenX + 12, top: hoveredAgent.screenY - 8, minWidth: 140 }}
+        >
+          <div className="text-orange-400 font-bold mb-1">{hoveredAgent.name}</div>
+          <div className="space-y-0.5 text-white/70">
+            <div>Position: ({hoveredAgent.worldX}, {hoveredAgent.worldY})</div>
+            {hoveredAgent.reputation !== undefined && <div>Reputation: {hoveredAgent.reputation}</div>}
+            {hoveredAgent.wealth !== undefined && <div>Wealth: {hoveredAgent.wealth}</div>}
+            {hoveredAgent.territory_count !== undefined && <div>Territories: {hoveredAgent.territory_count}</div>}
+          </div>
         </div>
       )}
 
