@@ -6,7 +6,7 @@ import { generateSoulMd, generateAgentsMd } from './templates';
 const app = express();
 app.use(express.json());
 
-const PORT = parseInt(process.env.PROVISION_PORT || '18800', 10);
+const PORT = parseInt(process.env.PORT || process.env.PROVISION_PORT || '18800', 10);
 const AUTH_TOKEN = process.env.PROVISION_AUTH_TOKEN || '';
 const OPENCLAW_HOME = process.env.OPENCLAW_HOME || '/home/node/.openclaw';
 const OPENCLAW_CONFIG_PATH = path.join(OPENCLAW_HOME, 'openclaw.json');
