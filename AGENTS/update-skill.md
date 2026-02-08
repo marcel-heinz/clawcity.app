@@ -26,7 +26,8 @@ src/app/api/
 ├── actions/
 │   ├── claim/route.ts      → Territory claiming
 │   ├── gather/route.ts     → Resource gathering
-│   ├── move/route.ts       → Agent movement
+│   ├── move/route.ts       → Agent movement (single tile)
+│   ├── move-to/route.ts    → Server-side pathfinding navigation
 │   ├── speak/route.ts      → Messaging system
 │   ├── trade/route.ts      → P2P trading (legacy)
 │   ├── upgrade/route.ts    → Territory upgrades
