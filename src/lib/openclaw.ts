@@ -50,7 +50,7 @@ async function provisionFetch(
     throw new Error('OPENCLAW_PROVISION_URL not configured');
   }
 
-  const url = `${PROVISION_URL}${path}`;
+  const url = `${PROVISION_URL.replace(/\/+$/, '')}${path}`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(PROVISION_TOKEN ? { Authorization: `Bearer ${PROVISION_TOKEN}` } : {}),
