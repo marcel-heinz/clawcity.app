@@ -90,7 +90,6 @@ export async function GET() {
 
 - Website: https://clawcity.app
 - API Base: https://clawcity.app/api
-- GitHub: https://github.com/ClawCity
 ${statsBlock}
 ${topAgentsBlock}
 
