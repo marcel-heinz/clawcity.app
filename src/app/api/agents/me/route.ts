@@ -24,13 +24,18 @@ export async function GET(request: NextRequest) {
   }
 
   const auth = await authenticateAgent(request);
-  
+
   if (!auth.success || !auth.agent) {
     return errorResponse(auth.error || 'Unauthorized', 401);
   }
 
   const agent = auth.agent;
   const supabase = createServerClient();
+
+  // Parse ?fields= parameter for selective response
+  const fieldsParam = request.nextUrl.searchParams.get('fields');
+  const requestedFields = fieldsParam ? new Set(fieldsParam.split(',').map(f => f.trim())) : null;
+  const includeField = (field: string) => !requestedFields || requestedFields.has(field);
 
   // Get current tile info
   const { data: tile } = await supabase
@@ -40,33 +45,37 @@ export async function GET(request: NextRequest) {
     .eq('y', agent.y)
     .single();
 
-  // Fetch agent's items
+  // Fetch agent's items (skip if not requested via ?fields=)
   let agentItems: AgentItem[] = [];
   let itemsForResponse: { id: string; name: string; category: string; quantity: number; uses_remaining: number | null }[] = [];
-  try {
-    const { data: items } = await supabase
-      .from('agent_items')
-      .select('id, agent_id, item_id, quantity, uses_remaining, created_at, expires_at')
-      .eq('agent_id', agent.id)
-      .gt('quantity', 0);
-    agentItems = ((items || []) as AgentItem[]).filter((item: AgentItem) =>
-      item.uses_remaining === null || item.uses_remaining > 0
-    );
-    itemsForResponse = agentItems.map(item => {
-      const def = getItemDefinition(item.item_id);
-      return {
-        id: item.item_id,
-        name: def?.name || item.item_id,
-        category: def?.category || 'unknown',
-        quantity: item.quantity,
-        uses_remaining: item.uses_remaining,
-      };
-    });
-  } catch {
-    // agent_items table may not exist yet
+  if (includeField('items') || includeField('nearby')) {
+    try {
+      const { data: items } = await supabase
+        .from('agent_items')
+        .select('id, agent_id, item_id, quantity, uses_remaining, created_at, expires_at')
+        .eq('agent_id', agent.id)
+        .gt('quantity', 0);
+      agentItems = ((items || []) as AgentItem[]).filter((item: AgentItem) =>
+        item.uses_remaining === null || item.uses_remaining > 0
+      );
+      if (includeField('items')) {
+        itemsForResponse = agentItems.map(item => {
+          const def = getItemDefinition(item.item_id);
+          return {
+            id: item.item_id,
+            name: def?.name || item.item_id,
+            category: def?.category || 'unknown',
+            quantity: item.quantity,
+            uses_remaining: item.uses_remaining,
+          };
+        });
+      }
+    } catch {
+      // agent_items table may not exist yet
+    }
   }
 
-  // Fetch agent's buildings
+  // Fetch agent's buildings (always needed for wealth calc unless only specific fields requested)
   let agentBuildings: { x: number; y: number; building_type: string; building_built_at: string }[] = [];
   let storageCount = 0;
   try {
@@ -111,104 +120,126 @@ export async function GET(request: NextRequest) {
   // Get detection range (default 5, spyglass increases to 10)
   const detectionRange = getDetectionRange(agentItems);
 
-  // Get nearby agents (detection range, default 5 tiles)
-  const { data: nearbyAgents } = await supabase
-    .from('agents')
-    .select('id, name, x, y, reputation')
-    .neq('id', agent.id)
-    .gte('x', agent.x - detectionRange)
-    .lte('x', agent.x + detectionRange)
-    .gte('y', agent.y - detectionRange)
-    .lte('y', agent.y + detectionRange);
-
-  // Get pending trades for this agent
-  const { data: pendingTrades } = await supabase
-    .from('trades')
-    .select('*')
-    .eq('to_agent_id', agent.id)
-    .eq('status', 'pending');
-
-  // Get NEW admin announcements since last seen
-  // Announcements are: pinned threads OR threads from ClawCity_Admin
-  const lastSeen = agent.last_announcement_seen_at || '1970-01-01T00:00:00Z';
-  
-  // First, get the admin agent ID
-  const { data: adminAgent } = await supabase
-    .from('agents')
-    .select('id')
-    .eq('name', ADMIN_ACCOUNT_NAME)
-    .single();
-
-  let announcements: AdminAnnouncement[] = [];
-  
-  if (adminAgent) {
-    // Get announcements: pinned threads OR threads from admin, newer than last seen
-    const { data: newAnnouncements } = await supabase
-      .from('forum_threads_public')
-      .select('id, author_name, title, body, category, pinned, created_at')
-      .gt('created_at', lastSeen)
-      .or(`pinned.eq.true,author_id.eq.${adminAgent.id}`)
-      .order('pinned', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(10);
-    
-    announcements = (newAnnouncements || []) as AdminAnnouncement[];
-  } else {
-    // No admin account yet, just check for pinned threads
-    const { data: pinnedAnnouncements } = await supabase
-      .from('forum_threads_public')
-      .select('id, author_name, title, body, category, pinned, created_at')
-      .eq('pinned', true)
-      .gt('created_at', lastSeen)
-      .order('created_at', { ascending: false })
-      .limit(10);
-    
-    announcements = (pinnedAnnouncements || []) as AdminAnnouncement[];
-  }
-
-  // If there are new announcements, update last_announcement_seen_at
-  if (announcements.length > 0) {
-    const latestTimestamp = announcements[0].created_at;
-    await supabase
+  // Get nearby agents (skip if not requested via ?fields=)
+  let nearbyAgents: { id: string; name: string; x: number; y: number; reputation: number }[] | null = null;
+  if (includeField('nearby')) {
+    const { data } = await supabase
       .from('agents')
-      .update({ last_announcement_seen_at: latestTimestamp })
-      .eq('id', agent.id);
+      .select('id, name, x, y, reputation')
+      .neq('id', agent.id)
+      .gte('x', agent.x - detectionRange)
+      .lte('x', agent.x + detectionRange)
+      .gte('y', agent.y - detectionRange)
+      .lte('y', agent.y + detectionRange);
+    nearbyAgents = data;
   }
 
-  return jsonResponse({
-    success: true,
-    data: {
-      id: agent.id,
-      name: agent.name,
-      position: { x: agent.x, y: agent.y },
-      terrain: tile?.terrain || 'unknown',
-      inventory: {
-        gold: agent.gold,
-        wood: agent.wood,
-        food: agent.food,
-        stone: agent.stone,
-      },
-      reputation: agent.reputation,
-      wealth: wealthBreakdown.total,
-      wealth_breakdown: {
-        resource_wealth: wealthBreakdown.resource_wealth,
-        infrastructure_wealth: wealthBreakdown.infrastructure_wealth,
-        territory_wealth: wealthBreakdown.territory_wealth,
-      },
-      items: itemsForResponse,
-      resource_cap: resourceCap,
-      buildings: agentBuildings.map(b => ({
-        type: b.building_type,
-        name: getBuildingDefinition(b.building_type)?.name || b.building_type,
-        position: { x: b.x, y: b.y },
-        built_at: b.building_built_at,
-      })),
-      nearby_agents: nearbyAgents || [],
-      pending_trades: pendingTrades || [],
-      last_active: agent.last_active,
-      // Push admin announcements
-      announcements: announcements.length > 0 ? announcements : undefined,
-      has_announcements: announcements.length > 0,
-    },
-  });
+  // Get pending trades (skip if not requested via ?fields=)
+  let pendingTrades: Record<string, unknown>[] | null = null;
+  if (includeField('trades')) {
+    const { data } = await supabase
+      .from('trades')
+      .select('*')
+      .eq('to_agent_id', agent.id)
+      .eq('status', 'pending');
+    pendingTrades = data;
+  }
+
+  // Get announcements (skip if not requested via ?fields=)
+  let announcements: AdminAnnouncement[] = [];
+  if (includeField('announcements')) {
+    const lastSeen = agent.last_announcement_seen_at || '1970-01-01T00:00:00Z';
+
+    const { data: adminAgent } = await supabase
+      .from('agents')
+      .select('id')
+      .eq('name', ADMIN_ACCOUNT_NAME)
+      .single();
+
+    if (adminAgent) {
+      const { data: newAnnouncements } = await supabase
+        .from('forum_threads_public')
+        .select('id, author_name, title, body, category, pinned, created_at')
+        .gt('created_at', lastSeen)
+        .or(`pinned.eq.true,author_id.eq.${adminAgent.id}`)
+        .order('pinned', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      announcements = (newAnnouncements || []) as AdminAnnouncement[];
+    } else {
+      const { data: pinnedAnnouncements } = await supabase
+        .from('forum_threads_public')
+        .select('id, author_name, title, body, category, pinned, created_at')
+        .eq('pinned', true)
+        .gt('created_at', lastSeen)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      announcements = (pinnedAnnouncements || []) as AdminAnnouncement[];
+    }
+
+    if (announcements.length > 0) {
+      const latestTimestamp = announcements[0].created_at;
+      await supabase
+        .from('agents')
+        .update({ last_announcement_seen_at: latestTimestamp })
+        .eq('id', agent.id);
+    }
+  }
+
+  // Build response — only include requested fields (all fields if no ?fields= param)
+  const data: Record<string, unknown> = {
+    id: agent.id,
+    name: agent.name,
+  };
+
+  if (includeField('position')) {
+    data.position = { x: agent.x, y: agent.y };
+    data.terrain = tile?.terrain || 'unknown';
+  }
+  if (includeField('inventory')) {
+    data.inventory = {
+      gold: agent.gold,
+      wood: agent.wood,
+      food: agent.food,
+      stone: agent.stone,
+    };
+  }
+  if (includeField('wealth')) {
+    data.reputation = agent.reputation;
+    data.wealth = wealthBreakdown.total;
+    data.wealth_breakdown = {
+      resource_wealth: wealthBreakdown.resource_wealth,
+      infrastructure_wealth: wealthBreakdown.infrastructure_wealth,
+      territory_wealth: wealthBreakdown.territory_wealth,
+    };
+  }
+  if (includeField('items')) {
+    data.items = itemsForResponse;
+  }
+  data.resource_cap = resourceCap;
+  if (includeField('buildings')) {
+    data.buildings = agentBuildings.map(b => ({
+      type: b.building_type,
+      name: getBuildingDefinition(b.building_type)?.name || b.building_type,
+      position: { x: b.x, y: b.y },
+      built_at: b.building_built_at,
+    }));
+  }
+  if (includeField('nearby')) {
+    data.nearby_agents = nearbyAgents || [];
+  }
+  if (includeField('trades')) {
+    data.pending_trades = pendingTrades || [];
+  }
+  data.last_active = agent.last_active;
+  if (includeField('announcements')) {
+    if (announcements.length > 0) {
+      data.announcements = announcements;
+    }
+    data.has_announcements = announcements.length > 0;
+  }
+
+  return jsonResponse({ success: true, data });
 }
