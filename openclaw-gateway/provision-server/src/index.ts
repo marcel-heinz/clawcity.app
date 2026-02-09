@@ -119,12 +119,10 @@ app.post('/api/provision', async (req, res) => {
     });
     fs.writeFileSync(path.join(workspaceDir, 'AGENTS.md'), agentsMd);
 
-    // Symlink or copy the ClawCity skill
+    // Always copy latest skill (SKILL_SOURCE is synced from defaults on every boot)
     const skillDest = path.join(skillsDir, 'clawcity.skill.ts');
-    if (!fs.existsSync(skillDest)) {
-      if (fs.existsSync(SKILL_SOURCE)) {
-        fs.copyFileSync(SKILL_SOURCE, skillDest);
-      }
+    if (fs.existsSync(SKILL_SOURCE)) {
+      fs.copyFileSync(SKILL_SOURCE, skillDest);
     }
 
     // Write per-agent skill config with the user's API key
