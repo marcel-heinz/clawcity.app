@@ -22,6 +22,10 @@ export function registerMoveCommands(program: Command) {
       if (!res.ok) handleError(res);
 
       const d = res.data as Record<string, unknown>;
+      if (d.error || d.success === false) {
+        console.error(`Error: ${d.error || 'Move failed'}`);
+        process.exit(1);
+      }
       const pos = d.position as Record<string, unknown> | undefined;
       const steps = d.steps_taken ?? d.steps ?? '?';
       const terrain = d.terrain ?? target;

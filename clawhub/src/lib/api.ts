@@ -40,7 +40,7 @@ export async function api(path: string, opts: ApiOptions = {}): Promise<ApiRespo
     });
 
     const json = await res.json() as Record<string, unknown>;
-    const data = (res.ok && json.data && typeof json.data === 'object')
+    const data = (res.ok && json.success !== false && json.data && typeof json.data === 'object')
       ? json.data as Record<string, unknown>
       : json;
     return { ok: res.ok, status: res.status, data };

@@ -5,6 +5,7 @@ import { TerrainType, WORLD_SIZE } from '@/lib/types';
 import { getCooldownMs } from '@/lib/game-settings';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
+import { getTerrainAt } from '@/lib/game-logic';
 
 /**
  * move-to: Server-side multi-tile pathfinding + stepped movement.
@@ -32,8 +33,6 @@ const MAX_STEPS_LIMIT = 300;
 const DEFAULT_MAX_STEPS = 60;
 // Delay between steps in ms — gives Supabase Realtime time to broadcast each position
 const STEP_DELAY_MS = 120;
-// Search radius for pathfinding (tiles to fetch from DB)
-const SEARCH_RADIUS = 150;
 
 const VALID_TERRAINS: TerrainType[] = [
   'plains', 'forest', 'mountain', 'market', 'water', 'rocky', 'sand', 'deep_water', 'marsh',
@@ -50,15 +49,34 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * BFS pathfinding on the tile grid.
+ * Spiral scan outward from (cx, cy) to find the Manhattan distance
+ * to the nearest tile of the given terrain type.
+ * Returns null if nothing found within MAX_STEPS_LIMIT.
+ */
+function spiralScanDistance(cx: number, cy: number, target: TerrainType): number | null {
+  for (let dist = 1; dist <= MAX_STEPS_LIMIT; dist++) {
+    for (let dx = -dist; dx <= dist; dx++) {
+      const dyAbs = dist - Math.abs(dx);
+      for (const dy of dyAbs === 0 ? [0] : [-dyAbs, dyAbs]) {
+        const x = cx + dx;
+        const y = cy + dy;
+        if (x < 0 || x >= WORLD_SIZE || y < 0 || y >= WORLD_SIZE) continue;
+        if (getTerrainAt(x, y) === target) return dist;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * BFS pathfinding on the tile grid using deterministic noise terrain.
  * Avoids deep_water unless the agent has enough food to pay stamina costs.
  * Returns the path as an array of {x, y} from start (exclusive) to destination (inclusive).
  */
 function findPath(
   startX: number,
   startY: number,
-  tiles: Map<string, TerrainType>,
-  isGoal: (x: number, y: number, terrain: TerrainType | undefined) => boolean,
+  isGoal: (x: number, y: number, terrain: TerrainType) => boolean,
   maxSteps: number,
   agentFood: number,
 ): { path: Array<{ x: number; y: number }>; deepWaterCount: number } | null {
@@ -86,9 +104,7 @@ function findPath(
       if (visited.has(key)) continue;
       visited.add(key);
 
-      const terrain = tiles.get(key);
-
-      // Count deep_water tiles in the path to check affordability
+      const terrain = getTerrainAt(nx, ny);
       const node: PathNode = { x: nx, y: ny, parent: current };
 
       // Reconstruct path to check length and deep_water cost
@@ -97,8 +113,7 @@ function findPath(
       let n: PathNode | null = node;
       while (n && n.parent) {
         path.unshift({ x: n.x, y: n.y });
-        const t = tiles.get(`${n.x},${n.y}`);
-        if (t === 'deep_water') deepWaterCount++;
+        if (getTerrainAt(n.x, n.y) === 'deep_water') deepWaterCount++;
         n = n.parent;
       }
 
@@ -188,31 +203,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Fetch tiles in search area for pathfinding
-    const searchRadius = Math.min(SEARCH_RADIUS, maxSteps + 10);
-    const { data: tileRows, error: tilesError } = await supabase
-      .from('tiles')
-      .select('x, y, terrain')
-      .gte('x', agent.x - searchRadius)
-      .lte('x', agent.x + searchRadius)
-      .gte('y', agent.y - searchRadius)
-      .lte('y', agent.y + searchRadius)
-      .limit(100000);
-
-    if (tilesError) {
-      console.error('move-to: tiles fetch error:', tilesError);
-      return errorResponse('Failed to fetch map data.', 500);
-    }
-
-    // Build tile map for pathfinding
-    const tileMap = new Map<string, TerrainType>();
-    for (const t of tileRows || []) {
-      tileMap.set(`${t.x},${t.y}`, t.terrain as TerrainType);
-    }
-
     // Define goal function
     let goalDescription: string;
-    let isGoal: (x: number, y: number, terrain: TerrainType | undefined) => boolean;
+    let isGoal: (x: number, y: number, terrain: TerrainType) => boolean;
+    let effectiveMaxSteps = maxSteps;
 
     if (hasCoords) {
       goalDescription = `(${targetX}, ${targetY})`;
@@ -224,7 +218,7 @@ export async function POST(request: NextRequest) {
 
     // Check if already on target terrain
     if (hasTerrain) {
-      const currentTerrain = tileMap.get(`${agent.x},${agent.y}`);
+      const currentTerrain = getTerrainAt(agent.x, agent.y);
       if (currentTerrain === targetTerrain) {
         return jsonResponse({
           success: true,
@@ -237,19 +231,25 @@ export async function POST(request: NextRequest) {
           },
         });
       }
+
+      // Spiral scan to find nearest matching terrain and auto-expand max_steps
+      const nearestDist = spiralScanDistance(agent.x, agent.y, targetTerrain as TerrainType);
+      if (nearestDist !== null) {
+        effectiveMaxSteps = Math.max(effectiveMaxSteps, nearestDist + 10);
+        effectiveMaxSteps = Math.min(effectiveMaxSteps, MAX_STEPS_LIMIT);
+      }
     }
 
-    // Find path via BFS
-    const result = findPath(agent.x, agent.y, tileMap, isGoal, maxSteps, agent.food);
+    // Find path via BFS (uses deterministic noise — no DB dependency)
+    const result = findPath(agent.x, agent.y, isGoal, effectiveMaxSteps, agent.food);
 
     if (!result) {
       return jsonResponse({
         success: false,
-        error: `No path found to ${goalDescription} within ${maxSteps} steps. Try increasing max_steps or moving to a different area first.`,
+        error: `No path found to ${goalDescription} within ${effectiveMaxSteps} steps. Try increasing max_steps or moving to a different area first.`,
         data: {
           position: { x: agent.x, y: agent.y },
-          searched_radius: searchRadius,
-          max_steps: maxSteps,
+          max_steps: effectiveMaxSteps,
         },
       });
     }
@@ -268,7 +268,7 @@ export async function POST(request: NextRequest) {
 
     for (let i = 0; i < path.length; i++) {
       const step = path[i];
-      const stepTerrain = tileMap.get(`${step.x},${step.y}`) || 'unknown';
+      const stepTerrain = getTerrainAt(step.x, step.y);
 
       // Deep water stamina cost
       let foodDeduction = 0;
@@ -300,7 +300,7 @@ export async function POST(request: NextRequest) {
           data: {
             message: `Moved ${pathTaken.length} of ${path.length} steps before error.`,
             position: { x: currentX, y: currentY },
-            terrain: tileMap.get(`${currentX},${currentY}`) || 'unknown',
+            terrain: getTerrainAt(currentX, currentY),
             steps: pathTaken.length,
             path: pathTaken,
             error_at_step: i,
@@ -339,7 +339,7 @@ export async function POST(request: NextRequest) {
       .update({ last_active: new Date().toISOString() })
       .eq('id', agent.id);
 
-    const finalTerrain = tileMap.get(`${currentX},${currentY}`) || 'unknown';
+    const finalTerrain = getTerrainAt(currentX, currentY);
 
     // Build terrain summary instead of full path array to save tokens
     const terrainCounts: Record<string, number> = {};
