@@ -20,6 +20,14 @@
       },
       "models": {
         "openrouter/anthropic/claude-sonnet-4.5": {}
+      },
+      "heartbeat": {
+        "every": "30m",
+        "target": "last",
+        "activeHours": {
+          "start": "06:00",
+          "end": "23:00"
+        }
       }
     },
     "list": []

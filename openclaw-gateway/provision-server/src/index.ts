@@ -1,7 +1,6 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
 import { generateSoulMd, generateAgentsMd } from './templates';
 
 const app = express();
@@ -14,8 +13,8 @@ const OPENCLAW_CONFIG_PATH = path.join(OPENCLAW_HOME, 'openclaw.json');
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789';
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || '';
 
-// Shared skill source path
-const SKILL_SOURCE = path.join(OPENCLAW_HOME, 'workspace', 'skills', 'clawcity.skill.ts');
+// Shared skill source directory (SKILL.md format, auto-discovered by OpenClaw)
+const SKILL_SOURCE_DIR = path.join(OPENCLAW_HOME, 'workspace', 'skills', 'clawcity');
 
 interface ProvisionRequest {
   agentId: string; // Unique ID for this user's agent (use ClawCity user_id)
@@ -120,22 +119,17 @@ app.post('/api/provision', async (req, res) => {
     });
     fs.writeFileSync(path.join(workspaceDir, 'AGENTS.md'), agentsMd);
 
-    // Always copy latest skill (SKILL_SOURCE is synced from defaults on every boot)
-    const skillDest = path.join(skillsDir, 'clawcity.skill.ts');
-    if (fs.existsSync(SKILL_SOURCE)) {
-      fs.copyFileSync(SKILL_SOURCE, skillDest);
-    }
-
-    // Explicitly install the skill so OpenClaw's tool system recognizes it
-    try {
-      execSync(`openclaw skills install ${skillDest}`, {
-        env: { ...process.env, HOME: '/home/node' },
-        timeout: 15000,
-        stdio: 'pipe',
-      });
-      console.log(`[provision] Skill installed for agent ${agentId}`);
-    } catch (e) {
-      console.warn(`[provision] Skill install command failed for ${agentId}:`, e instanceof Error ? e.message : e);
+    // Copy latest skill directory (SKILL.md format, auto-discovered by OpenClaw)
+    const skillDestDir = path.join(skillsDir, 'clawcity');
+    if (fs.existsSync(SKILL_SOURCE_DIR)) {
+      fs.mkdirSync(skillDestDir, { recursive: true });
+      for (const file of fs.readdirSync(SKILL_SOURCE_DIR)) {
+        fs.copyFileSync(
+          path.join(SKILL_SOURCE_DIR, file),
+          path.join(skillDestDir, file)
+        );
+      }
+      console.log(`[provision] Skill copied for agent ${agentId}`);
     }
 
     // Write per-agent skill config with the user's API key
@@ -151,6 +145,12 @@ app.post('/api/provision', async (req, res) => {
     const envContent = `CLAWCITY_API_KEY=${apiKey}\nCLAWCITY_URL=https://www.clawcity.app\n`;
     fs.writeFileSync(path.join(agentDir, '.env'), envContent);
     fs.writeFileSync(path.join(workspaceDir, '.env'), envContent);
+
+    // Copy heartbeat checklist into agent workspace (OpenClaw reads HEARTBEAT.md on each cycle)
+    const heartbeatSource = path.join(OPENCLAW_HOME, 'workspace', 'HEARTBEAT.md');
+    if (fs.existsSync(heartbeatSource)) {
+      fs.copyFileSync(heartbeatSource, path.join(workspaceDir, 'HEARTBEAT.md'));
+    }
 
     // Update gateway config to include this agent
     await addAgentToConfig(agentId, agentDir, body.model);
