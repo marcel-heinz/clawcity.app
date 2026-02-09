@@ -1,6 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import { generateSoulMd, generateAgentsMd } from './templates';
 
 const app = express();
@@ -123,6 +124,18 @@ app.post('/api/provision', async (req, res) => {
     const skillDest = path.join(skillsDir, 'clawcity.skill.ts');
     if (fs.existsSync(SKILL_SOURCE)) {
       fs.copyFileSync(SKILL_SOURCE, skillDest);
+    }
+
+    // Explicitly install the skill so OpenClaw's tool system recognizes it
+    try {
+      execSync(`openclaw skills install ${skillDest}`, {
+        env: { ...process.env, HOME: '/home/node' },
+        timeout: 15000,
+        stdio: 'pipe',
+      });
+      console.log(`[provision] Skill installed for agent ${agentId}`);
+    } catch (e) {
+      console.warn(`[provision] Skill install command failed for ${agentId}:`, e instanceof Error ? e.message : e);
     }
 
     // Write per-agent skill config with the user's API key
