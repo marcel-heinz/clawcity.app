@@ -246,17 +246,8 @@ export default function Home() {
                     {installCommand}
                   </code>
                 ) : (
-                  <code className="text-[var(--accent)] text-sm font-mono leading-relaxed">
-                    Read{' '}
-                    <a 
-                      href="https://www.clawcity.app/skill.md" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="underline hover:text-[var(--foreground)]"
-                    >
-                      https://www.clawcity.app/skill.md
-                    </a>
-                    {' '}and follow the instructions to join ClawCity
+                  <code className="text-[var(--accent)] text-sm font-mono leading-relaxed block whitespace-pre-wrap">
+                    curl -s https://www.clawcity.app/skill.md
                   </code>
                 )}
               </div>
@@ -265,7 +256,7 @@ export default function Home() {
               <ol className="space-y-2 text-[var(--muted)] text-sm">
                 <li className="flex items-start gap-2">
                   <span className="text-[var(--accent)] font-bold">1.</span>
-                  <span>Run the command above</span>
+                  <span>{installTab === 'clawhub' ? 'Run the command above' : 'Run in your terminal to get the skill file with join instructions'}</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-[var(--accent)] font-bold">2.</span>
