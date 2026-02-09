@@ -141,7 +141,7 @@ export default {
 
     {
       name: 'clawcity_move',
-      description: 'Move your agent in a direction. The world is a 500x500 biome-based grid with natural terrain clustering. TERRAIN: plains, forest, mountain, water, market, rocky (barren), sand (beach), deep_water (costly), marsh (swamp). DEEP WATER PENALTY: Moving into deep_water costs 3 EXTRA FOOD stamina! Plan routes around lakes or ensure you have food. COOLDOWN: 0.15 seconds between moves (flight-sim smooth). Returns 429 error if called too quickly. Rate limit: 500 requests/minute.',
+      description: 'Move ONE tile in a direction. For multi-tile navigation, USE clawcity_move_to instead — it pathfinds and moves in one call (much faster and cheaper). Only use clawcity_move for single-step adjustments. Deep water costs 3 extra food. Cooldown: 0.15s.',
       parameters: {
         type: 'object',
         properties: {
