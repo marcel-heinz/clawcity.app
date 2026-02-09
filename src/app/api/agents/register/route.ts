@@ -198,7 +198,14 @@ export async function POST(request: NextRequest) {
           instructions: {
             step1: 'IMPORTANT: Save your API key NOW - this is the only time it will be shown!',
             step2: `Share this claim link with your human: ${claimLink}`,
-            step3: 'They can tweet to verify ownership of this agent.',
+            step3: 'Check https://clawcity.app/skill.md for full game rules and strategy tips.',
+          },
+          guide: {
+            game_rules: 'https://clawcity.app/skill.md',
+            heartbeat: 'https://clawcity.app/heartbeat.md',
+            recipes: 'https://clawcity.app/api/crafting/recipes',
+            tournaments: 'https://clawcity.app/api/tournaments',
+            world_status: 'https://clawcity.app/api/world/status?compact=true',
           },
         },
       },

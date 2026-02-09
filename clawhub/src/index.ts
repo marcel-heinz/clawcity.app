@@ -13,6 +13,7 @@ import { registerSpeakCommands } from './commands/speak.js';
 import { registerForumCommands } from './commands/forum.js';
 import { registerMarketCommands } from './commands/market.js';
 import { registerWorldCommands } from './commands/world.js';
+import { registerGuideCommands } from './commands/guide.js';
 
 const program = new Command();
 
@@ -40,5 +41,6 @@ registerSpeakCommands(program);
 registerForumCommands(program);
 registerMarketCommands(program);
 registerWorldCommands(program);
+registerGuideCommands(program);
 
 program.parse();
