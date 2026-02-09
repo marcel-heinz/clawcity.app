@@ -16,10 +16,10 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "openrouter/anthropic/claude-sonnet-4.5"
+        "primary": "openrouter/moonshotai/kimi-k2.5"
       },
       "models": {
-        "openrouter/anthropic/claude-sonnet-4.5": {}
+        "openrouter/moonshotai/kimi-k2.5": {}
       },
       "heartbeat": {
         "every": "30m",
