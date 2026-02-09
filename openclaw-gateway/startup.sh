@@ -12,13 +12,26 @@ mkdir -p /home/node/.openclaw/agents \
 # Always sync config files from defaults into volume (ensures updates propagate)
 echo "[startup] Syncing openclaw.json into volume"
 cp /home/node/defaults/openclaw.json /home/node/.openclaw/openclaw.json
-echo "[startup] Syncing clawcity.skill.ts into volume"
-cp /home/node/defaults/clawcity.skill.ts /home/node/.openclaw/workspace/skills/clawcity.skill.ts
 
-# Also update skill for all existing agents so they pick up changes on next reload
-for agent_skill in /home/node/.openclaw/agents/*/workspace/skills/clawcity.skill.ts; do
-  [ -f "$agent_skill" ] && cp /home/node/defaults/clawcity.skill.ts "$agent_skill"
+# Sync clawcity skill directory into global workspace (SKILL.md format for auto-discovery)
+echo "[startup] Syncing clawcity skill into workspace"
+mkdir -p /home/node/.openclaw/workspace/skills/clawcity
+cp -r /home/node/defaults/clawcity-skill/* /home/node/.openclaw/workspace/skills/clawcity/
+
+# Copy heartbeat checklist into global workspace
+cp /home/node/defaults/HEARTBEAT.md /home/node/.openclaw/workspace/HEARTBEAT.md
+
+# Also update skill and heartbeat for all existing agents
+for agent_workspace in /home/node/.openclaw/agents/*/workspace; do
+  if [ -d "$agent_workspace" ]; then
+    mkdir -p "$agent_workspace/skills/clawcity"
+    cp -r /home/node/defaults/clawcity-skill/* "$agent_workspace/skills/clawcity/"
+    cp /home/node/defaults/HEARTBEAT.md "$agent_workspace/HEARTBEAT.md"
+  fi
 done
+
+# Clean up stale .skill.ts files from previous format (replaced by SKILL.md directories)
+find /home/node/.openclaw -name "clawcity.skill.ts" -delete 2>/dev/null || true
 
 # Clean up stale session lock files from previous runs (prevents "session file locked" errors)
 find /home/node/.openclaw/agents -name "*.lock" -delete 2>/dev/null || true
@@ -28,23 +41,9 @@ find /home/node/.openclaw/agents -path "*/sessions/*.jsonl" -delete 2>/dev/null 
 # Fix Railway volume permissions (volume may mount as root-owned)
 chown -R node:node /home/node/.openclaw 2>/dev/null || true
 
-# Explicitly install the skill so OpenClaw's tool system recognizes it
-# (just copying .skill.ts files is not enough — OpenClaw needs `skills install`)
-echo "[startup] Installing clawcity skill..."
-su -s /bin/bash node -c "export HOME=/home/node; openclaw skills install /home/node/.openclaw/workspace/skills/clawcity.skill.ts" 2>&1 || echo "[startup] WARNING: global skill install failed"
-
-# Also install for each existing agent workspace
-for agent_dir in /home/node/.openclaw/agents/*/workspace/skills; do
-  if [ -f "$agent_dir/clawcity.skill.ts" ]; then
-    agent_id=$(echo "$agent_dir" | sed 's|.*/agents/\([^/]*\)/.*|\1|')
-    echo "[startup] Installing skill for agent $agent_id"
-    su -s /bin/bash node -c "export HOME=/home/node; openclaw skills install $agent_dir/clawcity.skill.ts" 2>&1 || echo "[startup] WARNING: skill install failed for $agent_id"
-  fi
-done
-
-# Diagnostic: list installed skills
-echo "[startup] Installed skills:"
-su -s /bin/bash node -c "export HOME=/home/node; openclaw skills list" 2>&1 || echo "[startup] WARNING: could not list skills"
+# Diagnostic: check skill discovery (no install needed — OpenClaw auto-discovers SKILL.md files)
+echo "[startup] Checking skill discovery:"
+su -s /bin/bash node -c "export HOME=/home/node; openclaw skills check" 2>&1 || echo "[startup] WARNING: could not check skills"
 
 GATEWAY_PORT=18789
 export OPENCLAW_GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
