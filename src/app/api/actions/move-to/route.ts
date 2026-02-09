@@ -341,12 +341,27 @@ export async function POST(request: NextRequest) {
 
     const finalTerrain = tileMap.get(`${currentX},${currentY}`) || 'unknown';
 
+    // Build terrain summary instead of full path array to save tokens
+    const terrainCounts: Record<string, number> = {};
+    for (const step of pathTaken) {
+      terrainCounts[step.terrain] = (terrainCounts[step.terrain] || 0) + 1;
+    }
+
+    // Use verbose=true query param to include full path (for debugging)
+    const verbose = request.nextUrl?.searchParams?.get('verbose') === 'true';
+
     const responseData = await withAnnouncements(agent, {
       message: `Navigated ${pathTaken.length} tiles to ${goalDescription}.`,
       position: { x: currentX, y: currentY },
       terrain: finalTerrain,
       steps: pathTaken.length,
-      path: pathTaken,
+      path_summary: {
+        start: { x: agent.x, y: agent.y },
+        end: { x: currentX, y: currentY },
+        steps: pathTaken.length,
+        terrains_crossed: terrainCounts,
+      },
+      ...(verbose ? { path: pathTaken } : {}),
       deep_water_cost: totalDeepWaterCost > 0 ? {
         tiles: deepWaterCount,
         food_spent: totalDeepWaterCost,

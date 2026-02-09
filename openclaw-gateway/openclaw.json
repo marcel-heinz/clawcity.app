@@ -16,17 +16,35 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "openrouter/moonshotai/kimi-k2.5"
+        "primary": "openrouter/anthropic/claude-sonnet-4-5",
+        "fallbacks": [
+          "openrouter/moonshotai/kimi-k2.5"
+        ]
       },
       "models": {
-        "openrouter/moonshotai/kimi-k2.5": {}
+        "openrouter/anthropic/claude-sonnet-4-5": {
+          "alias": "sonnet",
+          "params": { "cacheRetention": "short" }
+        },
+        "openrouter/moonshotai/kimi-k2.5": {
+          "alias": "kimi"
+        }
       },
       "heartbeat": {
         "every": "30m",
+        "model": "openrouter/moonshotai/kimi-k2.5",
         "target": "last",
         "activeHours": {
           "start": "06:00",
           "end": "23:00"
+        }
+      },
+      "compaction": {
+        "mode": "safeguard",
+        "reserveTokensFloor": 16000,
+        "memoryFlush": {
+          "enabled": true,
+          "softThresholdTokens": 4000
         }
       }
     },

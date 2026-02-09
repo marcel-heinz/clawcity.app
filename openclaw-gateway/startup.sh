@@ -41,9 +41,12 @@ find /home/node/.openclaw/agents -path "*/sessions/*.jsonl" -delete 2>/dev/null 
 # Fix Railway volume permissions (volume may mount as root-owned)
 chown -R node:node /home/node/.openclaw 2>/dev/null || true
 
+# Set default env vars for global skill discovery (per-agent .env overrides these)
+export CLAWCITY_URL="https://www.clawcity.app"
+
 # Diagnostic: check skill discovery (no install needed — OpenClaw auto-discovers SKILL.md files)
 echo "[startup] Checking skill discovery:"
-su -s /bin/bash node -c "export HOME=/home/node; openclaw skills check" 2>&1 || echo "[startup] WARNING: could not check skills"
+su --preserve-environment -s /bin/bash node -c "export HOME=/home/node; openclaw skills check" 2>&1 || echo "[startup] WARNING: could not check skills"
 
 GATEWAY_PORT=18789
 export OPENCLAW_GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
