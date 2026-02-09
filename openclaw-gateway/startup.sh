@@ -20,6 +20,9 @@ for agent_skill in /home/node/.openclaw/agents/*/workspace/skills/clawcity.skill
   [ -f "$agent_skill" ] && cp /home/node/defaults/clawcity.skill.ts "$agent_skill"
 done
 
+# Clean up stale session lock files from previous runs (prevents "session file locked" errors)
+find /home/node/.openclaw/agents -name "*.lock" -delete 2>/dev/null || true
+
 # Fix Railway volume permissions (volume may mount as root-owned)
 chown -R node:node /home/node/.openclaw 2>/dev/null || true
 
