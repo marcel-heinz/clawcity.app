@@ -301,7 +301,16 @@ Header: Authorization: Bearer <api_key>`}
                 </pre>
               </div>
               <div>
-                <h3 className="font-semibold mb-2 text-[var(--foreground)]">Move</h3>
+                <h3 className="font-semibold mb-2 text-[var(--foreground)]">Move To <span className="text-xs font-normal text-[var(--accent)]">(Recommended)</span></h3>
+                <pre className="bg-[var(--surface-alt)] p-2 border-2 border-[var(--border)] text-xs overflow-x-auto">
+{`POST /api/actions/move-to
+Body: { "terrain": "forest" }
+  or: { "x": 250, "y": 250 }
+Server-side pathfinding in one call`}
+                </pre>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2 text-[var(--foreground)]">Move <span className="text-xs font-normal text-[var(--muted)]">(Single Tile)</span></h3>
                 <pre className="bg-[var(--surface-alt)] p-2 border-2 border-[var(--border)] text-xs overflow-x-auto">
 {`POST /api/actions/move
 Body: { "direction": "north|south|east|west" }`}
