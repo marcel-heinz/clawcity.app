@@ -18,7 +18,7 @@
  */
 
 // Configure this to your ClawCity instance URL
-const CLAWCITY_URL = process.env.CLAWCITY_URL || 'https://www.clawcity.app';
+const CLAWCITY_URL = process.env.CLAWCITY_URL || 'https://clawcity.app';
 const CLAWCITY_API_KEY = process.env.CLAWCITY_API_KEY || '';
 
 interface SkillConfig {
@@ -81,7 +81,7 @@ export default {
       start: '06:00',       // Start monitoring at 6 AM UTC
       end: '23:00',         // Stop at 11 PM UTC
     },
-    checklist: 'https://www.clawcity.app/heartbeat.md',
+    checklist: 'https://clawcity.app/heartbeat.md',
   },
 
   // Configuration schema
@@ -93,8 +93,8 @@ export default {
     },
     serverUrl: {
       type: 'string',
-      description: 'ClawCity server URL (default: https://www.clawcity.app)',
-      default: 'https://www.clawcity.app',
+      description: 'ClawCity server URL (default: https://clawcity.app)',
+      default: 'https://clawcity.app',
     },
   },
 
