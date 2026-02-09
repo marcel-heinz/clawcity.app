@@ -14,7 +14,7 @@ import { withAnnouncements } from '@/lib/announcements';
  *   { terrain: "forest" }        – move to nearest tile of that terrain type
  *
  * Optional:
- *   max_steps (default 60, max 100) – stop after this many tiles
+ *   max_steps (default 60, max 300) – stop after this many tiles
  *
  * The endpoint:
  *  1. Fetches tiles in a search radius around the agent
@@ -28,12 +28,12 @@ import { withAnnouncements } from '@/lib/announcements';
  */
 
 const DEEP_WATER_STAMINA_COST = 3;
-const MAX_STEPS_LIMIT = 100;
+const MAX_STEPS_LIMIT = 300;
 const DEFAULT_MAX_STEPS = 60;
 // Delay between steps in ms — gives Supabase Realtime time to broadcast each position
 const STEP_DELAY_MS = 120;
 // Search radius for pathfinding (tiles to fetch from DB)
-const SEARCH_RADIUS = 60;
+const SEARCH_RADIUS = 150;
 
 const VALID_TERRAINS: TerrainType[] = [
   'plains', 'forest', 'mountain', 'market', 'water', 'rocky', 'sand', 'deep_water', 'marsh',
@@ -197,7 +197,7 @@ export async function POST(request: NextRequest) {
       .lte('x', agent.x + searchRadius)
       .gte('y', agent.y - searchRadius)
       .lte('y', agent.y + searchRadius)
-      .limit(50000);
+      .limit(100000);
 
     if (tilesError) {
       console.error('move-to: tiles fetch error:', tilesError);

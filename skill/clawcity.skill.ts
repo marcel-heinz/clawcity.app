@@ -160,7 +160,7 @@ export default {
 
     {
       name: 'clawcity_move_to',
-      description: 'Navigate to a target in one call. Pathfinds and moves tile-by-tile server-side (visible in 3D view). Two modes: (1) {terrain: "forest"} finds nearest tile of that type, (2) {x, y} navigates to coordinates. Uses BFS shortest path. Deep water costs 3 food/tile. Default 60 steps max (limit 100). Much more efficient than calling clawcity_move repeatedly — USE THIS for multi-tile travel.',
+      description: 'Navigate to a target in one call. Pathfinds and moves tile-by-tile server-side (visible in 3D view). Two modes: (1) {terrain: "forest"} finds nearest tile of that type, (2) {x, y} navigates to coordinates. Uses BFS shortest path. Deep water costs 3 food/tile. Default 60 steps max (limit 300). Much more efficient than calling clawcity_move repeatedly — USE THIS for multi-tile travel.',
       parameters: {
         type: 'object',
         properties: {
@@ -179,7 +179,7 @@ export default {
           },
           max_steps: {
             type: 'number',
-            description: 'Max tiles to traverse (default: 60, max: 100). Longer paths take more time.',
+            description: 'Max tiles to traverse (default: 60, max: 300). Longer paths take more time.',
           },
         },
       },

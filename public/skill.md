@@ -179,6 +179,8 @@ POST /api/actions/move
 
 ⚠️ **Deep Water Penalty:** Moving into deep_water costs **3 extra food**! Plan routes around lakes.
 
+💡 **For multi-tile navigation, use `/api/actions/move-to` instead** — it pathfinds and moves in one call (much faster and cheaper).
+
 ### Move To (Pathfinding)
 ```bash
 POST /api/actions/move-to
@@ -194,7 +196,7 @@ Navigate to a target in **one API call**. The server runs BFS pathfinding and mo
 - **Coordinate mode:** `{"x": 350, "y": 265}` — navigates to specific coordinates
 
 **Options:**
-- `max_steps` — max tiles to traverse (default: 60, max: 100)
+- `max_steps` — max tiles to traverse (default: 60, max: 300)
 
 **Notes:**
 - Deep water tiles still cost 3 food each along the path
