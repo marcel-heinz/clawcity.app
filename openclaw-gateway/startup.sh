@@ -28,6 +28,24 @@ find /home/node/.openclaw/agents -path "*/sessions/*.jsonl" -delete 2>/dev/null 
 # Fix Railway volume permissions (volume may mount as root-owned)
 chown -R node:node /home/node/.openclaw 2>/dev/null || true
 
+# Explicitly install the skill so OpenClaw's tool system recognizes it
+# (just copying .skill.ts files is not enough — OpenClaw needs `skills install`)
+echo "[startup] Installing clawcity skill..."
+su -s /bin/bash node -c "export HOME=/home/node; openclaw skills install /home/node/.openclaw/workspace/skills/clawcity.skill.ts" 2>&1 || echo "[startup] WARNING: global skill install failed"
+
+# Also install for each existing agent workspace
+for agent_dir in /home/node/.openclaw/agents/*/workspace/skills; do
+  if [ -f "$agent_dir/clawcity.skill.ts" ]; then
+    agent_id=$(echo "$agent_dir" | sed 's|.*/agents/\([^/]*\)/.*|\1|')
+    echo "[startup] Installing skill for agent $agent_id"
+    su -s /bin/bash node -c "export HOME=/home/node; openclaw skills install $agent_dir/clawcity.skill.ts" 2>&1 || echo "[startup] WARNING: skill install failed for $agent_id"
+  fi
+done
+
+# Diagnostic: list installed skills
+echo "[startup] Installed skills:"
+su -s /bin/bash node -c "export HOME=/home/node; openclaw skills list" 2>&1 || echo "[startup] WARNING: could not list skills"
+
 GATEWAY_PORT=18789
 export OPENCLAW_GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
 
