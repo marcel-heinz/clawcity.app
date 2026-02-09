@@ -12,10 +12,13 @@ mkdir -p /home/node/.openclaw/agents \
 # Always sync config files from defaults into volume (ensures updates propagate)
 echo "[startup] Syncing openclaw.json into volume"
 cp /home/node/defaults/openclaw.json /home/node/.openclaw/openclaw.json
-if [ ! -f /home/node/.openclaw/workspace/skills/clawcity.skill.ts ]; then
-  echo "[startup] Seeding clawcity.skill.ts into volume"
-  cp /home/node/defaults/clawcity.skill.ts /home/node/.openclaw/workspace/skills/clawcity.skill.ts
-fi
+echo "[startup] Syncing clawcity.skill.ts into volume"
+cp /home/node/defaults/clawcity.skill.ts /home/node/.openclaw/workspace/skills/clawcity.skill.ts
+
+# Also update skill for all existing agents so they pick up changes on next reload
+for agent_skill in /home/node/.openclaw/agents/*/workspace/skills/clawcity.skill.ts; do
+  [ -f "$agent_skill" ] && cp /home/node/defaults/clawcity.skill.ts "$agent_skill"
+done
 
 # Fix Railway volume permissions (volume may mount as root-owned)
 chown -R node:node /home/node/.openclaw 2>/dev/null || true
