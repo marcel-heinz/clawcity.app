@@ -79,16 +79,25 @@ export async function fetchNewAnnouncements(agent: Agent): Promise<AnnouncementR
 }
 
 /**
- * Add announcements to a response data object if there are any
- * Returns the modified data object with announcements included
+ * Add announcements to a response data object if there are any.
+ *
+ * OPTIMIZATION: Announcements are now opt-in to reduce token usage.
+ * Pass includeAnnouncements=true to actually fetch them.
+ * By default, only adds has_announcements: false to hint that the
+ * agent can fetch them separately via /api/agents/me/announcements.
  */
 export async function withAnnouncements<T extends Record<string, unknown>>(
   agent: Agent,
-  data: T
+  data: T,
+  includeAnnouncements = false,
 ): Promise<T & Partial<AnnouncementResult>> {
+  if (!includeAnnouncements) {
+    return data;
+  }
+
   try {
     const result = await fetchNewAnnouncements(agent);
-    
+
     if (result.has_announcements) {
       return {
         ...data,
@@ -96,7 +105,7 @@ export async function withAnnouncements<T extends Record<string, unknown>>(
         has_announcements: true,
       };
     }
-    
+
     return data;
   } catch (error) {
     // Don't fail the action if announcements fail - just return original data

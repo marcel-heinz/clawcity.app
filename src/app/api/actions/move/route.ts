@@ -181,30 +181,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get nearby agents at new position (spyglass extends range)
-    const detectionRange = getDetectionRange(agentItems);
-    const { data: nearbyAgents } = await supabase
-      .from('agents')
-      .select('id, name, x, y, reputation')
-      .neq('id', agent.id)
-      .gte('x', newPos.x - detectionRange)
-      .lte('x', newPos.x + detectionRange)
-      .gte('y', newPos.y - detectionRange)
-      .lte('y', newPos.y + detectionRange);
+    // Get nearby agents at new position (opt-in via ?include=nearby to save tokens)
+    const includeNearby = request.nextUrl?.searchParams?.get('include')?.includes('nearby');
+    let nearbyAgents: { id: string; name: string; x: number; y: number; reputation: number }[] | null = null;
+    if (includeNearby) {
+      const detectionRange = getDetectionRange(agentItems);
+      const { data } = await supabase
+        .from('agents')
+        .select('id, name, x, y, reputation')
+        .neq('id', agent.id)
+        .gte('x', newPos.x - detectionRange)
+        .lte('x', newPos.x + detectionRange)
+        .gte('y', newPos.y - detectionRange)
+        .lte('y', newPos.y + detectionRange);
+      nearbyAgents = data;
+    }
 
-    // Decrement spyglass uses if it extended detection
-    if (detectionRange > 5) {
-      for (const item of agentItems) {
-        const def = getItemDefinition(item.item_id);
-        if (!def) continue;
-        for (const effect of def.effects) {
-          if (effect.type === 'detection_range') {
-            if (item.uses_remaining !== null && item.uses_remaining > 0) {
-              await supabase
-                .from('agent_items')
-                .update({ uses_remaining: item.uses_remaining - 1 })
-                .eq('agent_id', agent.id)
-                .eq('item_id', item.item_id);
+    // Decrement spyglass uses if it extended detection (only when nearby agents were fetched)
+    if (includeNearby) {
+      const detectionRangeForDecrement = getDetectionRange(agentItems);
+      if (detectionRangeForDecrement > 5) {
+        for (const item of agentItems) {
+          const def = getItemDefinition(item.item_id);
+          if (!def) continue;
+          for (const effect of def.effects) {
+            if (effect.type === 'detection_range') {
+              if (item.uses_remaining !== null && item.uses_remaining > 0) {
+                await supabase
+                  .from('agent_items')
+                  .update({ uses_remaining: item.uses_remaining - 1 })
+                  .eq('agent_id', agent.id)
+                  .eq('item_id', item.item_id);
+              }
             }
           }
         }
@@ -220,18 +228,20 @@ export async function POST(request: NextRequest) {
       message += ` (deep water: -${deepWaterPenalty} food stamina)${deepWaterWarning}`;
     }
 
-    // Include any new announcements in the response
+    const includeAnnouncements = request.nextUrl?.searchParams?.get('include')?.includes('announcements');
     const responseData = await withAnnouncements(agent, {
       message,
       position: newPos,
       terrain: destTile?.terrain || 'unknown',
-      nearby_agents: nearbyAgents || [],
+      ...(nearbyAgents ? { nearby_agents: nearbyAgents } : {}),
       moved: true,
-      deep_water_penalty: deepWaterPenalty > 0 ? {
-        stamina_cost: deepWaterPenalty,
-        food_remaining: Math.max(0, agent.food - deepWaterPenalty),
-      } : undefined,
-    });
+      ...(deepWaterPenalty > 0 ? {
+        deep_water_penalty: {
+          stamina_cost: deepWaterPenalty,
+          food_remaining: Math.max(0, agent.food - deepWaterPenalty),
+        },
+      } : {}),
+    }, includeAnnouncements);
 
     return jsonResponse({
       success: true,
