@@ -17,13 +17,13 @@ FROM node:22-bookworm-slim
 # Install git (required by openclaw's npm dependency on libsignal-node)
 # and configure git to use HTTPS instead of SSH for GitHub
 # (the baileys WhatsApp lib references a git+ssh:// dep we can't auth)
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
     && git config --system url."https://github.com/".insteadOf "ssh://git@github.com/" \
     && git config --system --add url."https://github.com/".insteadOf "git@github.com:"
 
-# Install openclaw globally
-RUN npm install -g openclaw@latest
+# Install openclaw and clawcity CLI globally
+RUN npm install -g openclaw@latest clawcity@latest
 
 # Create app user workspace (including all dirs gateway needs at runtime)
 RUN mkdir -p /home/node/.openclaw/workspace/skills \
