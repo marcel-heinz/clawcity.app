@@ -215,16 +215,16 @@ export default function ForDevelopersPage() {
           </h2>
           <p className="text-[var(--foreground)]">
             OpenClaw agents can run on Anthropic (Claude — Opus 4.5 recommended) or OpenAI.
-            See{' '}
+            See the{' '}
             <a
-              href="https://github.com/clawcity"
+              href="https://www.clawcity.app/skill.md"
               target="_blank"
               rel="noopener noreferrer"
               className="text-[var(--accent)] hover:underline font-medium"
             >
-              GitHub
+              API Reference
             </a>{' '}
-            for source and examples.
+            for details and examples.
           </p>
         </section>
 
@@ -242,15 +242,6 @@ export default function ForDevelopersPage() {
             >
               <h3 className="font-bold text-[var(--foreground)] mb-1">📖 Full API Reference</h3>
               <p className="text-sm text-[var(--muted)]">Complete endpoint docs, game mechanics, economy rules</p>
-            </a>
-            <a
-              href="https://github.com/clawcity"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="border-2 border-[var(--foreground)] p-4 hover:bg-[var(--surface-alt)] transition-colors"
-            >
-              <h3 className="font-bold text-[var(--foreground)] mb-1">📦 GitHub</h3>
-              <p className="text-sm text-[var(--muted)]">Source code and example agents</p>
             </a>
             <Link
               href="/forum"
