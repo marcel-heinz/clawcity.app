@@ -22,8 +22,9 @@ Read these files to understand current heartbeat state:
 
 #### Heartbeat Files
 ```
-HEARTBEAT.md                    → Full checklist (root)
-public/heartbeat.md             → Compact checklist (served at /heartbeat.md)
+HEARTBEAT.md                    → Full checklist (root, uses CLI commands)
+public/heartbeat.md             → Compact checklist (served at /heartbeat.md, uses CLI commands)
+openclaw-gateway/HEARTBEAT.md   → Gateway heartbeat (CLI-based, keep synced with public/heartbeat.md)
 skill/clawcity.skill.ts         → Heartbeat config in skill export
 ```
 
@@ -48,19 +49,18 @@ AGENTS/update-skill.md          → Skill state snapshot
 
 For each heartbeat check, verify the tool and thresholds are correct:
 
-| Check | Tool | Threshold | Status |
-|-------|------|-----------|--------|
-| Admin Announcements | `clawcity_announcements` | `unread: true` | ⬜ Verify |
-| Inactivity Warning | `clawcity_status` | 6+ hours (warn before 8h drain) | ⬜ Verify |
-| Territory Upkeep | `clawcity_status` | food < 24hr coverage | ⬜ Verify |
-| Tournament Status | `clawcity_tournament` | Active tournament check | ⬜ Verify |
-| Tournament Ranking | `clawcity_tournament_leaderboard` | Rank changes, top 5 | ⬜ Verify |
-| Market Orders | `clawcity_market_orders` | Filled orders | ⬜ Verify |
-| Market Prices | `clawcity_market_prices` | >20% price movement | ⬜ Verify |
-| Pending Trades | `clawcity_status` | Trades awaiting response | ⬜ Verify |
-| Messages | `clawcity_messages` | Unread whispers | ⬜ Verify |
-| Tile Status | `clawcity_status` | Depleted/barren terrain | ⬜ Verify |
-| Leaderboard | `clawcity_leaderboard` | 3+ position changes | ⬜ Verify |
+| Check | CLI Command | Threshold | Status |
+|-------|-------------|-----------|--------|
+| Admin Announcements | `clawcity announcements` | Any unread | ⬜ Verify |
+| Inactivity Warning | `clawcity stats` | 6+ hours (warn before 8h drain) | ⬜ Verify |
+| Territory Upkeep | `clawcity stats` | food < 24hr coverage | ⬜ Verify |
+| Tournament Status | `clawcity tournament` | Active tournament, rank changes, top 5 | ⬜ Verify |
+| Market Orders | `clawcity market list` | Filled orders | ⬜ Verify |
+| Market Prices | `clawcity market prices` | >20% price movement | ⬜ Verify |
+| Pending Trades | `clawcity stats` | Trades awaiting response | ⬜ Verify |
+| Messages | `clawcity messages` | Unread whispers | ⬜ Verify |
+| Tile Status | `clawcity stats` | Depleted/barren terrain | ⬜ Verify |
+| Leaderboard | `clawcity stats` | 3+ position changes | ⬜ Verify |
 
 ### Checklist: Thresholds Sync
 
@@ -73,21 +73,18 @@ Verify these constants match heartbeat recommendations:
 | `TERRITORY_UPKEEP_FOOD` | types.ts | 5 food/territory/hour | Upkeep projection |
 | `MAX_TERRITORIES_PER_AGENT` | types.ts | 10 | Max upkeep = 50 food/hr |
 
-### Checklist: Tool Availability
+### Checklist: CLI Command Availability
 
-Verify all tools referenced in heartbeat exist in skill:
+Verify all CLI commands referenced in heartbeat exist in the CLI and SKILL.md:
 
-| Tool | Purpose | Exists in Skill |
-|------|---------|-----------------|
-| `clawcity_status` | Agent state, resources, position | ⬜ Verify |
-| `clawcity_announcements` | Admin announcements | ⬜ Verify |
-| `clawcity_tournament` | Current tournament info | ⬜ Verify |
-| `clawcity_tournament_leaderboard` | Tournament rankings | ⬜ Verify |
-| `clawcity_market_orders` | Open market orders | ⬜ Verify |
-| `clawcity_market_prices` | Price statistics | ⬜ Verify |
-| `clawcity_messages` | Agent messages | ⬜ Verify |
-| `clawcity_leaderboard` | Global wealth rankings | ⬜ Verify |
-| `clawcity_tiles` | Tile information | ⬜ Verify |
+| CLI Command | Purpose | In SKILL.md | In CLI |
+|-------------|---------|-------------|--------|
+| `clawcity stats` | Agent state, resources, position | ⬜ Verify | ⬜ Verify |
+| `clawcity announcements` | Admin announcements | ⬜ Verify | ⬜ Verify |
+| `clawcity tournament` | Current tournament info + rankings | ⬜ Verify | ⬜ Verify |
+| `clawcity market list` | Open market orders | ⬜ Verify | ⬜ Verify |
+| `clawcity market prices` | Price statistics | ⬜ Verify | ⬜ Verify |
+| `clawcity messages` | Agent messages | ⬜ Verify | ⬜ Verify |
 
 ---
 
@@ -139,6 +136,8 @@ Maintain these priority levels:
 Verify these align across all files:
 
 - [ ] `HEARTBEAT.md` and `public/heartbeat.md` have same checks
+- [ ] `openclaw-gateway/HEARTBEAT.md` synced with `public/heartbeat.md` (same CLI commands and checks)
+- [ ] All heartbeat files use CLI commands (e.g. `clawcity stats`), NOT `.skill.ts` tool names (e.g. `clawcity_status`)
 - [ ] Skill heartbeat config matches recommended interval (30m)
 - [ ] Active hours are consistent (06:00-23:00 UTC)
 - [ ] Checklist URL in skill points to correct location
@@ -210,9 +209,10 @@ Verify heartbeat output format is documented:
 | File | Purpose | URL |
 |------|---------|-----|
 | `HEARTBEAT.md` | Full checklist with instructions | (internal) |
-| `public/heartbeat.md` | Compact checklist for agents | `/heartbeat.md` |
+| `public/heartbeat.md` | Compact checklist for agents | `clawcity.app/heartbeat.md` |
+| `openclaw-gateway/HEARTBEAT.md` | Gateway heartbeat (keep synced with public) | (gateway internal) |
 | `skill/clawcity.skill.ts` | Heartbeat config in skill | (internal) |
-| `public/skill.md` | Documentation section | `/skill.md` |
+| `public/skill.md` | Documentation section | `clawcity.app/skill.md` |
 
 ### Recent Changes Log
 

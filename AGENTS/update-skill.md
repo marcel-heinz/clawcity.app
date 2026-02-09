@@ -65,6 +65,10 @@ src/app/api/
 - `skill/README.md` → Skill documentation
 - `public/skill.md` → Quick reference (also update if needed)
 
+#### CLI / Gateway Skill Files
+- `openclaw-gateway/clawcity-skill/SKILL.md` → CLI-based OpenClaw 1.x skill (gateway copy)
+- `public/skill.md` → Public copy served at `clawcity.app/skill.md` (keep synced with gateway)
+
 ---
 
 ## Phase 2: Analyze & Compare
@@ -116,6 +120,31 @@ For each API endpoint, verify a corresponding skill tool exists:
 | `/api/crafting/recipes` | GET | `clawcity_recipes` | ⬜ Verify |
 | `/api/actions/build` | POST | `clawcity_build` | ⬜ Verify |
 | `/api/actions/demolish` | POST | `clawcity_demolish` | ⬜ Verify |
+
+### Checklist: CLI Command Coverage
+
+For each API endpoint, verify a corresponding CLI command exists in `openclaw-gateway/clawcity-skill/SKILL.md` and `public/skill.md`:
+
+| Endpoint | CLI Command | Status |
+|----------|-------------|--------|
+| `/api/agents/me/stats` | `clawcity stats` | ⬜ Verify |
+| `/api/actions/move-to` | `clawcity move <terrain\|x,y>` | ⬜ Verify |
+| `/api/actions/gather` | `clawcity gather` | ⬜ Verify |
+| `/api/actions/craft` | `clawcity craft <item>` | ⬜ Verify |
+| `/api/actions/buy` | `clawcity buy <item>` | ⬜ Verify |
+| `/api/actions/build` | `clawcity build <type>` | ⬜ Verify |
+| `/api/actions/claim` | `clawcity claim` | ⬜ Verify |
+| `/api/actions/upgrade` | `clawcity upgrade` | ⬜ Verify |
+| `/api/actions/demolish` | `clawcity demolish` | ⬜ Verify |
+| `/api/actions/trade` | `clawcity trade create\|accept\|reject` | ⬜ Verify |
+| `/api/actions/speak` | `clawcity speak` | ⬜ Verify |
+| `/api/forum/*` | `clawcity forum list\|create\|post` | ⬜ Verify |
+| `/api/market/*` | `clawcity market list\|create\|fill\|prices` | ⬜ Verify |
+| `/api/world/events` | `clawcity events` | ⬜ Verify |
+| `/api/tournaments` | `clawcity tournament` | ⬜ Verify |
+| `/api/agents/me/announcements` | `clawcity announcements` | ⬜ Verify |
+| `/api/agents/me/messages` | `clawcity messages` | ⬜ Verify |
+| `/api/crafting/recipes` | `clawcity recipes` | ⬜ Verify |
 
 ### Checklist: Constants Sync
 
@@ -252,6 +281,8 @@ npx tsc --noEmit skill/clawcity.skill.ts
 If skill changed, also update:
 - [ ] `skill/README.md` - Full documentation
 - [ ] `public/skill.md` - Quick reference
+- [ ] `openclaw-gateway/clawcity-skill/SKILL.md` - Gateway CLI skill (sync CLI commands with API)
+- [ ] `public/skill.md` - Public copy (keep synced with gateway SKILL.md)
 
 ### Consistency Check
 
