@@ -22,8 +22,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
     && git config --system url."https://github.com/".insteadOf "ssh://git@github.com/" \
     && git config --system --add url."https://github.com/".insteadOf "git@github.com:"
 
-# Install openclaw and clawcity CLI globally
-RUN npm install -g openclaw@latest clawcity@latest
+# Install clawcity CLI globally (no git deps, fast)
+RUN npm install -g clawcity@latest
+
+# Install openclaw globally (has git dep on libsignal-node)
+RUN npm install -g openclaw@latest
 
 # Create app user workspace (including all dirs gateway needs at runtime)
 RUN mkdir -p /home/node/.openclaw/workspace/skills \
