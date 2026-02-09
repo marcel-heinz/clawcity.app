@@ -28,12 +28,14 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServerClient();
     const url = new URL(request.url);
-    
+
     // Optional query params for filtering
-    const limit = parseInt(url.searchParams.get('limit') || '50');
+    const limit = parseInt(url.searchParams.get('limit') || '20');
     const x = url.searchParams.get('x');
     const y = url.searchParams.get('y');
     const radius = parseInt(url.searchParams.get('radius') || '10');
+    // compact=true returns only leaderboard + stats (no agents array, no events)
+    const compact = url.searchParams.get('compact') === 'true';
 
     // Get all agents with resources and gathering stats
     let agentsQuery = supabase
@@ -183,7 +185,54 @@ export async function GET(request: NextRequest) {
         name: agent.name,
       }));
 
-    // Get recent events
+    // Get world stats
+    const { count: totalAgents } = await supabase
+      .from('agents')
+      .select('*', { count: 'exact', head: true });
+
+    // Count active agents (active in last 5 minutes)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { count: activeAgents } = await supabase
+      .from('agents')
+      .select('*', { count: 'exact', head: true })
+      .gte('last_active', fiveMinutesAgo);
+
+    // Count completed trades
+    const { count: totalTrades } = await supabase
+      .from('trades')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'accepted');
+
+    // Count total claimed territories
+    const { count: totalTerritories } = await supabase
+      .from('tiles')
+      .select('*', { count: 'exact', head: true })
+      .not('owner_id', 'is', null);
+
+    // Get top gatherer
+    const topGatherer = topGatherers.length > 0 ? topGatherers[0] : null;
+
+    const stats = {
+      total_agents: totalAgents || 0,
+      active_agents: activeAgents || 0,
+      total_trades: totalTrades || 0,
+      total_territories: totalTerritories || 0,
+      top_gatherer: topGatherer ? topGatherer.name : null,
+    };
+
+    // Compact mode: leaderboard + stats only (saves ~5-20k tokens)
+    if (compact) {
+      return jsonResponse({
+        success: true,
+        data: {
+          leaderboard: leaderboard.map(a => ({ rank: a.rank, name: a.name, wealth: a.wealth })),
+          stats,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+
+    // Full mode: includes agents array, events, resources
     const { data: events, error: eventsError } = await supabase
       .from('events')
       .select(`
@@ -209,30 +258,6 @@ export async function GET(request: NextRequest) {
       agent_name: agentMap.get(e.agent_id) || 'Unknown',
     })) || [];
 
-    // Get world stats
-    const { count: totalAgents } = await supabase
-      .from('agents')
-      .select('*', { count: 'exact', head: true });
-
-    // Count active agents (active in last 5 minutes)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const { count: activeAgents } = await supabase
-      .from('agents')
-      .select('*', { count: 'exact', head: true })
-      .gte('last_active', fiveMinutesAgo);
-
-    // Count completed trades
-    const { count: totalTrades } = await supabase
-      .from('trades')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'accepted');
-
-    // Count total claimed territories
-    const { count: totalTerritories } = await supabase
-      .from('tiles')
-      .select('*', { count: 'exact', head: true })
-      .not('owner_id', 'is', null);
-
     // Calculate total resources in the world (sum across all agents)
     const totalResources = agents.reduce((acc, agent) => ({
       gold: acc.gold + (agent.gold || 0),
@@ -249,9 +274,6 @@ export async function GET(request: NextRequest) {
       .eq('type', 'gather')
       .gte('created_at', oneHourAgo);
 
-    // Get top gatherer
-    const topGatherer = topGatherers.length > 0 ? topGatherers[0] : null;
-
     return jsonResponse({
       success: true,
       data: {
@@ -261,13 +283,9 @@ export async function GET(request: NextRequest) {
         recentlyJoined,
         events: enrichedEvents,
         stats: {
-          total_agents: totalAgents || 0,
-          active_agents: activeAgents || 0,
-          total_trades: totalTrades || 0,
-          total_territories: totalTerritories || 0,
+          ...stats,
           total_resources: totalResources,
           mining_activity_last_hour: miningActivity || 0,
-          top_gatherer: topGatherer ? topGatherer.name : null,
         },
         timestamp: new Date().toISOString(),
       },

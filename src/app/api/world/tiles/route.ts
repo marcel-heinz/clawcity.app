@@ -127,6 +127,9 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // summary=true returns terrain type counts instead of full tile array (saves ~90% tokens)
+    const summary = url.searchParams.get('summary') === 'true';
+
     // Standard path for small-radius requests or no sampling
     let query = supabase.from('tiles').select('x, y, terrain, owner_id, building_type');
 
@@ -151,11 +154,45 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching tiles:', error);
       return errorResponse('Failed to fetch tiles', 500);
     }
-    
+
     // Apply client-requested sampling (for small-radius requests)
     let resultTiles = tiles || [];
     if (sample > 1) {
       resultTiles = resultTiles.filter(t => t.x % sample === 0 && t.y % sample === 0);
+    }
+
+    // Summary mode: return terrain counts + nearest of each type
+    if (summary && x !== null && y !== null) {
+      const centerX = parseInt(x);
+      const centerY = parseInt(y);
+      const terrainCounts: Record<string, number> = {};
+      const nearest: Record<string, { x: number; y: number; dist: number }> = {};
+
+      for (const t of resultTiles) {
+        const terrain = t.terrain as string;
+        terrainCounts[terrain] = (terrainCounts[terrain] || 0) + 1;
+
+        const dist = Math.abs(t.x - centerX) + Math.abs(t.y - centerY);
+        if (!nearest[terrain] || dist < nearest[terrain].dist) {
+          nearest[terrain] = { x: t.x, y: t.y, dist };
+        }
+      }
+
+      // Strip dist from nearest
+      const nearestClean: Record<string, { x: number; y: number }> = {};
+      for (const [terrain, loc] of Object.entries(nearest)) {
+        nearestClean[terrain] = { x: loc.x, y: loc.y };
+      }
+
+      return jsonResponse({
+        success: true,
+        data: {
+          terrain_counts: terrainCounts,
+          nearest: nearestClean,
+          total: resultTiles.length,
+          radius,
+        },
+      });
     }
 
     return jsonResponse({

@@ -350,6 +350,7 @@ export async function POST(request: NextRequest) {
     // Use verbose=true query param to include full path (for debugging)
     const verbose = request.nextUrl?.searchParams?.get('verbose') === 'true';
 
+    const includeAnnouncements = request.nextUrl?.searchParams?.get('include')?.includes('announcements');
     const responseData = await withAnnouncements(agent, {
       message: `Navigated ${pathTaken.length} tiles to ${goalDescription}.`,
       position: { x: currentX, y: currentY },
@@ -358,17 +359,17 @@ export async function POST(request: NextRequest) {
       path_summary: {
         start: { x: agent.x, y: agent.y },
         end: { x: currentX, y: currentY },
-        steps: pathTaken.length,
         terrains_crossed: terrainCounts,
       },
       ...(verbose ? { path: pathTaken } : {}),
-      deep_water_cost: totalDeepWaterCost > 0 ? {
-        tiles: deepWaterCount,
-        food_spent: totalDeepWaterCost,
-        food_remaining: currentFood,
-      } : undefined,
-      duration_estimate_ms: pathTaken.length * Math.max(STEP_DELAY_MS, moveCooldownMs),
-    });
+      ...(totalDeepWaterCost > 0 ? {
+        deep_water_cost: {
+          tiles: deepWaterCount,
+          food_spent: totalDeepWaterCost,
+          food_remaining: currentFood,
+        },
+      } : {}),
+    }, includeAnnouncements);
 
     return jsonResponse({
       success: true,
