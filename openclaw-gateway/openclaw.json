@@ -16,13 +16,13 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "openrouter/anthropic/claude-sonnet-4-5",
+        "primary": "openrouter/anthropic/claude-sonnet-4.5",
         "fallbacks": [
           "openrouter/moonshotai/kimi-k2.5"
         ]
       },
       "models": {
-        "openrouter/anthropic/claude-sonnet-4-5": {
+        "openrouter/anthropic/claude-sonnet-4.5": {
           "alias": "sonnet",
           "params": { "cacheRetention": "short" }
         },
