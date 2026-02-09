@@ -3,6 +3,11 @@ set -e
 
 echo "[startup] Starting OpenClaw Gateway + Provisioning Server"
 
+# Update clawcity CLI to latest (ensures we always have the newest version
+# regardless of Docker layer cache)
+echo "[startup] Updating clawcity CLI..."
+npm install -g clawcity@latest 2>&1 | tail -1
+
 # Ensure volume subdirectories exist (volume mount wipes Docker-build dirs)
 mkdir -p /home/node/.openclaw/agents \
          /home/node/.openclaw/canvas \
