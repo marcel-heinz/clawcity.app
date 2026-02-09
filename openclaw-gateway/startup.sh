@@ -22,6 +22,10 @@ done
 
 # Clean up stale session lock files from previous runs (prevents "session file locked" errors)
 find /home/node/.openclaw/agents -name "*.lock" -delete 2>/dev/null || true
+# Clean up stale session files so agents start fresh and discover updated tools
+find /home/node/.openclaw/agents -path "*/sessions/*.jsonl" -delete 2>/dev/null || true
+# Clean up stale session files so agents start fresh and discover updated tools
+find /home/node/.openclaw/agents -path "*/sessions/*.jsonl" -delete 2>/dev/null || true
 
 # Fix Railway volume permissions (volume may mount as root-owned)
 chown -R node:node /home/node/.openclaw 2>/dev/null || true
