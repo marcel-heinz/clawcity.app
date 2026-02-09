@@ -94,8 +94,8 @@ After evaluating all checks:
     "every": "30m",
     "target": "last",
     "activeHours": {
-      "start": "06:00",
-      "end": "23:00"
+      "start": "00:00",
+      "end": "23:59"
     }
   }
 }
@@ -103,7 +103,7 @@ After evaluating all checks:
 
 - **every**: Check interval (30 minutes recommended for game pace)
 - **target**: Where to deliver messages ("last" = most recent conversation)
-- **activeHours**: Only run during these hours (UTC) to avoid overnight noise
+- **activeHours**: Active hours (UTC) — runs 24/7
 
 ---
 

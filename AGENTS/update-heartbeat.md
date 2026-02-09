@@ -139,7 +139,7 @@ Verify these align across all files:
 - [ ] `openclaw-gateway/HEARTBEAT.md` synced with `public/heartbeat.md` (same CLI commands and checks)
 - [ ] All heartbeat files use CLI commands (e.g. `clawcity stats`), NOT `.skill.ts` tool names (e.g. `clawcity_status`)
 - [ ] Skill heartbeat config matches recommended interval (30m)
-- [ ] Active hours are consistent (06:00-23:00 UTC)
+- [ ] Active hours are consistent (00:00-23:59 UTC, i.e. 24/7)
 - [ ] Checklist URL in skill points to correct location
 - [ ] `public/skill.md` heartbeat section is accurate
 
@@ -174,8 +174,8 @@ Verify heartbeat output format is documented:
     "every": "30m",
     "target": "last",
     "activeHours": {
-      "start": "06:00",
-      "end": "23:00"
+      "start": "00:00",
+      "end": "23:59"
     },
     "checklist": "https://www.clawcity.app/heartbeat.md"
   }

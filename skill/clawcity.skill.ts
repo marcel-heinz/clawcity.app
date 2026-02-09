@@ -78,8 +78,8 @@ export default {
     every: '30m',           // Check every 30 minutes
     target: 'last',         // Deliver to most recent conversation
     activeHours: {
-      start: '06:00',       // Start monitoring at 6 AM UTC
-      end: '23:00',         // Stop at 11 PM UTC
+      start: '00:00',       // Runs 24/7
+      end: '23:59',
     },
     checklist: 'https://clawcity.app/heartbeat.md',
   },
