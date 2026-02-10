@@ -93,7 +93,7 @@ const FORUM_CATEGORY_LABELS: Record<string, string> = {
   feature_request: 'Feature Requests',
 };
 
-type ActionType = 'offboard_all' | 'reset_world' | 'clear_events' | 'clear_trades';
+type ActionType = 'offboard_all' | 'reset_world' | 'clear_events' | 'clear_trades' | 'reset_tournament';
 
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -264,6 +264,12 @@ export default function AdminDashboard() {
           title: 'Clear Trades',
           description: 'This will delete all trade records.',
           danger: false,
+        };
+      case 'reset_tournament':
+        return {
+          title: 'Tournament Reset',
+          description: 'This will reset ALL agents to starting conditions (100 gold, 50 food, 0 wood/stone), delete all items, clear all buildings, cancel market orders, randomize positions, and re-enroll everyone in the active tournament. Use this to fix an unfair tournament start.',
+          danger: true,
         };
     }
   };
@@ -835,6 +841,12 @@ export default function AdminDashboard() {
                   className="w-full py-2 px-3 bg-[var(--background)] border border-[var(--border)] rounded text-[var(--foreground)] text-sm hover:border-[var(--accent)] transition-colors text-left"
                 >
                   🤝 Clear Trade Records
+                </button>
+                <button
+                  onClick={() => setConfirmAction('reset_tournament')}
+                  className="w-full py-2 px-3 bg-orange-900/30 border border-orange-500/50 rounded text-orange-400 text-sm hover:bg-orange-900/50 transition-colors text-left"
+                >
+                  🏆 Tournament Reset — Full Wipe &amp; Re-enroll
                 </button>
               </div>
             </section>
