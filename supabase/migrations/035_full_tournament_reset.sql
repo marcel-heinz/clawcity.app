@@ -45,7 +45,6 @@ BEGIN
   UPDATE tiles
   SET
     owner_id = NULL,
-    owner_name = NULL,
     claimed_at = NULL,
     upgrade_level = 1
   WHERE owner_id = p_agent_id;
@@ -99,7 +98,6 @@ BEGIN
   UPDATE tiles
   SET
     owner_id = NULL,
-    owner_name = NULL,
     claimed_at = NULL,
     upgrade_level = 1
   WHERE owner_id IS NOT NULL;
