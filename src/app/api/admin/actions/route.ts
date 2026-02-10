@@ -5,7 +5,7 @@ import { generateWorldTiles } from '@/lib/game-logic';
 import { getClientIdentifier } from '@/lib/rate-limit';
 import { updateCooldownSetting, CooldownType, DEFAULT_COOLDOWNS } from '@/lib/game-settings';
 
-type AdminAction = 'offboard_all' | 'reset_world' | 'clear_events' | 'clear_trades' | 'update_agent_limit' | 'update_cooldowns';
+type AdminAction = 'offboard_all' | 'reset_world' | 'clear_events' | 'clear_trades' | 'update_agent_limit' | 'update_cooldowns' | 'reset_tournament';
 
 /**
  * Log admin action to audit log
@@ -324,6 +324,52 @@ export async function POST(request: NextRequest) {
           details: { cooldowns },
         };
         
+        await logAdminAction(action, request, true, result.details);
+        break;
+      }
+
+      case 'reset_tournament': {
+        // Call the full tournament reset RPC
+        const { data: resetCount, error: resetError } = await supabase.rpc('reset_all_agents_for_tournament');
+
+        if (resetError) {
+          console.error('Error resetting for tournament:', resetError);
+          await logAdminAction(action, request, false, { error: 'Failed to reset agents' });
+          return NextResponse.json(
+            { success: false, error: 'Failed to reset agents for tournament' },
+            { status: 500 }
+          );
+        }
+
+        // Find the active tournament and re-enroll all agents
+        let enrolledCount = 0;
+        const { data: activeTournament } = await supabase
+          .from('tournaments')
+          .select('id')
+          .eq('status', 'active')
+          .single();
+
+        if (activeTournament) {
+          const { data: enrolled, error: enrollError } = await supabase.rpc('auto_enroll_all_agents', {
+            p_tournament_id: activeTournament.id,
+          });
+
+          if (enrollError) {
+            console.error('Error auto-enrolling agents:', enrollError);
+          } else {
+            enrolledCount = enrolled ?? 0;
+          }
+        }
+
+        result = {
+          message: `Tournament reset complete: ${resetCount ?? 0} agents reset, ${enrolledCount} enrolled`,
+          details: {
+            agents_reset: resetCount ?? 0,
+            agents_enrolled: enrolledCount,
+            tournament_id: activeTournament?.id ?? null,
+          },
+        };
+
         await logAdminAction(action, request, true, result.details);
         break;
       }
