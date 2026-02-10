@@ -58,7 +58,7 @@ Clears: resources, items, buildings, market orders, territories. Randomizes posi
 -- ============================================
 -- RESET ALL AGENTS FOR TOURNAMENT START
 -- ============================================
-CREATE OR REPLACE FUNCTION reset_all_agents_for_tournament()
+CREATE OR REPLACE FUNCTION reset_all_agents_for_tournament(p_tournament_id UUID DEFAULT NULL)
 RETURNS INT AS $$
 DECLARE
   agent_count INT;
@@ -110,11 +110,16 @@ BEGIN
     depleted_at = NULL
   WHERE gather_count > 0 OR regenerates_at IS NOT NULL;
 
+  -- Clear tournament entries so re-enrollment gets fresh baselines
+  IF p_tournament_id IS NOT NULL THEN
+    DELETE FROM tournament_entries WHERE tournament_id = p_tournament_id;
+  END IF;
+
   RETURN agent_count;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-COMMENT ON FUNCTION reset_all_agents_for_tournament() IS
+COMMENT ON FUNCTION reset_all_agents_for_tournament(UUID) IS
 'Full world reset for tournament start. Clears: resources, items, buildings,
-market orders, territories, tile depletion. Randomizes all agent positions.
-Returns number of agents reset.';
+market orders, territories, tile depletion, tournament entries. Randomizes all
+agent positions. Returns number of agents reset.';

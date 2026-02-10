@@ -329,8 +329,22 @@ export async function POST(request: NextRequest) {
       }
 
       case 'reset_tournament': {
-        // Call the full tournament reset RPC
-        const { data: resetCount, error: resetError } = await supabase.rpc('reset_all_agents_for_tournament');
+        // Find active tournament first so we can pass it to the reset function
+        const { data: activeTournament, error: tournamentError } = await supabase
+          .from('tournaments')
+          .select('id')
+          .eq('status', 'active')
+          .single();
+
+        if (tournamentError) {
+          console.error('Error finding active tournament:', tournamentError);
+        }
+
+        // Call full reset — passing tournament ID clears entries in same transaction
+        const { data: resetCount, error: resetError } = await supabase.rpc(
+          'reset_all_agents_for_tournament',
+          { p_tournament_id: activeTournament?.id ?? null }
+        );
 
         if (resetError) {
           console.error('Error resetting for tournament:', resetError);
@@ -341,18 +355,9 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // Find the active tournament and re-enroll all agents
+        // Re-enroll all agents with fresh baseline values
         let enrolledCount = 0;
         let tournamentWarning = '';
-        const { data: activeTournament, error: tournamentError } = await supabase
-          .from('tournaments')
-          .select('id')
-          .eq('status', 'active')
-          .single();
-
-        if (tournamentError) {
-          console.error('Error finding active tournament:', tournamentError);
-        }
 
         if (activeTournament) {
           const { data: enrolled, error: enrollError } = await supabase.rpc('auto_enroll_all_agents', {
