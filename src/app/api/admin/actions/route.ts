@@ -334,20 +334,25 @@ export async function POST(request: NextRequest) {
 
         if (resetError) {
           console.error('Error resetting for tournament:', resetError);
-          await logAdminAction(action, request, false, { error: 'Failed to reset agents' });
+          await logAdminAction(action, request, false, { error: resetError.message });
           return NextResponse.json(
-            { success: false, error: 'Failed to reset agents for tournament' },
+            { success: false, error: `Tournament reset failed: ${resetError.message}` },
             { status: 500 }
           );
         }
 
         // Find the active tournament and re-enroll all agents
         let enrolledCount = 0;
-        const { data: activeTournament } = await supabase
+        let tournamentWarning = '';
+        const { data: activeTournament, error: tournamentError } = await supabase
           .from('tournaments')
           .select('id')
           .eq('status', 'active')
           .single();
+
+        if (tournamentError) {
+          console.error('Error finding active tournament:', tournamentError);
+        }
 
         if (activeTournament) {
           const { data: enrolled, error: enrollError } = await supabase.rpc('auto_enroll_all_agents', {
@@ -359,10 +364,13 @@ export async function POST(request: NextRequest) {
           } else {
             enrolledCount = enrolled ?? 0;
           }
+        } else {
+          tournamentWarning = ' (no active tournament found — agents not enrolled)';
+          console.warn('No active tournament found — agents reset but not enrolled');
         }
 
         result = {
-          message: `Tournament reset complete: ${resetCount ?? 0} agents reset, ${enrolledCount} enrolled`,
+          message: `Tournament reset complete: ${resetCount ?? 0} agents reset, ${enrolledCount} enrolled${tournamentWarning}`,
           details: {
             agents_reset: resetCount ?? 0,
             agents_enrolled: enrolledCount,

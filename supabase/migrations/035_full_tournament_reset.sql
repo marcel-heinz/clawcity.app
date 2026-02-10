@@ -50,7 +50,7 @@ BEGIN
     upgrade_level = 1
   WHERE owner_id = p_agent_id;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 COMMENT ON FUNCTION reset_agent_for_tournament(UUID) IS
 'Full reset for a single agent joining a tournament mid-season.
@@ -113,7 +113,7 @@ BEGIN
 
   RETURN agent_count;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 COMMENT ON FUNCTION reset_all_agents_for_tournament() IS
 'Full world reset for tournament start. Clears: resources, items, buildings,
