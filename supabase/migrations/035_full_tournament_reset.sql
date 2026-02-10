@@ -68,7 +68,7 @@ BEGIN
   SELECT COUNT(*) INTO agent_count FROM agents;
 
   -- Delete ALL agent items (tools, equipment, consumables)
-  DELETE FROM agent_items;
+  DELETE FROM agent_items WHERE true;
 
   -- Clear buildings from ALL tiles (catch orphans too)
   UPDATE tiles SET
@@ -92,7 +92,8 @@ BEGIN
     total_gathered_food = 0,
     total_gathered_stone = 0,
     x = floor(random() * 500)::int,
-    y = floor(random() * 500)::int;
+    y = floor(random() * 500)::int
+  WHERE true;
 
   -- Remove all territory ownership
   UPDATE tiles
