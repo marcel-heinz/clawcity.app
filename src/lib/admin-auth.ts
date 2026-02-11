@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { createHash } from 'crypto';
+import { createHash, timingSafeEqual } from 'crypto';
 
 const COOKIE_NAME = 'admin_session';
 
@@ -15,7 +15,10 @@ export function getSessionToken(): string {
 export function verifyPassword(input: string): boolean {
   const password = process.env.ADMIN_DASHBOARD_PASSWORD;
   if (!password) return false;
-  return input === password;
+  const inputBuf = Buffer.from(input);
+  const passwordBuf = Buffer.from(password);
+  if (inputBuf.length !== passwordBuf.length) return false;
+  return timingSafeEqual(inputBuf, passwordBuf);
 }
 
 export function verifyAdminSession(request: NextRequest): boolean {
@@ -24,7 +27,10 @@ export function verifyAdminSession(request: NextRequest): boolean {
   
   try {
     const expectedToken = getSessionToken();
-    return sessionCookie.value === expectedToken;
+    const cookieBuf = Buffer.from(sessionCookie.value);
+    const expectedBuf = Buffer.from(expectedToken);
+    if (cookieBuf.length !== expectedBuf.length) return false;
+    return timingSafeEqual(cookieBuf, expectedBuf);
   } catch {
     return false;
   }

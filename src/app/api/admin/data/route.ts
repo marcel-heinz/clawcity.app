@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     // Fetch all agents with their full data
     const { data: agents, error: agentsError } = await supabase
       .from('agents')
-      .select('*')
+      .select('id, name, x, y, gold, wood, food, stone, reputation, created_at, last_active, claimed, claimed_by_twitter, last_move_at, last_gather_at, last_trade_at, total_gathered_gold, total_gathered_wood, total_gathered_food, total_gathered_stone, last_forum_thread_at, last_forum_post_at, last_food_upkeep_at, food_depleted_at, last_announcement_seen_at, last_gather_x, last_gather_y, consecutive_same_tile, last_craft_at, last_build_at, avatar')
       .order('created_at', { ascending: false });
 
     if (agentsError) {

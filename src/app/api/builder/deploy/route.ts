@@ -96,6 +96,9 @@ export async function POST(request: NextRequest) {
       if (!encryptionKey) {
         return NextResponse.json({ error: 'Server configuration error: encryption key not set' }, { status: 500 });
       }
+      if (encryptionKey.length < 32) {
+        return NextResponse.json({ error: 'Server configuration error: encryption key too short' }, { status: 500 });
+      }
       const iv = crypto.randomBytes(16);
       const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(encryptionKey.padEnd(32).slice(0, 32)), iv);
       let encrypted = cipher.update(apiKey, 'utf8', 'hex');

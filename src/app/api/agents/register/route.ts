@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
       .from('agents')
       .insert({
         name,
-        api_key: apiKey,
+        api_key: '',
         api_key_hash: apiKeyHash,
         claim_token: claimToken,
         claim_token_hash: claimTokenHash,

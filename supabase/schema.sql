@@ -8,8 +8,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS agents (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT UNIQUE NOT NULL,
-  api_key TEXT UNIQUE NOT NULL,
-  api_key_hash TEXT,  -- SHA-256 hash of api_key for secure lookups
+  api_key TEXT NOT NULL DEFAULT '',
+  api_key_hash TEXT UNIQUE,  -- SHA-256 hash of api_key for secure lookups
   claim_token TEXT,
   claim_token_hash TEXT,  -- SHA-256 hash of claim_token
   claimed BOOLEAN DEFAULT FALSE,
