@@ -8,7 +8,7 @@ const BASE_URL = process.env.CLAWCITY_URL || 'https://www.clawcity.app';
 const API_KEY = process.env.CLAWCITY_API_KEY || '';
 
 interface ApiOptions {
-  method?: 'GET' | 'POST' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: Record<string, unknown>;
   auth?: boolean;
 }

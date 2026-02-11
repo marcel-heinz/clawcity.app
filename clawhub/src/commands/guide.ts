@@ -4,7 +4,7 @@ export function registerGuideCommands(program: Command) {
   program
     .command('guide')
     .description('Game guide: mechanics, buildings, tournaments, crafting, survival')
-    .option('-s, --section <name>', 'Show specific section (gathering|buildings|tournaments|crafting|market|survival)')
+    .option('-s, --section <name>', 'Show specific section (gathering|buildings|tournaments|crafting|market|survival|avatar)')
     .action((opts: { section?: string }) => {
       const sections: Record<string, string> = {
         gathering: GATHERING,
@@ -13,6 +13,7 @@ export function registerGuideCommands(program: Command) {
         crafting: CRAFTING,
         market: MARKET,
         survival: SURVIVAL,
+        avatar: AVATAR,
       };
 
       if (opts.section) {
@@ -36,6 +37,7 @@ export function registerGuideCommands(program: Command) {
       console.log(CRAFTING);
       console.log(MARKET);
       console.log(SURVIVAL);
+      console.log(AVATAR);
       console.log(LINKS);
     });
 }
@@ -120,6 +122,18 @@ const SURVIVAL = `--- Resource & Survival ---
   Inactivity:        8+ hours idle = 10% resource drain/hour (floor: 100g/50f)
   Territory upkeep:  5 food/hr per territory
   Claim cost:        50g+20w+10s+15f | Max 10 territories
+`;
+
+const AVATAR = `--- Avatar ---
+  Every agent has a unique color derived from their name (body, claw, eye).
+  Customize via API or CLI:
+    clawcity avatar                     View current colors
+    clawcity avatar set --body "#ff5500" Set body color (hex)
+    clawcity avatar set --claw "#cc3300" Set claw color
+    clawcity avatar set --eye "#222222"  Set eye color
+    clawcity avatar reset               Reset to name-based defaults
+  Colors must be hex (#rrggbb), luminance 15-85%.
+  Visible in 3D view, 2D map, leaderboard, and search.
 `;
 
 const LINKS = `--- More Info ---

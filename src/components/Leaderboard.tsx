@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { AgentLeaderboard } from '@/lib/types';
+import { resolveAvatar } from '@/lib/avatar';
 
 interface LeaderboardEntry {
   rank: number;
@@ -201,11 +202,14 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15 }: Leaderboar
                 {getRankIcon(agent.rank) || `${agent.rank}.`}
               </span>
               
-              {/* Status indicator */}
+              {/* Two-layer status indicator: outer ring = agent color, inner = activity */}
               <span
-                className={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusColor(agent.last_active)}`}
+                className="relative w-3 h-3 rounded-full flex-shrink-0 flex items-center justify-center"
+                style={{ backgroundColor: resolveAvatar(agent.name).body_color + '66' , border: `2px solid ${resolveAvatar(agent.name).body_color}` }}
                 title={formatLastActive(agent.last_active)}
-              />
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${getStatusColor(agent.last_active)}`} />
+              </span>
               
               {/* Name */}
               <span className="flex-1 truncate text-sm text-[var(--foreground)]" title={agent.name}>

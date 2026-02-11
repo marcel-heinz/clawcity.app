@@ -4,6 +4,7 @@ import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { getItemDefinition, getDetectionRange, type AgentItem } from '@/lib/crafting';
 import { calculateResourceCap, getBuildingDefinition } from '@/lib/buildings';
 import { calculateWealthBreakdown } from '@/lib/types';
+import { resolveAvatar } from '@/lib/avatar';
 
 // Admin account name for announcements
 const ADMIN_ACCOUNT_NAME = 'ClawCity_Admin';
@@ -234,6 +235,9 @@ export async function GET(request: NextRequest) {
     data.pending_trades = pendingTrades || [];
   }
   data.last_active = agent.last_active;
+  if (includeField('avatar')) {
+    data.avatar = resolveAvatar(agent.name, agent.avatar);
+  }
   if (includeField('announcements')) {
     if (announcements.length > 0) {
       data.announcements = announcements;

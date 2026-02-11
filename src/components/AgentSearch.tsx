@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { AgentLeaderboard } from '@/lib/types';
+import { resolveAvatar } from '@/lib/avatar';
 
 interface AgentSearchProps {
   agents: AgentLeaderboard[];
@@ -104,7 +105,13 @@ export function AgentSearch({ agents }: AgentSearchProps) {
                     />
                   </td>
                   <td className="py-3 pr-4 font-medium text-[var(--foreground)]">
-                    {agent.name}
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: resolveAvatar(agent.name, agent.avatar).body_color }}
+                      />
+                      {agent.name}
+                    </span>
                   </td>
                   <td className="py-3 pr-4 text-[var(--muted)] font-mono text-xs">
                     ({agent.x}, {agent.y})

@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
-import { AgentPublic, Tile, TerrainType, WORLD_SIZE } from '@/lib/types';
+import { AgentPublic, AgentAvatar, Tile, TerrainType, WORLD_SIZE } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
+import { resolveAvatar, hexToThreeColor } from '@/lib/avatar';
 
 // ─── Color palette ───────────────────────────────────────────────────────────
 const COLORS = {
@@ -78,6 +79,7 @@ interface OtherAgentData {
   current: THREE.Vector3;
   target: THREE.Vector3;
   mesh: THREE.Group;
+  avatar: Required<AgentAvatar>;
 }
 
 interface AgentView3DProps {
@@ -176,11 +178,15 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
   const isSpectator = mode === 'spectator';
 
-  // Find selected agent's name
+  // Find selected agent's name and avatar
+  const selfAvatarRef = useRef<Required<AgentAvatar>>({ body_color: '#ff4444', claw_color: '#cc2222', eye_color: '#111111' });
   useEffect(() => {
     if (!isSpectator) {
       const agent = agents.find(a => a.id === selectedAgentId);
-      if (agent) setAgentName(agent.name);
+      if (agent) {
+        setAgentName(agent.name);
+        selfAvatarRef.current = resolveAvatar(agent.name, agent.avatar);
+      }
     }
   }, [agents, selectedAgentId, isSpectator]);
 
@@ -190,20 +196,21 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
   // ─── Mesh Creators ───────────────────────────────────────────────────────────
 
-  const createCrabMesh = useCallback((color: number) => {
+  const createCrabMesh = useCallback((colors: { body: number; claw: number; eye: number }) => {
     const group = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.1 });
+    const bodyMat = new THREE.MeshStandardMaterial({ color: colors.body, roughness: 0.6, metalness: 0.1 });
+    const clawMat = new THREE.MeshStandardMaterial({ color: colors.claw, roughness: 0.6, metalness: 0.1 });
 
     // Body
     const bodyGeo = new THREE.BoxGeometry(0.5, 0.25, 0.4);
-    const body = new THREE.Mesh(bodyGeo, mat);
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.position.y = 0.2;
     body.castShadow = true;
     group.add(body);
 
     // Eyes
     const eyeGeo = new THREE.BoxGeometry(0.08, 0.1, 0.08);
-    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3 });
+    const eyeMat = new THREE.MeshStandardMaterial({ color: colors.eye, roughness: 0.3 });
     const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
     leftEye.position.set(-0.12, 0.38, 0.15);
     const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
@@ -221,17 +228,17 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
     // Claws
     const clawGeo = new THREE.BoxGeometry(0.2, 0.15, 0.18);
-    const leftClaw = new THREE.Mesh(clawGeo, mat);
+    const leftClaw = new THREE.Mesh(clawGeo, clawMat);
     leftClaw.position.set(-0.42, 0.18, 0.12);
     leftClaw.castShadow = true;
-    const rightClaw = new THREE.Mesh(clawGeo, mat);
+    const rightClaw = new THREE.Mesh(clawGeo, clawMat);
     rightClaw.position.set(0.42, 0.18, 0.12);
     rightClaw.castShadow = true;
     group.add(leftClaw, rightClaw);
 
     // Legs (small cylinders)
     const legGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.15, 4);
-    const legMat = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+    const legMat = new THREE.MeshStandardMaterial({ color: colors.body, roughness: 0.7 });
     for (let i = 0; i < 3; i++) {
       const ll = new THREE.Mesh(legGeo, legMat);
       ll.position.set(-0.2, 0.08, -0.1 + i * 0.15);
@@ -1028,7 +1035,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
     // Create self agent mesh (for follow mode)
     if (!isSpectator) {
-      const selfAgent = createCrabMesh(COLORS.agentSelf);
+      const av = selfAvatarRef.current;
+      const selfAgent = createCrabMesh({ body: hexToThreeColor(av.body_color), claw: hexToThreeColor(av.claw_color), eye: hexToThreeColor(av.eye_color) });
       selfAgent.position.set(0, 0, 0);
       agentGroup.add(selfAgent);
       selfAgentRef.current = selfAgent;
@@ -1281,7 +1289,9 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           let selfLabel = agentLabelElsRef.current.get('__self__');
           if (!selfLabel) {
             selfLabel = document.createElement('div');
-            selfLabel.style.cssText = 'position:absolute;pointer-events:auto;cursor:pointer;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;background:rgba(0,0,0,0.7);color:#ff6666;border:1px solid rgba(255,68,68,0.4);transform:translate(-50%,-100%);font-family:monospace;transition:background 0.15s;';
+            const sav = selfAvatarRef.current;
+            const selfLabelColor = sav.body_color;
+            selfLabel.style.cssText = `position:absolute;pointer-events:auto;cursor:pointer;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;background:rgba(0,0,0,0.7);color:${selfLabelColor};border:1px solid ${selfLabelColor}66;transform:translate(-50%,-100%);font-family:monospace;transition:background 0.15s;`;
             selfLabel.textContent = agentNameRef.current || 'Agent';
             const selfLbl = selfLabel;
             selfLabel.addEventListener('mouseenter', () => {
@@ -1304,12 +1314,10 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
                 });
               }
               selfLbl.style.background = 'rgba(0,0,0,0.9)';
-              selfLbl.style.color = '#ff8888';
             });
             selfLabel.addEventListener('mouseleave', () => {
               setHoveredAgent(null);
               selfLbl.style.background = 'rgba(0,0,0,0.7)';
-              selfLbl.style.color = '#ff6666';
             });
             overlay.appendChild(selfLabel);
             agentLabelElsRef.current.set('__self__', selfLabel);
@@ -1324,7 +1332,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           let label = agentLabelElsRef.current.get(agentId);
           if (!label) {
             label = document.createElement('div');
-            label.style.cssText = 'position:absolute;pointer-events:auto;cursor:pointer;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;background:rgba(0,0,0,0.7);color:#ffaa66;border:1px solid rgba(255,136,68,0.3);transform:translate(-50%,-100%);font-family:monospace;transition:background 0.15s;';
+            const labelColor = agentData.avatar.body_color;
+            label.style.cssText = `position:absolute;pointer-events:auto;cursor:pointer;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;background:rgba(0,0,0,0.7);color:${labelColor};border:1px solid ${labelColor}44;transform:translate(-50%,-100%);font-family:monospace;transition:background 0.15s;`;
             label.textContent = agentData.name;
             const lbl = label;
             label.addEventListener('mouseenter', () => {
@@ -1347,12 +1356,10 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
                 });
               }
               lbl.style.background = 'rgba(0,0,0,0.9)';
-              lbl.style.color = '#ffcc88';
             });
             label.addEventListener('mouseleave', () => {
               setHoveredAgent(null);
               lbl.style.background = 'rgba(0,0,0,0.7)';
-              lbl.style.color = '#ffaa66';
             });
             overlay.appendChild(label);
             agentLabelElsRef.current.set(agentId, label);
@@ -1486,7 +1493,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
     const getCenter = () => isSpectator ? terrainCenterRef.current : targetPosRef.current;
 
-    const handleAgentUpdate = async (payload: { new: { id: string; x: number; y: number; name: string } }) => {
+    const handleAgentUpdate = async (payload: { new: { id: string; x: number; y: number; name: string; avatar?: AgentAvatar } }) => {
       if (!isMounted) return;
       const updatedAgent = payload.new;
 
@@ -1526,7 +1533,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           existing.worldX = updatedAgent.x;
           existing.worldY = updatedAgent.y;
         } else {
-          const mesh = createCrabMesh(COLORS.agentOther);
+          const av = resolveAvatar(updatedAgent.name, updatedAgent.avatar);
+          const mesh = createCrabMesh({ body: hexToThreeColor(av.body_color), claw: hexToThreeColor(av.claw_color), eye: hexToThreeColor(av.eye_color) });
           mesh.position.set(relX, 0, relZ);
           agentGroup.add(mesh);
           otherAgentsRef.current.set(updatedAgent.id, {
@@ -1535,7 +1543,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
             name: updatedAgent.name,
             current: new THREE.Vector3(relX, 0, relZ),
             target: new THREE.Vector3(relX, 0, relZ),
-            mesh
+            mesh,
+            avatar: av,
           });
         }
       }
@@ -1567,7 +1576,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
               const relX = agent.x - center.x;
               const relZ = agent.y - center.y;
               if (Math.abs(relX) <= VIEW_RADIUS && Math.abs(relZ) <= VIEW_RADIUS) {
-                const mesh = createCrabMesh(COLORS.agentOther);
+                const av = resolveAvatar(agent.name, agent.avatar);
+                const mesh = createCrabMesh({ body: hexToThreeColor(av.body_color), claw: hexToThreeColor(av.claw_color), eye: hexToThreeColor(av.eye_color) });
                 mesh.position.set(relX, 0, relZ);
                 agentGroup.add(mesh);
                 otherAgentsRef.current.set(agent.id, {
@@ -1576,7 +1586,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
                   name: agent.name,
                   current: new THREE.Vector3(relX, 0, relZ),
                   target: new THREE.Vector3(relX, 0, relZ),
-                  mesh
+                  mesh,
+                  avatar: av,
                 });
               }
             });
@@ -1600,7 +1611,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         { event: '*', schema: 'public', table: 'agents_realtime' },
         (payload) => {
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            handleAgentUpdate(payload as unknown as { new: { id: string; x: number; y: number; name: string } });
+            handleAgentUpdate(payload as unknown as { new: { id: string; x: number; y: number; name: string; avatar?: AgentAvatar } });
           }
         }
       )

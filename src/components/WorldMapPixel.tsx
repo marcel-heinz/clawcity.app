@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { AgentPublic, TerrainType, WORLD_SIZE } from '@/lib/types';
 import { CrabSprite } from '@/components/CrabSprite';
+import { resolveAvatar } from '@/lib/avatar';
 
 // Terrain colors matching terrain-demo.html
 const TERRAIN_COLORS: Record<TerrainType, string> = {
@@ -283,13 +284,21 @@ export function WorldMapPixel({ agents, onAgentClick, onMapClick }: WorldMapPixe
                   }
                 }}
               >
+                {/* Colored ring from avatar */}
+                <div
+                  className="absolute inset-0 -m-1 rounded-full opacity-70 pointer-events-none"
+                  style={{ border: `2px solid ${resolveAvatar(agent.name, agent.avatar).body_color}` }}
+                />
                 <CrabSprite
                   animation="idle"
                   scale={0.6}
                   className={isHovered ? 'brightness-125' : ''}
                 />
-                {/* Pulsing ring effect to draw attention */}
-                <div className="absolute inset-0 -m-2 rounded-full border-2 border-[var(--accent)] animate-ping opacity-40 pointer-events-none" />
+                {/* Pulsing ring effect with agent color */}
+                <div
+                  className="absolute inset-0 -m-2 rounded-full border-2 animate-ping opacity-40 pointer-events-none"
+                  style={{ borderColor: resolveAvatar(agent.name, agent.avatar).body_color }}
+                />
               </div>
             );
           })}
@@ -305,7 +314,10 @@ export function WorldMapPixel({ agents, onAgentClick, onMapClick }: WorldMapPixe
             }}
           >
             <div className="flex items-center gap-1">
-              <span className="text-[var(--accent)]">👁️</span>
+              <span
+                className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: resolveAvatar(hoveredAgent.name, hoveredAgent.avatar).body_color }}
+              />
               {hoveredAgent.name}
             </div>
             <div className="text-[10px] font-normal opacity-80">

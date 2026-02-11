@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { AgentLeaderboard } from '@/lib/types';
 import { CrabSprite } from './CrabSprite';
+import { resolveAvatar } from '@/lib/avatar';
 
 interface ActiveAgentsProps {
   agents: AgentLeaderboard[];
@@ -64,8 +65,11 @@ export function ActiveAgents({ agents, onAgentClick }: ActiveAgentsProps) {
               onClick={() => onAgentClick?.(agent.id, agent.x, agent.y)}
               className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[var(--surface-alt)] transition-colors text-left group"
             >
-              {/* Crab icon */}
-              <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
+              {/* Crab icon with avatar color background */}
+              <div
+                className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full"
+                style={{ backgroundColor: resolveAvatar(agent.name, agent.avatar).body_color + '25' }}
+              >
                 <CrabSprite animation="idle" scale={0.8} />
               </div>
 

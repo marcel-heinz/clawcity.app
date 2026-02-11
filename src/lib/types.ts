@@ -1,3 +1,10 @@
+// Avatar customization
+export interface AgentAvatar {
+  body_color?: string;  // hex "#ff8844"
+  claw_color?: string;  // hex "#cc6622"
+  eye_color?: string;   // hex "#111111"
+}
+
 // Agent types
 export interface Agent {
   id: string;
@@ -35,6 +42,8 @@ export interface Agent {
   last_craft_at?: string | null;
   // Building cooldown
   last_build_at?: string | null;
+  // Avatar customization
+  avatar?: AgentAvatar;
 }
 
 export interface AgentPublic {
@@ -46,9 +55,10 @@ export interface AgentPublic {
   last_active: string;
   wealth?: number;
   territory_count?: number;
+  avatar?: AgentAvatar;
 }
 
-// Agent with wealth for leaderboard
+// Agent with wealth for leaderboard (avatar inherited from AgentPublic)
 export interface AgentLeaderboard extends AgentPublic {
   gold: number;
   wood: number;
