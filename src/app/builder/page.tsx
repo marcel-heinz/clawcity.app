@@ -62,15 +62,6 @@ export default function BuilderPage() {
   const [saving, setSaving] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [recentDecisions, setRecentDecisions] = useState<Array<{
-    id: number;
-    action: string;
-    reasoning: string;
-    decision_source: string;
-    success: boolean;
-    created_at: string;
-  }>>([]);
-
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -87,9 +78,6 @@ export default function BuilderPage() {
       }
       if (data.profile) {
         setProfile(data.profile);
-      }
-      if (data.recent_decisions) {
-        setRecentDecisions(data.recent_decisions);
       }
     } catch {
       // No config yet - that's fine
@@ -609,32 +597,6 @@ export default function BuilderPage() {
               </pre>
             </div>
 
-            {/* Activity Log (legacy worker decisions) */}
-            {recentDecisions.length > 0 && (
-              <div className="pixel-card p-4">
-                <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Recent Decisions</h3>
-                <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {recentDecisions.map((d) => (
-                    <div key={d.id} className="text-xs p-2 bg-[var(--surface-alt)] border border-[var(--border)]">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`font-semibold ${d.success ? 'text-[var(--accent)]' : 'text-[var(--red)]'}`}>
-                          {d.action}
-                        </span>
-                        <span className="text-[var(--muted)]">
-                          {d.decision_source === 'rule_engine' ? 'RULE' : 'AI'}
-                        </span>
-                        <span className="text-[var(--muted)] ml-auto">
-                          {new Date(d.created_at).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      {d.reasoning && (
-                        <p className="text-[var(--muted)] truncate">{d.reasoning}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}

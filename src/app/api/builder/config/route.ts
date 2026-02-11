@@ -26,23 +26,9 @@ export async function GET() {
       .limit(1)
       .single();
 
-    // Fetch recent decisions if config exists
-    let recentDecisions: unknown[] = [];
-    if (config) {
-      const { data: decisions } = await supabase
-        .from('decision_log')
-        .select('id, action, reasoning, decision_source, success, created_at')
-        .eq('agent_config_id', config.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      recentDecisions = decisions || [];
-    }
-
     return NextResponse.json({
       config: config || null,
       profile: profile || null,
-      recent_decisions: recentDecisions,
     });
   } catch (error) {
     console.error('Config GET error:', error);

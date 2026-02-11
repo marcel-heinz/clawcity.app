@@ -40,27 +40,9 @@ export async function GET() {
       agent = agentData;
     }
 
-    // Fetch decision stats
-    let stats = { total_decisions: 0, successful_decisions: 0, ai_decisions: 0, rule_decisions: 0 };
-    if (config) {
-      const { data: decisions } = await supabase
-        .from('decision_log')
-        .select('success, decision_source')
-        .eq('agent_config_id', config.id);
-
-      if (decisions) {
-        stats = {
-          total_decisions: decisions.length,
-          successful_decisions: decisions.filter((d) => d.success).length,
-          ai_decisions: decisions.filter((d) => d.decision_source === 'llm').length,
-          rule_decisions: decisions.filter((d) => d.decision_source === 'rule_engine').length,
-        };
-      }
-    }
-
     return NextResponse.json({
       success: true,
-      data: { profile, config, agent, stats },
+      data: { profile, config, agent },
     });
   } catch (error) {
     console.error('Profile error:', error);

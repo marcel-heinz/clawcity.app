@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
 
       agentId = agent.id;
 
-      // Encrypt the API key for the worker (kept for backward compatibility)
+      // Encrypt the API key for OpenClaw provisioning
       const encryptionKey = process.env.AGENT_KEY_ENCRYPTION_SECRET;
       if (!encryptionKey) {
         return NextResponse.json({ error: 'Server configuration error: encryption key not set' }, { status: 500 });
@@ -126,48 +126,51 @@ export async function POST(request: NextRequest) {
         });
     }
 
-    // Provision OpenClaw agent (if gateway is configured)
-    let openclawProvisioned = false;
-    if (isOpenClawConfigured()) {
-      // For existing agents, we need to decrypt the API key for OpenClaw
-      if (!plainApiKey && config.agent_api_key_encrypted) {
-        const encryptionKey = process.env.AGENT_KEY_ENCRYPTION_SECRET;
-        if (encryptionKey) {
-          try {
-            const [ivHex, encryptedHex] = config.agent_api_key_encrypted.split(':');
-            const ivBuf = Buffer.from(ivHex, 'hex');
-            const decipher = crypto.createDecipheriv(
-              'aes-256-cbc',
-              Buffer.from(encryptionKey.padEnd(32).slice(0, 32)),
-              ivBuf
-            );
-            let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
-            decrypted += decipher.final('utf8');
-            plainApiKey = decrypted;
-          } catch (e) {
-            console.error('Failed to decrypt API key for OpenClaw:', e);
-          }
+    // Provision OpenClaw agent
+    if (!isOpenClawConfigured()) {
+      return NextResponse.json({ error: 'OpenClaw gateway is not configured. Deployment is unavailable.' }, { status: 503 });
+    }
+
+    // For existing agents, we need to decrypt the API key for OpenClaw
+    if (!plainApiKey && config.agent_api_key_encrypted) {
+      const encryptionKey = process.env.AGENT_KEY_ENCRYPTION_SECRET;
+      if (encryptionKey) {
+        try {
+          const [ivHex, encryptedHex] = config.agent_api_key_encrypted.split(':');
+          const ivBuf = Buffer.from(ivHex, 'hex');
+          const decipher = crypto.createDecipheriv(
+            'aes-256-cbc',
+            Buffer.from(encryptionKey.padEnd(32).slice(0, 32)),
+            ivBuf
+          );
+          let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
+          decrypted += decipher.final('utf8');
+          plainApiKey = decrypted;
+        } catch (e) {
+          console.error('Failed to decrypt API key for OpenClaw:', e);
         }
       }
+    }
 
-      if (plainApiKey) {
-        const openclawResult = await provisionAgent({
-          agentId: config_id, // Use config ID as the OpenClaw agent ID
-          agentName: config.agent_name,
-          apiKey: plainApiKey,
-          personalityPreset: config.personality_preset || 'explorer',
-          strategyExploration: config.strategy_exploration ?? 50,
-          strategyTrading: config.strategy_trading ?? 50,
-          strategyAggression: config.strategy_aggression ?? 50,
-          strategySocial: config.strategy_social ?? 50,
-          customInstructions: config.custom_instructions || '',
-        });
+    if (!plainApiKey) {
+      return NextResponse.json({ error: 'Failed to resolve agent API key for provisioning' }, { status: 500 });
+    }
 
-        openclawProvisioned = openclawResult.success;
-        if (!openclawResult.success) {
-          console.error('OpenClaw provisioning failed:', openclawResult.error, openclawResult.details);
-        }
-      }
+    const openclawResult = await provisionAgent({
+      agentId: config_id, // Use config ID as the OpenClaw agent ID
+      agentName: config.agent_name,
+      apiKey: plainApiKey,
+      personalityPreset: config.personality_preset || 'explorer',
+      strategyExploration: config.strategy_exploration ?? 50,
+      strategyTrading: config.strategy_trading ?? 50,
+      strategyAggression: config.strategy_aggression ?? 50,
+      strategySocial: config.strategy_social ?? 50,
+      customInstructions: config.custom_instructions || '',
+    });
+
+    if (!openclawResult.success) {
+      console.error('OpenClaw provisioning failed:', openclawResult.error, openclawResult.details);
+      return NextResponse.json({ error: 'OpenClaw provisioning failed: ' + (openclawResult.error || 'unknown error') }, { status: 502 });
     }
 
     // Activate
@@ -175,14 +178,14 @@ export async function POST(request: NextRequest) {
       .from('agent_configs')
       .update({
         is_active: true,
-        ...(openclawProvisioned ? { engine: 'openclaw' } : {}),
+        engine: 'openclaw',
       })
       .eq('id', config_id);
 
     return NextResponse.json({
       success: true,
       agent_id: agentId,
-      engine: openclawProvisioned ? 'openclaw' : 'worker',
+      engine: 'openclaw',
     });
   } catch (error) {
     console.error('Deploy error:', error);
