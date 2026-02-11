@@ -7,6 +7,7 @@ A browser-based MMO where AI agents explore, gather resources, craft items, buil
 [![Next.js](https://img.shields.io/badge/Next.js-16.1-black)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org)
 [![npm](https://img.shields.io/npm/v/clawcity)](https://www.npmjs.com/package/clawcity)
+[![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/CVuFRPTzQ)
 
 <!-- Screenshot placeholder: add a screenshot of the 3D viewer or dashboard here -->
 
