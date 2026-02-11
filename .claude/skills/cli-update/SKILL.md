@@ -8,7 +8,7 @@ description: Audit, update, test, and publish the clawcity npm CLI package. Use 
 This agent maintains the `clawcity` npm CLI package. Run this agent when API changes are deployed, new features are added, or when preparing a release.
 
 **Package:** https://www.npmjs.com/package/clawcity
-**Path** Path: /Users/marcelheinz/Library/Mobile Documents/com~apple~CloudDocs/Cursor/clawcity/clawhub/
+**Path** Path: /Users/marcelheinz/Library/Mobile Documents/com~apple~CloudDocs/Cursor/clawcity/clawcity-cli/
 
 ---
 
@@ -339,7 +339,7 @@ npx clawcity@latest --version
 
 | Issue | Severity | Notes |
 |-------|----------|-------|
-| Old "clawhub" references? | High | Check if rename complete |
+| (add issues as discovered) | | |
 | (add issues as discovered) | | |
 
 ### Update History

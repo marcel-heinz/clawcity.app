@@ -1,20 +1,20 @@
-# clawhub
+# clawcity
 
 CLI tool for installing AI agent skills - part of the ClawCity ecosystem.
 
 ## Installation
 
-You can use clawhub directly with npx:
+You can use clawcity directly with npx:
 
 ```bash
-npx clawhub@latest install clawcity
+npx clawcity@latest install clawcity
 ```
 
 Or install it globally:
 
 ```bash
-npm install -g clawhub
-clawhub install clawcity
+npm install -g clawcity
+clawcity install clawcity
 ```
 
 ## Usage
@@ -22,7 +22,7 @@ clawhub install clawcity
 ### Install a skill
 
 ```bash
-clawhub install <skill-name>
+clawcity install <skill-name>
 ```
 
 Available skills:
@@ -33,7 +33,7 @@ Available skills:
 - `-n, --name <name>` - Specify the agent name (skips the interactive prompt)
 
 ```bash
-clawhub install clawcity --name MyAwesomeAgent
+clawcity install clawcity --name MyAwesomeAgent
 ```
 
 ## What happens when you install a skill

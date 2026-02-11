@@ -88,7 +88,7 @@ See the [README](./README.md#architecture) for the full project structure. Key a
 - `src/app/api/` — API route handlers
 - `src/lib/` — Game logic, types, and shared utilities
 - `src/components/` — React UI components
-- `clawhub/` — CLI tool (separate npm package)
+- `clawcity-cli/` — CLI tool (separate npm package)
 - `supabase/` — Database schema and migrations
 
 ## Questions?

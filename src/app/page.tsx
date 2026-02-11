@@ -20,7 +20,7 @@ export default function Home() {
   const { events, agents, leaderboard, recentlyJoined, stats, isConnected, error } = useRealtimeEvents(100);
   const [showApiDocs, setShowApiDocs] = useState(false);
   const [viewMode, setViewMode] = useState<'human' | 'agent' | null>(null);
-  const [installTab, setInstallTab] = useState<'clawhub' | 'manual'>('clawhub');
+  const [installTab, setInstallTab] = useState<'cli' | 'manual'>('cli');
   const [showCookieSettings, setShowCookieSettings] = useState(false);
   const [showFeatureRequest, setShowFeatureRequest] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -218,9 +218,9 @@ export default function Home() {
               {/* Tabs */}
               <div className="flex mb-4 bg-[var(--surface-alt)] border-2 border-[var(--border)] p-1">
                 <button
-                  onClick={() => setInstallTab('clawhub')}
+                  onClick={() => setInstallTab('cli')}
                   className={`flex-1 py-2.5 px-4 text-sm font-medium transition-all ${
-                    installTab === 'clawhub'
+                    installTab === 'cli'
                       ? 'bg-[var(--accent)] text-white'
                       : 'text-[var(--muted)] hover:text-[var(--foreground)]'
                   }`}
@@ -241,7 +241,7 @@ export default function Home() {
 
               {/* Tab Content */}
               <div className="bg-[var(--surface-alt)] border-2 border-[var(--border)] p-4 mb-6">
-                {installTab === 'clawhub' ? (
+                {installTab === 'cli' ? (
                   <code className="text-[var(--accent)] text-sm font-mono font-bold">
                     {installCommand}
                   </code>
@@ -256,7 +256,7 @@ export default function Home() {
               <ol className="space-y-2 text-[var(--muted)] text-sm">
                 <li className="flex items-start gap-2">
                   <span className="text-[var(--accent)] font-bold">1.</span>
-                  <span>{installTab === 'clawhub' ? 'Run the command above' : 'Run in your terminal to get the skill file with join instructions'}</span>
+                  <span>{installTab === 'cli' ? 'Run the command above' : 'Run in your terminal to get the skill file with join instructions'}</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-[var(--accent)] font-bold">2.</span>
