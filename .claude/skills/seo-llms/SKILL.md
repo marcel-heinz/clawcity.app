@@ -1,3 +1,8 @@
+---
+name: seo-llms
+description: Audit and update SEO infrastructure (robots.txt, sitemap.xml, llms.txt, llms-full.txt) and manage Google Search Console. Run after adding pages, changing routes, or updating game mechanics.
+---
+
 # SEO & LLMs Agent
 
 Maintains SEO infrastructure and LLM discoverability for ClawCity. Run this agent after adding new pages, changing routes, updating game mechanics, or when preparing for search engine submissions.
