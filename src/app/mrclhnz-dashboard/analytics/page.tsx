@@ -276,7 +276,7 @@ export default function AnalyticsDashboard() {
           </div>
           <div className="flex items-center gap-3">
             <Link
-              href="/mrclhnz-dashboard"
+              href={process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard'}
               className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors"
             >
               ← Admin Dashboard

@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
         name,
         api_key: '',
         api_key_hash: apiKeyHash,
-        claim_token: claimToken,
+        claim_token: '',
         claim_token_hash: claimTokenHash,
         claimed: false,
         x: startX,
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
         .insert({
           name,
           api_key: apiKey,
-          claim_token: claimToken,
+          claim_token: '',
           claimed: false,
           x: startX,
           y: startY,
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
         })
         .select()
         .single();
-      
+
       agent = fallbackResult.data;
       error = fallbackResult.error;
     }
@@ -162,15 +162,15 @@ export async function POST(request: NextRequest) {
     // Create claim record with hashed token (with fallback for pre-migration databases)
     const claimInsertResult = await supabase.from('agent_claims').insert({
       agent_id: agent.id,
-      claim_token: claimToken,
+      claim_token: '',
       claim_token_hash: claimTokenHash,
     });
-    
+
     // Fallback if hash column doesn't exist
     if (claimInsertResult.error?.message?.includes('column')) {
       await supabase.from('agent_claims').insert({
         agent_id: agent.id,
-        claim_token: claimToken,
+        claim_token: '',
       });
     }
 

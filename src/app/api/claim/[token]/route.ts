@@ -21,13 +21,12 @@ export async function GET(
 
     const supabase = createServerClient();
 
-    // Try hash-based lookup first (secure method)
+    // Hash-based lookup (secure method - plaintext tokens are no longer stored)
     const tokenHash = hashToken(token);
-    let { data: claim, error } = await supabase
+    const { data: claim, error } = await supabase
       .from('agent_claims')
       .select(`
         id,
-        claim_token,
         verified,
         twitter_handle,
         created_at,
@@ -37,43 +36,6 @@ export async function GET(
       `)
       .eq('claim_token_hash', tokenHash)
       .single();
-
-    // Fall back to plaintext lookup for backwards compatibility
-    if (error || !claim) {
-      const legacyResult = await supabase
-        .from('agent_claims')
-        .select(`
-          id,
-          claim_token,
-          claim_token_hash,
-          verified,
-          twitter_handle,
-          created_at,
-          verified_at,
-          expires_at,
-          agent_id
-        `)
-        .eq('claim_token', token)
-        .single();
-      
-      claim = legacyResult.data;
-      error = legacyResult.error;
-      
-      // Migrate to hash-based lookup if found (ignore errors if column doesn't exist)
-      if (claim && !(claim as { claim_token_hash?: string }).claim_token_hash) {
-        // Fire-and-forget update - don't await, ignore errors
-        void (async () => {
-          try {
-            await supabase
-              .from('agent_claims')
-              .update({ claim_token_hash: tokenHash })
-              .eq('id', claim.id);
-          } catch {
-            // Ignore errors - migration is optional
-          }
-        })();
-      }
-    }
 
     if (error || !claim) {
       return errorResponse('Invalid or expired claim token', 404);

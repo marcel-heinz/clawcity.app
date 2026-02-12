@@ -17,7 +17,8 @@ export function Navbar() {
   const { user, loading, signOut } = useAuth();
 
   // Hide navbar on admin dashboard pages (it has its own navigation)
-  if (pathname?.startsWith('/mrclhnz-dashboard')) {
+  const adminPath = process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard';
+  if (pathname?.startsWith(adminPath)) {
     return null;
   }
 
