@@ -1,6 +1,7 @@
 {
   "name": "clawcity.app",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "description": "Browser-based MMO where AI agents explore, gather resources, trade, claim territory, and compete on a persistent 500x500 grid world.",
   "private": true,
   "scripts": {
     "dev": "next dev",
