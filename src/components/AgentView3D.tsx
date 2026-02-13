@@ -171,12 +171,22 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   const agentNameRef = useRef('');
   const agentsDataRef = useRef<AgentPublic[]>(agents);
 
-  const VIEW_RADIUS = 20;        // Tiles to load
-  const UNLOAD_RADIUS = 24;      // Tiles before removal (hysteresis)
-  const FETCH_THRESHOLD = 4;     // Refetch when player moves this far from last fetch center
+  const FOLLOW_TERRAIN_VIEW_RADIUS = 20;      // Follow-mode terrain load radius
+  const FOLLOW_TERRAIN_UNLOAD_RADIUS = 24;    // Follow-mode terrain unload radius (hysteresis)
+  const FOLLOW_TERRAIN_FETCH_THRESHOLD = 4;   // Follow-mode refetch threshold
+
+  const SPECTATOR_TERRAIN_VIEW_RADIUS = 36;   // Spectator terrain load radius
+  const SPECTATOR_TERRAIN_UNLOAD_RADIUS = 40; // Spectator terrain unload radius (hysteresis)
+  const SPECTATOR_TERRAIN_FETCH_THRESHOLD = 8; // Spectator refetch threshold
+
+  const AGENT_VIEW_RADIUS = 20;               // Keep agent visibility/culling behavior unchanged
+  const AGENT_UNLOAD_RADIUS = 24;             // Keep agent unload behavior unchanged
   const MINIMAP_SIZE = 120;
 
   const isSpectator = mode === 'spectator';
+  const terrainViewRadius = isSpectator ? SPECTATOR_TERRAIN_VIEW_RADIUS : FOLLOW_TERRAIN_VIEW_RADIUS;
+  const terrainUnloadRadius = isSpectator ? SPECTATOR_TERRAIN_UNLOAD_RADIUS : FOLLOW_TERRAIN_UNLOAD_RADIUS;
+  const terrainFetchThreshold = isSpectator ? SPECTATOR_TERRAIN_FETCH_THRESHOLD : FOLLOW_TERRAIN_FETCH_THRESHOLD;
 
   // Find selected agent's name and avatar
   const selfAvatarRef = useRef<Required<AgentAvatar>>({ body_color: '#ff4444', claw_color: '#cc2222', eye_color: '#111111' });
@@ -684,14 +694,14 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
   const fetchTiles = useCallback(async (cx: number, cy: number) => {
     try {
-      const response = await fetch(`/api/world/tiles?x=${cx}&y=${cy}&radius=${VIEW_RADIUS}`);
+      const response = await fetch(`/api/world/tiles?x=${cx}&y=${cy}&radius=${terrainViewRadius}`);
       const data = await response.json();
       if (data.success) return data.data.tiles as Tile[];
     } catch (error) {
       console.error('Failed to fetch tiles:', error);
     }
     return [];
-  }, []);
+  }, [terrainViewRadius]);
 
   const fetchWorldTiles = useCallback(async () => {
     try {
@@ -820,14 +830,14 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     });
 
     // Reposition ALL loaded tiles relative to new center (not just those in current response)
-    // This fixes the bug where tiles between VIEW_RADIUS and UNLOAD_RADIUS
+    // This fixes the bug where tiles between terrainViewRadius and terrainUnloadRadius
     // kept stale positions when the center shifted
     const keysToRemove: string[] = [];
     loadedTilesRef.current.forEach((group, key) => {
       const wx = group.userData.worldX as number;
       const wy = group.userData.worldY as number;
-      // Remove tiles outside UNLOAD_RADIUS (hysteresis: load at VIEW_RADIUS, unload at UNLOAD_RADIUS)
-      if (Math.abs(wx - cx) > UNLOAD_RADIUS || Math.abs(wy - cy) > UNLOAD_RADIUS) {
+      // Remove tiles outside terrainUnloadRadius (hysteresis: load at terrainViewRadius, unload at terrainUnloadRadius)
+      if (Math.abs(wx - cx) > terrainUnloadRadius || Math.abs(wy - cy) > terrainUnloadRadius) {
         terrainGroup.remove(group);
         keysToRemove.push(key);
         loadedWaterRef.current.delete(key);
@@ -843,7 +853,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
     // Update water mesh list for animation
     waterMeshesRef.current = Array.from(loadedWaterRef.current.values());
-  }, [createTileGroup, UNLOAD_RADIUS]);
+  }, [createTileGroup, terrainUnloadRadius]);
 
   // Legacy buildTerrain for initial load / follow mode (full rebuild)
   const buildTerrain = useCallback((tiles: Tile[], cx: number, cy: number) => {
@@ -1196,7 +1206,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           (spectatorPosRef.current.y - tc.y) ** 2
         );
 
-        if (distFromCenter > FETCH_THRESHOLD && !isFetchingTerrainRef.current && now - lastTerrainFetchRef.current > 300) {
+        if (distFromCenter > terrainFetchThreshold && !isFetchingTerrainRef.current && now - lastTerrainFetchRef.current > 300) {
           lastTerrainFetchRef.current = now;
           isFetchingTerrainRef.current = true;
           const newCx = Math.round(spectatorPosRef.current.x);
@@ -1221,7 +1231,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
             otherAgentsRef.current.forEach((agentData, agentId) => {
               const relX = agentData.worldX - newCx;
               const relZ = agentData.worldY - newCy;
-              if (Math.abs(relX) > UNLOAD_RADIUS || Math.abs(relZ) > UNLOAD_RADIUS) {
+              if (Math.abs(relX) > AGENT_UNLOAD_RADIUS || Math.abs(relZ) > AGENT_UNLOAD_RADIUS) {
                 agentGroupRef.current?.remove(agentData.mesh);
                 otherAgentsRef.current.delete(agentId);
               } else {
@@ -1516,7 +1526,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         const relX = updatedAgent.x - center.x;
         const relZ = updatedAgent.y - center.y;
 
-        if (Math.abs(relX) > VIEW_RADIUS || Math.abs(relZ) > VIEW_RADIUS) {
+        if (Math.abs(relX) > AGENT_VIEW_RADIUS || Math.abs(relZ) > AGENT_VIEW_RADIUS) {
           const existing = otherAgentsRef.current.get(updatedAgent.id);
           if (existing) {
             agentGroup.remove(existing.mesh);
@@ -1575,7 +1585,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
               if (!isSpectator && agent.id === selectedAgentId) return;
               const relX = agent.x - center.x;
               const relZ = agent.y - center.y;
-              if (Math.abs(relX) <= VIEW_RADIUS && Math.abs(relZ) <= VIEW_RADIUS) {
+              if (Math.abs(relX) <= AGENT_VIEW_RADIUS && Math.abs(relZ) <= AGENT_VIEW_RADIUS) {
                 const av = resolveAvatar(agent.name, agent.avatar);
                 const mesh = createCrabMesh({ body: hexToThreeColor(av.body_color), claw: hexToThreeColor(av.claw_color), eye: hexToThreeColor(av.eye_color) });
                 mesh.position.set(relX, 0, relZ);
