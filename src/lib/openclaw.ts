@@ -56,6 +56,16 @@ export interface AutoModeFeedbackEntry {
   details?: string;
 }
 
+export type OpenRouterGatewayModel = 'z-ai/glm-5' | 'minimax/minimax-m2.5';
+
+interface GatewayModelSettingsResponse {
+  success: boolean;
+  model?: OpenRouterGatewayModel;
+  models?: OpenRouterGatewayModel[];
+  error?: string;
+  details?: string;
+}
+
 async function provisionFetch(
   path: string,
   options: RequestInit = {}
@@ -280,6 +290,97 @@ export async function getAgentAutoplayFeedback(
       success: false,
       entries: [],
       error: 'Failed to fetch autoplay feedback',
+      details: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function getGatewayModelSettings(): Promise<{
+  success: boolean;
+  model?: OpenRouterGatewayModel;
+  models?: OpenRouterGatewayModel[];
+  error?: string;
+  details?: string;
+  status?: number;
+}> {
+  try {
+    const res = await provisionFetch('/api/settings/model');
+    const data = await parseJsonSafe<GatewayModelSettingsResponse>(res);
+    if (!data) {
+      return {
+        success: false,
+        error: `Model settings request failed (${res.status})`,
+        status: res.status,
+      };
+    }
+
+    if (!res.ok || !data.success) {
+      return {
+        success: false,
+        error: data.error || `Model settings request failed (${res.status})`,
+        details: data.details,
+        status: res.status,
+      };
+    }
+
+    return {
+      success: true,
+      model: data.model,
+      models: data.models,
+      status: res.status,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Failed to fetch gateway model settings',
+      details: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function updateGatewayModelSettings(
+  model: OpenRouterGatewayModel
+): Promise<{
+  success: boolean;
+  model?: OpenRouterGatewayModel;
+  models?: OpenRouterGatewayModel[];
+  error?: string;
+  details?: string;
+  status?: number;
+}> {
+  try {
+    const res = await provisionFetch('/api/settings/model', {
+      method: 'PUT',
+      body: JSON.stringify({ model }),
+    });
+    const data = await parseJsonSafe<GatewayModelSettingsResponse>(res);
+    if (!data) {
+      return {
+        success: false,
+        error: `Model settings update failed (${res.status})`,
+        status: res.status,
+      };
+    }
+
+    if (!res.ok || !data.success) {
+      return {
+        success: false,
+        error: data.error || `Model settings update failed (${res.status})`,
+        details: data.details,
+        status: res.status,
+      };
+    }
+
+    return {
+      success: true,
+      model: data.model,
+      models: data.models,
+      status: res.status,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Failed to update gateway model settings',
       details: error instanceof Error ? error.message : String(error),
     };
   }

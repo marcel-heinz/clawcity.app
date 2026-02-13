@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAuthServerClient } from '@/lib/supabase-auth-server';
 import { generateSoulMarkdown } from '@/lib/agent-soul';
+import {
+  getGatewayModelSettings,
+  isOpenClawConfigured,
+  OpenRouterGatewayModel,
+} from '@/lib/openclaw';
 
-const DEFAULT_MODEL = process.env.OPENROUTER_SOUL_MODEL || 'z-ai/glm-5';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const FALLBACK_MODEL: OpenRouterGatewayModel = 'z-ai/glm-5';
+const GATEWAY_MODEL_CACHE_TTL_MS = 60_000;
+
+let cachedGatewayModel: { model: OpenRouterGatewayModel; fetchedAt: number } | null = null;
+
 type WarningCode =
   | 'configuration'
   | 'http_error'
@@ -97,6 +106,34 @@ function ensureSoulShape(raw: string, agentName: string, operatorNotes?: string)
   return text;
 }
 
+function getEnvFallbackModel(): OpenRouterGatewayModel {
+  const configured = process.env.OPENROUTER_SOUL_MODEL;
+  if (configured === 'z-ai/glm-5' || configured === 'minimax/minimax-m2.5') {
+    return configured;
+  }
+  return FALLBACK_MODEL;
+}
+
+async function resolveSoulModel(): Promise<OpenRouterGatewayModel> {
+  const fallback = getEnvFallbackModel();
+  if (!isOpenClawConfigured()) {
+    return fallback;
+  }
+
+  const now = Date.now();
+  if (cachedGatewayModel && now - cachedGatewayModel.fetchedAt < GATEWAY_MODEL_CACHE_TTL_MS) {
+    return cachedGatewayModel.model;
+  }
+
+  const settings = await getGatewayModelSettings();
+  if (settings.success && settings.model) {
+    cachedGatewayModel = { model: settings.model, fetchedAt: now };
+    return settings.model;
+  }
+
+  return fallback;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createAuthServerClient();
@@ -125,6 +162,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const model = await resolveSoulModel();
+
     const prompt = [
       `Generate a concise SOUL.md for an autonomous ClawCity agent named "${agentName}".`,
       'Return markdown only.',
@@ -147,7 +186,7 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: DEFAULT_MODEL,
+        model,
         temperature: 0.4,
         max_tokens: 380,
         messages: [
@@ -166,7 +205,7 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const details = await response.text();
       console.warn('[builder:soul-generate] OpenRouter request failed', {
-        model: DEFAULT_MODEL,
+        model,
         status: response.status,
       });
       return fallbackResponse(
@@ -189,7 +228,7 @@ export async function POST(request: NextRequest) {
       : choice?.error?.message;
 
     console.info('[builder:soul-generate] OpenRouter completion', {
-      model: DEFAULT_MODEL,
+      model,
       finish_reason: finishReason,
       has_refusal: Boolean(refusal),
       content_shape: contentShape,
@@ -208,7 +247,7 @@ export async function POST(request: NextRequest) {
           : 'Model returned empty content.';
 
       console.warn('[builder:soul-generate] Empty model content, using fallback', {
-        model: DEFAULT_MODEL,
+        model,
         finish_reason: finishReason,
         has_refusal: Boolean(refusal),
         content_shape: contentShape,
@@ -223,7 +262,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       soul_md: soulMd,
-      model: DEFAULT_MODEL,
+      model,
       fallback_used: false,
       content_shape: contentShape,
     });

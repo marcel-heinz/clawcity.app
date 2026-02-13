@@ -17,17 +17,15 @@
     "defaults": {
       "model": {
         "primary": "openrouter/z-ai/glm-5",
-        "fallbacks": [
-          "openrouter/moonshotai/kimi-k2.5"
-        ]
+        "fallbacks": []
       },
       "models": {
         "openrouter/z-ai/glm-5": {
           "alias": "glm5",
           "params": { "cacheRetention": "short" }
         },
-        "openrouter/moonshotai/kimi-k2.5": {
-          "alias": "kimi"
+        "openrouter/minimax/minimax-m2.5": {
+          "alias": "minimax-m2.5"
         }
       },
       "heartbeat": {

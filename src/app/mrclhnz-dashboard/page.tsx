@@ -461,6 +461,12 @@ export default function AdminDashboard() {
             >
               📊 Analytics
             </Link>
+            <Link
+              href={`${process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard'}/railway`}
+              className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors flex items-center gap-1"
+            >
+              🚂 Railway
+            </Link>
             <button
               onClick={fetchData}
               disabled={isLoading}

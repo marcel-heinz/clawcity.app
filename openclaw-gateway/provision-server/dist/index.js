@@ -13,6 +13,7 @@ const PORT = parseInt(process.env.PORT || process.env.PROVISION_PORT || '18800',
 const AUTH_TOKEN = process.env.PROVISION_AUTH_TOKEN || '';
 const OPENCLAW_HOME = process.env.OPENCLAW_HOME || '/home/node/.openclaw';
 const OPENCLAW_CONFIG_PATH = path_1.default.join(OPENCLAW_HOME, 'openclaw.json');
+const MODEL_OVERRIDE_PATH = path_1.default.join(OPENCLAW_HOME, 'model.override.json');
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789';
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || '';
 // Shared skill source directory (SKILL.md format, auto-discovered by OpenClaw)
@@ -37,6 +38,8 @@ const AGENT_SETTINGS_FILE = 'agent-settings.json';
 const AUTOPLAY_FEEDBACK_FILE = 'autoplay-feedback.jsonl';
 const AUTOPLAY_FEEDBACK_RETENTION_MS = 24 * 60 * 60 * 1000;
 const AUTOPLAY_FEEDBACK_DEFAULT_LIMIT = 50;
+const OPENROUTER_PREFIX = 'openrouter/';
+const ALLOWED_MODELS = ['z-ai/glm-5', 'minimax/minimax-m2.5'];
 const autoplayInFlight = new Set();
 let autoplayTimer = null;
 let autoplayCursor = 0;
@@ -58,6 +61,52 @@ app.get('/health', (_req, res) => {
     res.json({ status: 'ok', agents: listAgentIds() });
 });
 app.use(authenticate);
+app.get('/api/settings/model', (_req, res) => {
+    try {
+        const config = readGatewayConfig();
+        const model = resolveModelFromConfig(config);
+        res.json({
+            success: true,
+            model,
+            models: ALLOWED_MODELS,
+        });
+    }
+    catch (error) {
+        console.error('[settings] Failed reading model setting:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to read model setting',
+            details: error instanceof Error ? error.message : String(error),
+        });
+    }
+});
+app.put('/api/settings/model', async (req, res) => {
+    const requestedModel = typeof req.body?.model === 'string' ? req.body.model : '';
+    const model = normalizeAllowedModel(requestedModel);
+    if (!model) {
+        res.status(400).json({
+            success: false,
+            error: 'Invalid model. Allowed values: z-ai/glm-5, minimax/minimax-m2.5',
+        });
+        return;
+    }
+    try {
+        await applyGlobalModelSetting(model, { persist: true });
+        res.json({
+            success: true,
+            model,
+            models: ALLOWED_MODELS,
+        });
+    }
+    catch (error) {
+        console.error('[settings] Failed updating model setting:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to update model setting',
+            details: error instanceof Error ? error.message : String(error),
+        });
+    }
+});
 // List all provisioned agents
 app.get('/api/provision', (_req, res) => {
     const agents = listAgentIds();
@@ -597,9 +646,90 @@ function isRetryableStatus(status) {
 function retryDelayMs(attempt) {
     return CHAT_RETRY_DELAY_MS * Math.max(1, attempt);
 }
+function normalizeAllowedModel(raw) {
+    const value = raw.trim().toLowerCase();
+    if (!value)
+        return null;
+    const normalized = value.startsWith(OPENROUTER_PREFIX)
+        ? value.slice(OPENROUTER_PREFIX.length)
+        : value;
+    return ALLOWED_MODELS.includes(normalized)
+        ? normalized
+        : null;
+}
+function toOpenRouterModel(model) {
+    return `${OPENROUTER_PREFIX}${model}`;
+}
+function readGatewayConfig() {
+    return JSON.parse(fs_1.default.readFileSync(OPENCLAW_CONFIG_PATH, 'utf-8'));
+}
+function writeGatewayConfig(config) {
+    fs_1.default.writeFileSync(OPENCLAW_CONFIG_PATH, JSON.stringify(config, null, 2));
+}
+function resolveModelFromConfig(config) {
+    const defaultsPrimary = config.agents?.defaults?.model?.primary;
+    const resolved = normalizeAllowedModel(defaultsPrimary || '');
+    return resolved || ALLOWED_MODELS[0];
+}
+function applyModelToConfig(config, model) {
+    if (!config.agents)
+        config.agents = {};
+    if (!config.agents.defaults)
+        config.agents.defaults = {};
+    if (!config.agents.defaults.model)
+        config.agents.defaults.model = {};
+    if (!config.agents.defaults.heartbeat)
+        config.agents.defaults.heartbeat = {};
+    if (!config.agents.list)
+        config.agents.list = [];
+    const openRouterModel = toOpenRouterModel(model);
+    config.agents.defaults.model.primary = openRouterModel;
+    config.agents.defaults.model.fallbacks = [];
+    config.agents.defaults.heartbeat.model = openRouterModel;
+    config.agents.list = config.agents.list.map((entry) => ({
+        ...entry,
+        model: { primary: openRouterModel },
+    }));
+}
+function readPersistedModelOverride() {
+    if (!fs_1.default.existsSync(MODEL_OVERRIDE_PATH))
+        return null;
+    try {
+        const payload = JSON.parse(fs_1.default.readFileSync(MODEL_OVERRIDE_PATH, 'utf-8'));
+        return normalizeAllowedModel(payload.model || '');
+    }
+    catch (error) {
+        console.warn('[settings] Failed reading model override:', error);
+        return null;
+    }
+}
+function writePersistedModelOverride(model) {
+    const payload = {
+        model,
+        updatedAt: new Date().toISOString(),
+    };
+    fs_1.default.writeFileSync(MODEL_OVERRIDE_PATH, JSON.stringify(payload, null, 2));
+}
+async function applyGlobalModelSetting(model, options) {
+    const persist = options?.persist !== false;
+    const config = readGatewayConfig();
+    applyModelToConfig(config, model);
+    writeGatewayConfig(config);
+    if (persist) {
+        writePersistedModelOverride(model);
+    }
+    await signalConfigReload();
+}
+async function restorePersistedModelSetting() {
+    const persistedModel = readPersistedModelOverride();
+    if (!persistedModel)
+        return null;
+    await applyGlobalModelSetting(persistedModel, { persist: false });
+    return persistedModel;
+}
 function listConfiguredAgentIds() {
     try {
-        const config = JSON.parse(fs_1.default.readFileSync(OPENCLAW_CONFIG_PATH, 'utf-8'));
+        const config = readGatewayConfig();
         return (config.agents?.list || [])
             .map((entry) => entry?.id || '')
             .filter(Boolean);
@@ -878,7 +1008,7 @@ function listAgentIds() {
     });
 }
 async function addAgentToConfig(agentId, agentDir, model) {
-    const config = JSON.parse(fs_1.default.readFileSync(OPENCLAW_CONFIG_PATH, 'utf-8'));
+    const config = readGatewayConfig();
     if (!config.agents)
         config.agents = {};
     if (!config.agents.list)
@@ -894,16 +1024,16 @@ async function addAgentToConfig(agentId, agentDir, model) {
         agentEntry.model = { primary: model };
     }
     config.agents.list.push(agentEntry);
-    fs_1.default.writeFileSync(OPENCLAW_CONFIG_PATH, JSON.stringify(config, null, 2));
+    writeGatewayConfig(config);
     // Signal gateway to reload config
     await signalConfigReload();
 }
 async function removeAgentFromConfig(agentId) {
-    const config = JSON.parse(fs_1.default.readFileSync(OPENCLAW_CONFIG_PATH, 'utf-8'));
+    const config = readGatewayConfig();
     if (config.agents?.list) {
         config.agents.list = config.agents.list.filter((a) => a.id !== agentId);
     }
-    fs_1.default.writeFileSync(OPENCLAW_CONFIG_PATH, JSON.stringify(config, null, 2));
+    writeGatewayConfig(config);
     await signalConfigReload();
 }
 async function signalConfigReload() {
@@ -924,7 +1054,18 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`[provision] Gateway URL: ${GATEWAY_URL}`);
     console.log(`[provision] OpenClaw home: ${OPENCLAW_HOME}`);
     console.log(`[provision] Existing agents: ${listAgentIds().join(', ') || 'none'}`);
-    void startAutoplayLoop();
+    void restorePersistedModelSetting()
+        .then((restoredModel) => {
+        if (restoredModel) {
+            console.log(`[settings] Restored persisted model override: ${restoredModel}`);
+        }
+    })
+        .catch((error) => {
+        console.warn('[settings] Failed restoring persisted model override:', error);
+    })
+        .finally(() => {
+        void startAutoplayLoop();
+    });
 });
 process.on('SIGTERM', stopAutoplayLoop);
 process.on('SIGINT', stopAutoplayLoop);
