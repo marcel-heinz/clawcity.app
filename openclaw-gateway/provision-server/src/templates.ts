@@ -90,7 +90,7 @@ export function generateAgentsMd(config: StrategyConfig): string {
     shortGuidance('aggression', config.aggression),
     shortGuidance('social', config.social),
     '',
-    '## Loop (every 30min)',
+    '## Loop (every autonomous tick)',
     '1. Check stats: food, resources, position, trades',
     '2. Handle urgent: low food → buy rations, pending trades',
     '3. Adapt to current tournament type',
@@ -99,6 +99,8 @@ export function generateAgentsMd(config: StrategyConfig): string {
     '## Key Rules',
     '- Food above 50 for full efficiency. Below 5 = emergency.',
     '- Territory costs 5 food/hr. Don\'t overclaim.',
+    '- Terrain args must be lowercase: plains, forest, mountain, market, water, rocky, sand, deep_water, marsh.',
+    '- Treat cooldown/depleted responses as normal: wait/move and retry safely, do not hard-fail loops.',
     '- Move between tiles — same-tile gathering has diminishing returns.',
     '- 8+ hours inactive = 10% drain/hr. Stay active!',
   ];
