@@ -375,7 +375,9 @@ export default function BuilderPage() {
       const assistantMsg: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: data.success ? data.response : `Error: ${data.error || 'Failed to get response'}`,
+        content: data.success
+          ? data.response
+          : `Error: ${data.error || 'Failed to get response'}${data.details ? `\n${data.details}` : ''}`,
         timestamp: new Date(),
       };
 
@@ -460,8 +462,8 @@ export default function BuilderPage() {
           <div className="bg-[var(--surface-alt)] border-2 border-[var(--border)] p-3 h-[400px] overflow-y-auto mb-3 space-y-3">
             {chatMessages.length === 0 && (
               <div className="text-center text-xs text-[var(--muted)] py-8">
-                <p className="mb-2">Your agent is active and operating autonomously.</p>
-                <p>Send a message to give instructions or ask about current status.</p>
+                <p className="mb-2">Your agent is active in auto-mode.</p>
+                <p>Background ticks keep it playing; chat messages act as live operator overrides.</p>
               </div>
             )}
 
@@ -667,7 +669,8 @@ export default function BuilderPage() {
                 <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">How It Works</h3>
                 <div className="space-y-2 text-xs text-[var(--muted)]">
                   <p>Your agent runs on OpenClaw and the current ClawCity skillset.</p>
-                  <p>It operates autonomously and follows your SOUL.md guidance plus live chat instructions.</p>
+                  <p>Auto-mode runs background decision ticks so the agent keeps playing even without chat.</p>
+                  <p>Chat remains a live control channel: your latest instructions steer subsequent auto-mode turns.</p>
                   <p>Use the <button onClick={() => setActiveTab('chat')} className="text-[var(--accent)] hover:underline">Chat tab</button> to guide behavior and stop the agent when needed.</p>
                 </div>
               </div>

@@ -16,33 +16,64 @@ export async function GET(request: NextRequest) {
   const agent = auth.agent;
   const supabase = createServerClient();
   const url = new URL(request.url);
+  type SpeakEventRow = {
+    id: string;
+    agent_id: string;
+    type: string;
+    data: Record<string, unknown>;
+    location: Record<string, unknown> | null;
+    created_at: string;
+  };
 
   // Query params
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);
   const since = url.searchParams.get('since'); // ISO timestamp for polling
 
   // Fetch speak events where:
-  // - Agent sent the message, OR
+  // - Agent sent the message
   // - Message was whispered TO this agent
-  let query = supabase
+  // NOTE: splitting into two queries is more reliable than `.or(...)` with JSON path filters.
+  let sentQuery = supabase
     .from('events')
     .select('id, agent_id, type, data, location, created_at')
     .eq('type', 'speak')
-    .or(`agent_id.eq.${agent.id},data->target_id.eq.${agent.id}`)
+    .eq('agent_id', agent.id)
     .order('created_at', { ascending: false })
     .limit(limit);
 
-  // Filter by timestamp if provided (for polling new messages)
+  let receivedQuery = supabase
+    .from('events')
+    .select('id, agent_id, type, data, location, created_at')
+    .eq('type', 'speak')
+    .filter('data->>target_id', 'eq', agent.id)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
   if (since) {
-    query = query.gt('created_at', since);
+    sentQuery = sentQuery.gt('created_at', since);
+    receivedQuery = receivedQuery.gt('created_at', since);
   }
 
-  const { data: messages, error } = await query;
+  const [{ data: sentMessages, error: sentError }, { data: receivedMessages, error: receivedError }] = await Promise.all([
+    sentQuery,
+    receivedQuery,
+  ]);
 
-  if (error) {
-    console.error('Error fetching messages:', error);
+  if (sentError || receivedError) {
+    console.error('Error fetching messages:', sentError || receivedError);
     return errorResponse('Failed to fetch messages', 500);
   }
+
+  const deduped = new Map<string, SpeakEventRow>();
+  const merged = [...(sentMessages || []), ...(receivedMessages || [])] as SpeakEventRow[];
+
+  for (const msg of merged) {
+    deduped.set(msg.id, msg);
+  }
+
+  const messages = Array.from(deduped.values())
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, limit);
 
   // Get all unique agent IDs to fetch names
   const agentIds = new Set<string>();
@@ -53,12 +84,14 @@ export async function GET(request: NextRequest) {
   });
 
   // Fetch agent names
-  const { data: agents } = await supabase
-    .from('agents')
-    .select('id, name')
-    .in('id', Array.from(agentIds));
-
-  const nameMap = new Map(agents?.map(a => [a.id, a.name]) || []);
+  const nameMap = new Map<string, string>();
+  if (agentIds.size > 0) {
+    const { data: agents } = await supabase
+      .from('agents')
+      .select('id, name')
+      .in('id', Array.from(agentIds));
+    agents?.forEach((a) => nameMap.set(a.id, a.name));
+  }
 
   // Format messages for response
   const formattedMessages = messages?.map(msg => {

@@ -41,6 +41,8 @@ interface ChatResponse {
     finish_reason: string;
   }>;
   error?: string;
+  details?: string;
+  status?: number;
 }
 
 async function provisionFetch(
@@ -139,8 +141,22 @@ export async function chatWithAgent(
       method: 'POST',
       body: JSON.stringify({ agentId, messages }),
     });
+    const data = (await res.json()) as ChatResponse & {
+      error?: string;
+      details?: string;
+    };
 
-    return (await res.json()) as ChatResponse;
+    if (!res.ok) {
+      return {
+        id: '',
+        choices: [],
+        error: data.error || `Gateway request failed (${res.status})`,
+        details: data.details,
+        status: res.status,
+      };
+    }
+
+    return data;
   } catch (error) {
     return {
       id: '',

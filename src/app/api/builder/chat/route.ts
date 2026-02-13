@@ -47,8 +47,16 @@ export async function POST(request: NextRequest) {
 
     if (response.error) {
       return NextResponse.json(
-        { error: response.error },
-        { status: 502 }
+        {
+          error: response.error,
+          details: response.details || null,
+        },
+        {
+          status:
+            typeof response.status === 'number' && response.status >= 400
+              ? response.status
+              : 502,
+        }
       );
     }
 
