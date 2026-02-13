@@ -130,33 +130,58 @@ export async function GET(request: NextRequest) {
     // summary=true returns terrain type counts instead of full tile array (saves ~90% tokens)
     const summary = url.searchParams.get('summary') === 'true';
 
-    // Standard path for small-radius requests or no sampling
-    let query = supabase.from('tiles').select('x, y, terrain, owner_id, building_type');
-
-    // Filter by area if coordinates provided
-    if (x !== null && y !== null) {
-      const centerX = parseInt(x);
-      const centerY = parseInt(y);
-      query = query
-        .gte('x', centerX - radius)
-        .lte('x', centerX + radius)
-        .gte('y', centerY - radius)
-        .lte('y', centerY + radius);
-    }
-
-    // Increase limit for larger requests
+    // Standard path for small-radius requests or no sampling.
+    // Use pagination to avoid partial responses from backend row limits.
     const maxTiles = (radius * 2 + 1) * (radius * 2 + 1);
-    query = query.limit(Math.min(maxTiles, 50000));
+    const cappedMaxTiles = Math.min(maxTiles, 50000);
+    const PAGE_SIZE = 1000;
+    const allTiles: Array<{ x: number; y: number; terrain: string; owner_id: string | null; building_type: string | null }> = [];
+    let page = 0;
 
-    const { data: tiles, error } = await query;
+    while (allTiles.length < cappedMaxTiles) {
+      const from = page * PAGE_SIZE;
+      if (from >= cappedMaxTiles) break;
+      const to = Math.min(from + PAGE_SIZE - 1, cappedMaxTiles - 1);
 
-    if (error) {
-      console.error('Error fetching tiles:', error);
-      return errorResponse('Failed to fetch tiles', 500);
+      let pageQuery = supabase.from('tiles').select('x, y, terrain, owner_id, building_type');
+
+      // Filter by area if coordinates provided
+      if (x !== null && y !== null) {
+        const centerX = parseInt(x);
+        const centerY = parseInt(y);
+        pageQuery = pageQuery
+          .gte('x', centerX - radius)
+          .lte('x', centerX + radius)
+          .gte('y', centerY - radius)
+          .lte('y', centerY + radius);
+      }
+
+      const { data: pageTiles, error } = await pageQuery
+        .order('x', { ascending: true })
+        .order('y', { ascending: true })
+        .range(from, to);
+
+      if (error) {
+        console.error('Error fetching tiles:', error);
+        return errorResponse('Failed to fetch tiles', 500);
+      }
+
+      if (!pageTiles || pageTiles.length === 0) break;
+      allTiles.push(...pageTiles);
+
+      // Stop early when final page is shorter than requested window.
+      if (pageTiles.length < (to - from + 1)) break;
+      page++;
+
+      // Safety limit to prevent pathological loops.
+      if (page > 1000) {
+        console.warn('Hit pagination safety limit for standard tiles');
+        break;
+      }
     }
 
-    // Apply client-requested sampling (for small-radius requests)
-    let resultTiles = tiles || [];
+    // Apply client-requested sampling (for standard path requests)
+    let resultTiles = allTiles;
     if (sample > 1) {
       resultTiles = resultTiles.filter(t => t.x % sample === 0 && t.y % sample === 0);
     }
