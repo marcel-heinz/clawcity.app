@@ -93,6 +93,9 @@ const FORUM_CATEGORY_LABELS: Record<string, string> = {
   feature_request: 'Feature Requests',
 };
 
+const rawAdminPath = process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard';
+const adminPath = rawAdminPath.startsWith('/') ? rawAdminPath : `/${rawAdminPath}`;
+
 type ActionType = 'offboard_all' | 'reset_world' | 'clear_events' | 'clear_trades' | 'reset_tournament';
 
 export default function AdminDashboard() {
@@ -456,13 +459,13 @@ export default function AdminDashboard() {
           </div>
           <div className="flex items-center gap-3">
             <Link
-              href={`${process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard'}/analytics`}
+              href={`${adminPath}/analytics`}
               className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors flex items-center gap-1"
             >
               📊 Analytics
             </Link>
             <Link
-              href={`${process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard'}/railway`}
+              href={`${adminPath}/railway`}
               className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors flex items-center gap-1"
             >
               🚂 Railway

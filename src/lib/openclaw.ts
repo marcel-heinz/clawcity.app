@@ -51,8 +51,43 @@ export interface AutoModeFeedbackEntry {
   agent_id: string;
   started_at: string;
   finished_at: string;
-  status: 'success' | 'failed' | 'busy' | 'skipped_disabled';
+  status: 'success' | 'failed' | 'busy' | 'skipped_disabled' | 'uncertain_timeout_deferred';
   summary: string;
+  details?: string;
+  error_code?: string;
+}
+
+export interface AutoModeAgentStatus {
+  agent_id: string;
+  enabled: boolean;
+  in_flight: boolean;
+  deferred_once?: boolean;
+  next_tick_at: string | null;
+  last_tick_started_at: string | null;
+  last_tick_finished_at: string | null;
+  last_tick_result: string | null;
+  last_tick_error_code: string | null;
+  last_tick: AutoModeFeedbackEntry | null;
+}
+
+export interface AutoModeProvisionStatus {
+  success: boolean;
+  enabled: boolean;
+  interval_ms: number;
+  timeout_ms: number;
+  max_parallel: number;
+  max_agents_per_tick: number;
+  pass?: number;
+  next_tick_at?: string | null;
+  last_tick_started_at?: string | null;
+  last_tick_finished_at?: string | null;
+  last_tick_result?: string | null;
+  last_tick_error_code?: string | null;
+  prompt_updated_at?: string | null;
+  running_agents: string[];
+  configured_agents: string[];
+  agents: AutoModeAgentStatus[];
+  error?: string;
   details?: string;
 }
 
@@ -290,6 +325,41 @@ export async function getAgentAutoplayFeedback(
       success: false,
       entries: [],
       error: 'Failed to fetch autoplay feedback',
+      details: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function getAutoplayStatus(): Promise<{
+  success: boolean;
+  status?: AutoModeProvisionStatus;
+  error?: string;
+  details?: string;
+}> {
+  try {
+    const res = await provisionFetch('/api/autoplay/status');
+    const data = await parseJsonSafe<AutoModeProvisionStatus>(res);
+    if (!data) {
+      return {
+        success: false,
+        error: `Status request failed (${res.status})`,
+      };
+    }
+    if (!res.ok || !data.success) {
+      return {
+        success: false,
+        error: data.error || `Status request failed (${res.status})`,
+        details: data.details,
+      };
+    }
+    return {
+      success: true,
+      status: data,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Failed to fetch autoplay status',
       details: error instanceof Error ? error.message : String(error),
     };
   }

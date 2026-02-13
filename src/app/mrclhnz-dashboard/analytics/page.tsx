@@ -67,6 +67,9 @@ const RESOURCE_COLORS = {
   stone: '#9CA3AF',
 };
 
+const rawAdminPath = process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard';
+const adminPath = rawAdminPath.startsWith('/') ? rawAdminPath : `/${rawAdminPath}`;
+
 export default function AnalyticsDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [password, setPassword] = useState('');
@@ -276,13 +279,13 @@ export default function AnalyticsDashboard() {
           </div>
           <div className="flex items-center gap-3">
             <Link
-              href={process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard'}
+              href={adminPath}
               className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors"
             >
               ← Admin Dashboard
             </Link>
             <Link
-              href={`${process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard'}/railway`}
+              href={`${adminPath}/railway`}
               className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors"
             >
               🚂 Railway Settings

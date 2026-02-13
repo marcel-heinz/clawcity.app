@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminConfigured, verifyAdminSession } from '@/lib/admin-auth';
 import {
+  checkGatewayHealth,
   getGatewayModelSettings,
   isOpenClawConfigured,
   OpenRouterGatewayModel,
@@ -11,6 +12,34 @@ const ALLOWED_MODELS: OpenRouterGatewayModel[] = [
   'z-ai/glm-5',
   'minimax/minimax-m2.5',
 ];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForModelActivation(
+  targetModel: OpenRouterGatewayModel,
+  attempts = 6,
+  delayMs = 300
+): Promise<{
+  activeModel: OpenRouterGatewayModel | null;
+  isActive: boolean;
+}> {
+  for (let i = 0; i < attempts; i++) {
+    const current = await getGatewayModelSettings();
+    if (current.success && current.model) {
+      if (current.model === targetModel) {
+        return { activeModel: current.model, isActive: true };
+      }
+      if (i === attempts - 1) {
+        return { activeModel: current.model, isActive: false };
+      }
+    }
+    await sleep(delayMs);
+  }
+
+  return { activeModel: null, isActive: false };
+}
 
 export async function GET(request: NextRequest) {
   if (!isAdminConfigured()) {
@@ -42,14 +71,23 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const health = await checkGatewayHealth();
+  const resolvedModel = result.model || ALLOWED_MODELS[0];
+
   return NextResponse.json({
     success: true,
     data: {
-      model: result.model || ALLOWED_MODELS[0],
+      model: resolvedModel,
       models:
         result.models && result.models.length > 0
           ? result.models
           : ALLOWED_MODELS,
+      status: {
+        gateway_healthy: health.healthy,
+        active_model: resolvedModel,
+        is_active: health.healthy,
+        checked_at: new Date().toISOString(),
+      },
     },
   });
 }
@@ -88,7 +126,8 @@ export async function PUT(request: NextRequest) {
     );
   }
 
-  const result = await updateGatewayModelSettings(rawModel as OpenRouterGatewayModel);
+  const targetModel = rawModel as OpenRouterGatewayModel;
+  const result = await updateGatewayModelSettings(targetModel);
   if (!result.success) {
     return NextResponse.json(
       { success: false, error: result.error || 'Failed to update gateway model settings' },
@@ -96,14 +135,23 @@ export async function PUT(request: NextRequest) {
     );
   }
 
+  const activation = await waitForModelActivation(targetModel);
+  const health = await checkGatewayHealth();
+
   return NextResponse.json({
     success: true,
     data: {
-      model: result.model || rawModel,
+      model: result.model || targetModel,
       models:
         result.models && result.models.length > 0
           ? result.models
           : ALLOWED_MODELS,
+      status: {
+        gateway_healthy: health.healthy,
+        active_model: activation.activeModel,
+        is_active: activation.isActive && health.healthy,
+        checked_at: new Date().toISOString(),
+      },
     },
   });
 }

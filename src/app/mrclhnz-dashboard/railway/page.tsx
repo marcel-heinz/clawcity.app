@@ -5,9 +5,18 @@ import Link from 'next/link';
 
 type AllowedModel = 'z-ai/glm-5' | 'minimax/minimax-m2.5';
 
+const rawAdminPath = process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard';
+const adminPath = rawAdminPath.startsWith('/') ? rawAdminPath : `/${rawAdminPath}`;
+
 interface RailwaySettingsData {
   model: AllowedModel;
   models: AllowedModel[];
+  status?: {
+    gateway_healthy: boolean;
+    active_model: AllowedModel | null;
+    is_active: boolean;
+    checked_at: string;
+  };
 }
 
 export default function RailwaySettingsPage() {
@@ -22,6 +31,18 @@ export default function RailwaySettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  const status = settings?.status;
+  const activeModel = status?.active_model || settings?.model || null;
+  const isGatewayHealthy = status?.gateway_healthy ?? false;
+  const isRailwayActive = status?.is_active ?? false;
+  const statusLabel = !status
+    ? 'Status unknown'
+    : !isGatewayHealthy
+      ? 'Gateway unreachable'
+      : isRailwayActive
+        ? 'Active on Railway'
+        : 'Pending propagation';
 
   const fetchSettings = useCallback(async () => {
     setIsLoading(true);
@@ -124,7 +145,13 @@ export default function RailwaySettingsPage() {
       const nextSettings = data.data as RailwaySettingsData;
       setSettings(nextSettings);
       setSelectedModel(nextSettings.model);
-      setMessage(`Global model updated to ${nextSettings.model}.`);
+      if (nextSettings.status?.is_active) {
+        setMessage(`Global model updated and active on Railway: ${nextSettings.model}.`);
+      } else {
+        setMessage(
+          `Model saved as ${nextSettings.model}. Railway has not confirmed activation yet. Refresh to verify.`
+        );
+      }
     } catch {
       setError('Connection error');
     } finally {
@@ -205,13 +232,13 @@ export default function RailwaySettingsPage() {
           </div>
           <div className="flex items-center gap-3">
             <Link
-              href={process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard'}
+              href={adminPath}
               className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors"
             >
               ← Admin Dashboard
             </Link>
             <Link
-              href={`${process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard'}/analytics`}
+              href={`${adminPath}/analytics`}
               className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors"
             >
               📊 Analytics
@@ -249,6 +276,29 @@ export default function RailwaySettingsPage() {
           <p className="text-sm text-[var(--muted)] mb-4">
             This updates the model globally in OpenClaw Gateway and Builder SOUL generation.
           </p>
+
+          <div className="mb-4 p-3 bg-[var(--background)] border border-[var(--border)] rounded">
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-block w-2.5 h-2.5 rounded-full ${
+                  !status
+                    ? 'bg-[var(--muted)]'
+                    : !isGatewayHealthy
+                      ? 'bg-red-400'
+                      : isRailwayActive
+                        ? 'bg-green-400 animate-pulse'
+                        : 'bg-yellow-400'
+                }`}
+              />
+              <span className="text-sm font-medium text-[var(--foreground)]">{statusLabel}</span>
+            </div>
+            <div className="text-xs text-[var(--muted)] mt-2">
+              Active model on Railway: {activeModel || '-'}
+            </div>
+            <div className="text-xs text-[var(--muted)] mt-1">
+              Last check: {status?.checked_at ? new Date(status.checked_at).toLocaleString() : '-'}
+            </div>
+          </div>
 
           <div className="space-y-4">
             <div>

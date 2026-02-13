@@ -40,7 +40,7 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-type AutoModeStatus = 'success' | 'failed' | 'busy' | 'skipped_disabled';
+type AutoModeStatus = 'success' | 'failed' | 'busy' | 'skipped_disabled' | 'uncertain_timeout_deferred';
 
 interface AutoModeFeedbackEntry {
   id: string;
@@ -50,6 +50,22 @@ interface AutoModeFeedbackEntry {
   status: AutoModeStatus;
   summary: string;
   details?: string;
+  error_code?: string;
+}
+
+interface AutoModeSchedulerStatus {
+  enabled: boolean;
+  global_enabled: boolean;
+  interval_ms: number;
+  timeout_ms: number;
+  pass: number | null;
+  next_tick_at: string | null;
+  in_flight: boolean;
+  deferred_once: boolean;
+  last_tick_started_at: string | null;
+  last_tick_finished_at: string | null;
+  last_tick_result: string | null;
+  last_tick_error_code: string | null;
 }
 
 function formatCycleEnd(value: string | null | undefined): string {
@@ -67,8 +83,32 @@ function formatFeedbackTime(value: string): string {
 
 function statusClass(status: AutoModeStatus): string {
   if (status === 'success') return 'text-[var(--accent)]';
-  if (status === 'failed') return 'text-[var(--red)]';
+  if (status === 'failed' || status === 'uncertain_timeout_deferred') return 'text-[var(--red)]';
   return 'text-[var(--muted)]';
+}
+
+function formatStatusLabel(status: AutoModeStatus): string {
+  return status.replace(/_/g, ' ');
+}
+
+function formatEta(targetIso: string | null): string {
+  if (!targetIso) return 'waiting for scheduler';
+  const targetMs = Date.parse(targetIso);
+  if (!Number.isFinite(targetMs)) return 'waiting for scheduler';
+  const delta = Math.max(0, targetMs - Date.now());
+  const minutes = Math.floor(delta / 60_000);
+  const seconds = Math.floor((delta % 60_000) / 1000);
+  return `next tick in ${minutes}m ${seconds}s`;
+}
+
+function normalizeFailureReason(entry: AutoModeFeedbackEntry): string {
+  const code = (entry.error_code || entry.status || '').toLowerCase();
+  if (code === 'unknown_command') return 'Unknown command requested by model; prompt now forces valid CLI forms.';
+  if (code === 'invalid_usage') return 'Invalid CLI usage shape; only exact command syntax is allowed.';
+  if (code === 'gateway_timeout') return 'Gateway timeout while waiting for model response.';
+  if (code === 'uncertain_timeout_deferred') return 'Gateway timeout; result may be uncertain, next interval deferred once.';
+  if (code === 'busy') return 'Agent already had an in-flight tick.';
+  return entry.details || 'Execution failed.';
 }
 
 export default function BuilderPage() {
@@ -97,6 +137,8 @@ export default function BuilderPage() {
   const [autoModeSaving, setAutoModeSaving] = useState(false);
   const [feedbackEntries, setFeedbackEntries] = useState<AutoModeFeedbackEntry[]>([]);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [schedulerStatus, setSchedulerStatus] = useState<AutoModeSchedulerStatus | null>(null);
+  const [schedulerLoading, setSchedulerLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const isFreeTier = profile?.tier === 'free';
@@ -184,6 +226,27 @@ export default function BuilderPage() {
     }
   }, [config.id]);
 
+  const fetchAutoModeStatus = useCallback(async () => {
+    if (!config.id) {
+      setSchedulerStatus(null);
+      return;
+    }
+
+    setSchedulerLoading(true);
+    try {
+      const query = new URLSearchParams({ config_id: config.id });
+      const res = await fetch(`/api/builder/auto-mode/status?${query.toString()}`);
+      const data = await res.json();
+      if (res.ok && data.success && data.scheduler) {
+        setSchedulerStatus(data.scheduler as AutoModeSchedulerStatus);
+      }
+    } catch {
+      // ignore status fetch failures; chat control remains available
+    } finally {
+      setSchedulerLoading(false);
+    }
+  }, [config.id]);
+
   useEffect(() => {
     if (!config.id) {
       setFeedbackEntries([]);
@@ -191,6 +254,7 @@ export default function BuilderPage() {
     }
 
     void fetchAutoModeFeedback();
+    void fetchAutoModeStatus();
     const shouldPoll = config.is_active || activeTab === 'chat';
     if (!shouldPoll) {
       return;
@@ -198,10 +262,11 @@ export default function BuilderPage() {
 
     const interval = setInterval(() => {
       void fetchAutoModeFeedback();
+      void fetchAutoModeStatus();
     }, AUTO_MODE_FEEDBACK_POLL_MS);
 
     return () => clearInterval(interval);
-  }, [activeTab, config.id, config.is_active, fetchAutoModeFeedback]);
+  }, [activeTab, config.id, config.is_active, fetchAutoModeFeedback, fetchAutoModeStatus]);
 
   const handleAutoModeToggle = async (enabled: boolean) => {
     const previousEnabled = config.auto_mode_enabled !== false;
@@ -240,6 +305,7 @@ export default function BuilderPage() {
         });
       }
       void fetchAutoModeFeedback();
+      void fetchAutoModeStatus();
     } catch {
       setConfig((prev) => ({ ...prev, auto_mode_enabled: previousEnabled }));
       setMessage({ type: 'error', text: 'Failed to update auto-mode setting.' });
@@ -682,25 +748,40 @@ export default function BuilderPage() {
               </span>
             </div>
 
-            {feedbackLoading && feedbackEntries.length === 0 ? (
+            {(feedbackLoading || schedulerLoading) && feedbackEntries.length === 0 ? (
               <p className="text-xs text-[var(--muted)]">Loading activity...</p>
             ) : feedbackEntries.length === 0 ? (
-              <p className="text-xs text-[var(--muted)]">No auto-mode activity in the last 24 hours yet.</p>
+              <div className="text-xs text-[var(--muted)] space-y-1">
+                <p>
+                  {config.auto_mode_enabled !== false
+                    ? `Auto-mode active, ${formatEta(schedulerStatus?.next_tick_at || null)}.`
+                    : 'Auto-mode is currently off for this agent.'}
+                </p>
+                {schedulerStatus?.last_tick_finished_at && (
+                  <p>
+                    Last tick: {schedulerStatus.last_tick_result || 'unknown'} at{' '}
+                    {formatFeedbackTime(schedulerStatus.last_tick_finished_at)}.
+                  </p>
+                )}
+                {schedulerStatus?.last_tick_error_code && (
+                  <p>Last failure reason: {schedulerStatus.last_tick_error_code}</p>
+                )}
+              </div>
             ) : (
               <div className="space-y-2">
                 {feedbackEntries.slice(0, 8).map((entry) => (
                   <div key={entry.id} className="border border-[var(--border)] bg-[var(--surface)] p-2">
                     <div className="flex items-center justify-between">
                       <span className={`text-[10px] font-semibold uppercase ${statusClass(entry.status)}`}>
-                        {entry.status.replace('_', ' ')}
+                        {formatStatusLabel(entry.status)}
                       </span>
                       <span className="text-[10px] text-[var(--muted)]">
                         {formatFeedbackTime(entry.finished_at)}
                       </span>
                     </div>
                     <p className="text-xs text-[var(--foreground)] mt-1">{entry.summary}</p>
-                    {entry.details && (
-                      <p className="text-[10px] text-[var(--muted)] mt-1">{entry.details}</p>
+                    {(entry.details || entry.error_code) && (
+                      <p className="text-[10px] text-[var(--muted)] mt-1">{normalizeFailureReason(entry)}</p>
                     )}
                   </div>
                 ))}
@@ -827,6 +908,16 @@ export default function BuilderPage() {
               {feedbackEntries[0] && (
                 <div className="mt-2 text-xs text-[var(--muted)]">
                   Last tick: <span className={statusClass(feedbackEntries[0].status)}>{feedbackEntries[0].summary}</span>
+                </div>
+              )}
+              {schedulerStatus?.next_tick_at && config.auto_mode_enabled !== false && (
+                <div className="mt-1 text-xs text-[var(--muted)]">
+                  Scheduler: {formatEta(schedulerStatus.next_tick_at)}
+                </div>
+              )}
+              {schedulerStatus?.last_tick_error_code && (
+                <div className="mt-1 text-xs text-[var(--red)]">
+                  Reason: {schedulerStatus.last_tick_error_code}
                 </div>
               )}
             </div>

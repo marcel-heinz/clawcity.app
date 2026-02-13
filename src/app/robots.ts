@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
 
-const adminPath = process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard';
+const rawAdminPath = process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard';
+const adminPath = rawAdminPath.startsWith('/') ? rawAdminPath : `/${rawAdminPath}`;
 
 export default function robots(): MetadataRoute.Robots {
   return {

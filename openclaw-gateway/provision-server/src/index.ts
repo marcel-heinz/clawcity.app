@@ -1,4 +1,5 @@
 import express from 'express';
+import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { generateSoulMd, generateAgentsMd } from './templates';
@@ -23,17 +24,12 @@ const CHAT_RETRY_DELAY_MS = intEnv('OPENCLAW_CHAT_RETRY_DELAY_MS', 1_500);
 
 const AUTOPLAY_ENABLED = boolEnv('OPENCLAW_AUTOPLAY_ENABLED', true);
 const AUTOPLAY_INTERVAL_MS = intEnv('OPENCLAW_AUTOPLAY_INTERVAL_MS', 300_000);
-const AUTOPLAY_TIMEOUT_MS = intEnv('OPENCLAW_AUTOPLAY_TIMEOUT_MS', 180_000);
+const AUTOPLAY_TIMEOUT_MS = intEnv('OPENCLAW_AUTOPLAY_TIMEOUT_MS', 240_000);
 const AUTOPLAY_MAX_PARALLEL = intEnv('OPENCLAW_AUTOPLAY_MAX_PARALLEL', 2);
 const AUTOPLAY_MAX_AGENTS_PER_TICK = intEnv('OPENCLAW_AUTOPLAY_MAX_AGENTS_PER_TICK', 20);
-const AUTOPLAY_PROMPT = (process.env.OPENCLAW_AUTOPLAY_PROMPT || '').trim() || [
-  'AUTO-MODE TICK:',
-  '- Execute 1 focused game progress turn using ClawCity tools.',
-  '- Priorities: keep food >= 50, recover if low food, move off depleted tiles, gather efficiently.',
-  '- Use lowercase terrain names only (plains, forest, mountain, market, water, rocky, sand, deep_water, marsh).',
-  '- Respect gather cooldowns: if cooldown/depleted errors occur, wait and retry safely instead of failing.',
-  '- Keep execution concise and robust; avoid unnecessary narration.',
-].join('\n');
+const AUTOPLAY_PROMPT_OVERRIDE = (process.env.OPENCLAW_AUTOPLAY_PROMPT || '').trim();
+const AUTOPLAY_SNAPSHOT_REFRESH_MS = 15 * 60 * 1000;
+const AUTOPLAY_WARM_START_DELAY_MS = 15_000;
 
 const AGENT_SETTINGS_FILE = 'agent-settings.json';
 const AUTOPLAY_FEEDBACK_FILE = 'autoplay-feedback.jsonl';
@@ -46,7 +42,25 @@ type AllowedModel = (typeof ALLOWED_MODELS)[number];
 
 const autoplayInFlight = new Set<string>();
 let autoplayTimer: NodeJS.Timeout | null = null;
+let autoplayWarmTimer: NodeJS.Timeout | null = null;
+let autoplaySnapshotTimer: NodeJS.Timeout | null = null;
 let autoplayCursor = 0;
+let autoplayPassCounter = 0;
+let autoplayNextTickAtMs: number | null = null;
+let autoplayLastTickStartedAt: string | null = null;
+let autoplayLastTickFinishedAt: string | null = null;
+let autoplayLastTickResult: string | null = null;
+let autoplayLastTickErrorCode: string | null = null;
+let autoplayCommandSnapshot = 'Unavailable';
+let autoplayPrompt = '';
+let autoplayPromptUpdatedAt: string | null = null;
+const autoplayDeferredUntilPass = new Map<string, number>();
+const autoplayAgentState = new Map<string, {
+  last_tick_started_at: string | null;
+  last_tick_finished_at: string | null;
+  last_tick_result: string | null;
+  last_tick_error_code: string | null;
+}>();
 
 interface GatewayChatMessage {
   role: string;
@@ -81,7 +95,12 @@ interface AgentSettings {
   updatedAt?: string;
 }
 
-type AutoplayFeedbackStatus = 'success' | 'failed' | 'busy' | 'skipped_disabled';
+type AutoplayFeedbackStatus =
+  | 'success'
+  | 'failed'
+  | 'busy'
+  | 'skipped_disabled'
+  | 'uncertain_timeout_deferred';
 
 interface AutoplayFeedbackEntry {
   id: string;
@@ -91,6 +110,7 @@ interface AutoplayFeedbackEntry {
   status: AutoplayFeedbackStatus;
   summary: string;
   details?: string;
+  error_code?: string;
 }
 
 interface RunAutoplayResult {
@@ -98,6 +118,17 @@ interface RunAutoplayResult {
   status: AutoplayFeedbackStatus;
   summary: string;
   details: string;
+  errorCode?: string;
+}
+
+interface RunAutoplayTickResult {
+  attempted: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  agents: string[];
+  reason_counts: Record<string, number>;
+  pass: number;
 }
 
 interface RunAutoplayOptions {
@@ -529,12 +560,24 @@ app.post('/api/chat/stream', async (req, res) => {
 
 app.get('/api/autoplay/status', (_req, res) => {
   const configuredAgents = listConfiguredAgentIds();
-  const agentStatus = configuredAgents.map((agentId) => ({
-    agent_id: agentId,
-    enabled: getAgentAutoplaySetting(agentId),
-    in_flight: autoplayInFlight.has(agentId),
-    last_tick: readAutoplayFeedback(agentId, 1)[0] || null,
-  }));
+  const agentStatus = configuredAgents.map((agentId) => {
+    const lastTick = readAutoplayFeedback(agentId, 1)[0] || null;
+    const runtime = getAutoplayAgentState(agentId);
+    const deferUntilPass = autoplayDeferredUntilPass.get(agentId);
+    const deferredOnce = Number.isFinite(deferUntilPass) && (deferUntilPass as number) > autoplayPassCounter;
+    return {
+      agent_id: agentId,
+      enabled: getAgentAutoplaySetting(agentId),
+      in_flight: autoplayInFlight.has(agentId),
+      deferred_once: deferredOnce,
+      next_tick_at: computeNextTickAtIso(agentId),
+      last_tick: lastTick,
+      last_tick_started_at: runtime.last_tick_started_at || lastTick?.started_at || null,
+      last_tick_finished_at: runtime.last_tick_finished_at || lastTick?.finished_at || null,
+      last_tick_result: runtime.last_tick_result || lastTick?.status || null,
+      last_tick_error_code: runtime.last_tick_error_code || lastTick?.error_code || null,
+    };
+  });
 
   res.json({
     success: true,
@@ -545,6 +588,13 @@ app.get('/api/autoplay/status', (_req, res) => {
     max_agents_per_tick: AUTOPLAY_MAX_AGENTS_PER_TICK,
     running_agents: Array.from(autoplayInFlight),
     configured_agents: configuredAgents,
+    pass: autoplayPassCounter,
+    next_tick_at: autoplayNextTickAtMs ? new Date(autoplayNextTickAtMs).toISOString() : null,
+    last_tick_started_at: autoplayLastTickStartedAt,
+    last_tick_finished_at: autoplayLastTickFinishedAt,
+    last_tick_result: autoplayLastTickResult,
+    last_tick_error_code: autoplayLastTickErrorCode,
+    prompt_updated_at: autoplayPromptUpdatedAt,
     agents: agentStatus,
   });
 });
@@ -595,7 +645,7 @@ app.post('/api/autoplay/tick', async (req, res) => {
       return;
     }
 
-    const result = await runAutoplayTick();
+    const result = await runAutoplayTick('manual');
     res.json({ success: true, ...result });
   } catch (error) {
     res.status(500).json({
@@ -631,6 +681,152 @@ function truncate(value: string, max = 220): string {
   const normalized = value.trim().replace(/\s+/g, ' ');
   if (normalized.length <= max) return normalized;
   return `${normalized.slice(0, max - 1)}…`;
+}
+
+function isGatewayTimeoutMessage(message: string): boolean {
+  const lowered = message.toLowerCase();
+  return lowered.includes('timeout') || lowered.includes('und_err_headers_timeout');
+}
+
+function normalizeAutoplayErrorCode(details: string, statusCode?: number): string {
+  const lowered = details.toLowerCase();
+  if (isGatewayTimeoutMessage(details) || statusCode === 408 || statusCode === 504) {
+    return 'gateway_timeout';
+  }
+  if (lowered.includes("unknown command '") || lowered.includes('unknown command "')) {
+    return 'unknown_command';
+  }
+  if (
+    lowered.includes('usage: clawcity') ||
+    lowered.includes('display help for command') ||
+    lowered.includes('missing required argument') ||
+    lowered.includes('unknown option')
+  ) {
+    return 'invalid_usage';
+  }
+  if (statusCode && statusCode >= 500) {
+    return 'gateway_error';
+  }
+  return 'execution_error';
+}
+
+function getAutoplayAgentState(agentId: string): {
+  last_tick_started_at: string | null;
+  last_tick_finished_at: string | null;
+  last_tick_result: string | null;
+  last_tick_error_code: string | null;
+} {
+  const existing = autoplayAgentState.get(agentId);
+  if (existing) return existing;
+  const initial = {
+    last_tick_started_at: null,
+    last_tick_finished_at: null,
+    last_tick_result: null,
+    last_tick_error_code: null,
+  };
+  autoplayAgentState.set(agentId, initial);
+  return initial;
+}
+
+function setAutoplayAgentState(
+  agentId: string,
+  patch: Partial<{
+    last_tick_started_at: string | null;
+    last_tick_finished_at: string | null;
+    last_tick_result: string | null;
+    last_tick_error_code: string | null;
+  }>
+): void {
+  autoplayAgentState.set(agentId, {
+    ...getAutoplayAgentState(agentId),
+    ...patch,
+  });
+}
+
+function computeNextTickAtIso(agentId: string): string | null {
+  if (!AUTOPLAY_ENABLED || !getAgentAutoplaySetting(agentId) || !autoplayNextTickAtMs) return null;
+  const deferUntil = autoplayDeferredUntilPass.get(agentId);
+  const deferred = Number.isFinite(deferUntil) && (deferUntil as number) > autoplayPassCounter;
+  const nextTickMs = autoplayNextTickAtMs + (deferred ? AUTOPLAY_INTERVAL_MS : 0);
+  return new Date(nextTickMs).toISOString();
+}
+
+function addReasonCount(reasonCounts: Record<string, number>, reason: string): void {
+  reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+}
+
+function captureCliHelp(command: string, args: string[], timeoutMs = 12_000): string {
+  const result = spawnSync(command, args, {
+    encoding: 'utf-8',
+    timeout: timeoutMs,
+  });
+  const output = `${result.stdout || ''}\n${result.stderr || ''}`.trim();
+  if (!output) return '(no output)';
+  return output
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0)
+    .slice(0, 60)
+    .join('\n');
+}
+
+function buildAutoplayCommandSnapshot(): string {
+  const sections = [
+    { title: 'clawcity --help', args: ['--help'] },
+    { title: 'clawcity move --help', args: ['move', '--help'] },
+    { title: 'clawcity stats --help', args: ['stats', '--help'] },
+    { title: 'clawcity status --help', args: ['status', '--help'] },
+    { title: 'clawcity gather --help', args: ['gather', '--help'] },
+    { title: 'clawcity trade --help', args: ['trade', '--help'] },
+  ];
+
+  return sections
+    .map(({ title, args }) => `## ${title}\n${captureCliHelp('clawcity', args)}`)
+    .join('\n\n');
+}
+
+function buildAutoplayPrompt(snapshot: string): string {
+  const base = [
+    'AUTO-MODE TICK (CLI-ONLY):',
+    '- Execute exactly one concise progress turn with a hard budget of 3-4 CLI commands.',
+    '- Priorities: keep food >= 50, recover low food, move off depleted tiles, gather efficiently.',
+    '- Use only valid CLI command forms from snapshot.',
+    '- Allowed movement command: `clawcity move <terrain|x,y>`.',
+    '- Allowed stats commands: `clawcity stats`, `clawcity status`, `clawcity summary`.',
+    '- Allowed trade commands: `clawcity trade create ...`, `clawcity trade accept ...`, `clawcity trade reject ...`.',
+    '- Terrain values must be lowercase: plains, forest, mountain, market, water, rocky, sand, deep_water, marsh.',
+    '- One retry branch max for cooldown/depleted outcomes; do not loop indefinitely.',
+    '- Keep response concise with actions + outcome.',
+    '',
+    'FORBIDDEN COMMAND EXAMPLES:',
+    '- `clawcity move-to ...` (invalid CLI shape; use `clawcity move ...`).',
+    '- `clawcity look` (invalid; use `clawcity stats|status|summary`).',
+    '- `clawcity trade` with no subcommand (invalid; use create/accept/reject).',
+    '',
+    'CLI SNAPSHOT (authoritative):',
+    snapshot,
+  ];
+
+  if (AUTOPLAY_PROMPT_OVERRIDE) {
+    base.push('', 'OPERATOR OVERRIDE:', AUTOPLAY_PROMPT_OVERRIDE);
+  }
+
+  return base.join('\n');
+}
+
+function refreshAutoplayPrompt(reason: string): void {
+  try {
+    autoplayCommandSnapshot = buildAutoplayCommandSnapshot();
+    autoplayPrompt = buildAutoplayPrompt(autoplayCommandSnapshot);
+    autoplayPromptUpdatedAt = new Date().toISOString();
+    console.log(`[autoplay] Command snapshot refreshed (${reason})`);
+  } catch (error) {
+    console.warn('[autoplay] Failed to refresh command snapshot:', error);
+    if (!autoplayPrompt) {
+      autoplayPrompt = buildAutoplayPrompt('Snapshot unavailable due to CLI help error.');
+      autoplayPromptUpdatedAt = new Date().toISOString();
+    }
+  }
 }
 
 function getAgentSettingsPath(agentId: string): string {
@@ -677,6 +873,7 @@ function makeFeedbackEntry(input: {
   status: AutoplayFeedbackStatus;
   summary: string;
   details?: string;
+  errorCode?: string;
 }): AutoplayFeedbackEntry {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
@@ -686,6 +883,7 @@ function makeFeedbackEntry(input: {
     status: input.status,
     summary: truncate(input.summary, 240),
     details: input.details ? truncate(input.details, 400) : undefined,
+    error_code: input.errorCode ? truncate(input.errorCode, 80) : undefined,
   };
 }
 
@@ -1018,6 +1216,7 @@ function recordAutoplayFeedback(params: {
   status: AutoplayFeedbackStatus;
   summary: string;
   details?: string;
+  errorCode?: string;
 }): void {
   const finishedAt = new Date();
   const entry = makeFeedbackEntry({
@@ -1027,12 +1226,25 @@ function recordAutoplayFeedback(params: {
     status: params.status,
     summary: params.summary,
     details: params.details,
+    errorCode: params.errorCode,
   });
   appendAutoplayFeedback(params.agentId, entry);
+  setAutoplayAgentState(params.agentId, {
+    last_tick_started_at: params.startedAt.toISOString(),
+    last_tick_finished_at: finishedAt.toISOString(),
+    last_tick_result: params.status,
+    last_tick_error_code: params.errorCode || null,
+  });
 }
 
 async function runAutoplayForAgent(agentId: string, options: RunAutoplayOptions = {}): Promise<RunAutoplayResult> {
   const startedAt = new Date();
+  if (!autoplayPrompt) {
+    refreshAutoplayPrompt('lazy-init');
+  }
+  setAutoplayAgentState(agentId, {
+    last_tick_started_at: startedAt.toISOString(),
+  });
 
   if (!getAgentAutoplaySetting(agentId)) {
     const result: RunAutoplayResult = {
@@ -1040,6 +1252,7 @@ async function runAutoplayForAgent(agentId: string, options: RunAutoplayOptions 
       status: 'skipped_disabled',
       summary: 'Auto-mode is disabled for this agent.',
       details: 'disabled',
+      errorCode: 'disabled',
     };
 
     if (options.recordDisabledFeedback || options.manual) {
@@ -1049,6 +1262,7 @@ async function runAutoplayForAgent(agentId: string, options: RunAutoplayOptions 
         status: result.status,
         summary: result.summary,
         details: result.details,
+        errorCode: result.errorCode,
       });
     }
 
@@ -1061,6 +1275,7 @@ async function runAutoplayForAgent(agentId: string, options: RunAutoplayOptions 
       status: 'busy',
       summary: 'Tick skipped because the agent is already processing another tick.',
       details: 'busy',
+      errorCode: 'busy',
     };
 
     if (options.manual) {
@@ -1070,6 +1285,7 @@ async function runAutoplayForAgent(agentId: string, options: RunAutoplayOptions 
         status: result.status,
         summary: result.summary,
         details: result.details,
+        errorCode: result.errorCode,
       });
     }
 
@@ -1080,14 +1296,17 @@ async function runAutoplayForAgent(agentId: string, options: RunAutoplayOptions 
   try {
     const response = await proxyGatewayChat({
       agentId,
-      messages: [{ role: 'user', content: AUTOPLAY_PROMPT }],
+      messages: [{ role: 'user', content: autoplayPrompt }],
       timeoutMs: AUTOPLAY_TIMEOUT_MS,
       retries: 1,
     });
 
     if (!response.ok) {
       const detail = await safeResponseText(response);
-      const summary = `Gateway error (HTTP ${response.status}).`;
+      const errorCode = normalizeAutoplayErrorCode(detail, response.status);
+      const summary = errorCode === 'gateway_timeout'
+        ? 'Auto-mode tick failed due to gateway timeout.'
+        : `Gateway error (HTTP ${response.status}).`;
       const details = detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`;
       recordAutoplayFeedback({
         agentId,
@@ -1095,8 +1314,9 @@ async function runAutoplayForAgent(agentId: string, options: RunAutoplayOptions 
         status: 'failed',
         summary,
         details,
+        errorCode,
       });
-      return { success: false, status: 'failed', summary, details };
+      return { success: false, status: 'failed', summary, details, errorCode };
     }
 
     const rawText = await safeResponseText(response);
@@ -1130,6 +1350,29 @@ async function runAutoplayForAgent(agentId: string, options: RunAutoplayOptions 
     return { success: true, status: 'success', summary, details };
   } catch (error) {
     const details = error instanceof Error ? error.message : String(error);
+    if (isGatewayTimeoutMessage(details)) {
+      const summary = 'Auto-mode tick timed out; outcome is uncertain. Deferring one interval.';
+      const errorCode = 'uncertain_timeout_deferred';
+      autoplayDeferredUntilPass.set(agentId, autoplayPassCounter + 1);
+      recordAutoplayFeedback({
+        agentId,
+        startedAt,
+        status: 'uncertain_timeout_deferred',
+        summary,
+        details,
+        errorCode,
+      });
+
+      return {
+        success: false,
+        status: 'uncertain_timeout_deferred',
+        summary,
+        details,
+        errorCode,
+      };
+    }
+
+    const errorCode = normalizeAutoplayErrorCode(details);
     const summary = 'Auto-mode tick failed.';
     recordAutoplayFeedback({
       agentId,
@@ -1137,6 +1380,7 @@ async function runAutoplayForAgent(agentId: string, options: RunAutoplayOptions 
       status: 'failed',
       summary,
       details,
+      errorCode,
     });
 
     return {
@@ -1144,25 +1388,48 @@ async function runAutoplayForAgent(agentId: string, options: RunAutoplayOptions 
       status: 'failed',
       summary,
       details,
+      errorCode,
     };
   } finally {
     autoplayInFlight.delete(agentId);
   }
 }
 
-async function runAutoplayTick(): Promise<{
-  attempted: number;
-  succeeded: number;
-  failed: number;
-  skipped: number;
-  agents: string[];
-}> {
+async function runAutoplayTick(trigger: 'warm' | 'interval' | 'manual' = 'interval'): Promise<RunAutoplayTickResult> {
+  const pass = ++autoplayPassCounter;
+  autoplayLastTickStartedAt = new Date().toISOString();
+  autoplayLastTickResult = null;
+  autoplayLastTickErrorCode = null;
+
   const allConfigured = listConfiguredAgentIds();
+  const reasonCounts: Record<string, number> = {};
+  const failureReasonCounts: Record<string, number> = {};
+
+  if (allConfigured.length === 0) {
+    addReasonCount(reasonCounts, 'no_configured_agents');
+    autoplayLastTickFinishedAt = new Date().toISOString();
+    autoplayLastTickResult = 'idle';
+    console.log(`[autoplay] Tick(${trigger}) pass=${pass} attempted=0 succeeded=0 failed=0 skipped=0 reasons=no_configured_agents:1`);
+    return { attempted: 0, succeeded: 0, failed: 0, skipped: 0, agents: [], reason_counts: reasonCounts, pass };
+  }
+
   const enabledConfigured = allConfigured.filter((agentId) => getAgentAutoplaySetting(agentId));
+  if (enabledConfigured.length === 0) {
+    addReasonCount(reasonCounts, 'all_agents_disabled');
+    autoplayLastTickFinishedAt = new Date().toISOString();
+    autoplayLastTickResult = 'idle';
+    console.log(`[autoplay] Tick(${trigger}) pass=${pass} attempted=0 succeeded=0 failed=0 skipped=0 reasons=all_agents_disabled:1`);
+    return { attempted: 0, succeeded: 0, failed: 0, skipped: 0, agents: [], reason_counts: reasonCounts, pass };
+  }
+
   const agents = getAutoplayBatch(enabledConfigured);
 
   if (agents.length === 0) {
-    return { attempted: 0, succeeded: 0, failed: 0, skipped: 0, agents: [] };
+    addReasonCount(reasonCounts, 'empty_batch');
+    autoplayLastTickFinishedAt = new Date().toISOString();
+    autoplayLastTickResult = 'idle';
+    console.log(`[autoplay] Tick(${trigger}) pass=${pass} attempted=0 succeeded=0 failed=0 skipped=0 reasons=empty_batch:1`);
+    return { attempted: 0, succeeded: 0, failed: 0, skipped: 0, agents: [], reason_counts: reasonCounts, pass };
   }
 
   const queue = [...agents];
@@ -1175,27 +1442,65 @@ async function runAutoplayTick(): Promise<{
       const agentId = queue.shift();
       if (!agentId) break;
 
+      const deferredPass = autoplayDeferredUntilPass.get(agentId);
+      if (Number.isFinite(deferredPass)) {
+        if ((deferredPass as number) < pass) {
+          autoplayDeferredUntilPass.delete(agentId);
+        } else if ((deferredPass as number) === pass) {
+          autoplayDeferredUntilPass.delete(agentId);
+          skipped++;
+          addReasonCount(reasonCounts, 'deferred_once');
+          continue;
+        }
+      }
+
       const result = await runAutoplayForAgent(agentId);
       if (result.status === 'success') {
         succeeded++;
       } else if (result.status === 'busy' || result.status === 'skipped_disabled') {
         skipped++;
+        addReasonCount(reasonCounts, result.errorCode || result.status);
+      } else if (result.status === 'uncertain_timeout_deferred') {
+        failed++;
+        const reason = result.errorCode || result.status;
+        addReasonCount(reasonCounts, reason);
+        addReasonCount(failureReasonCounts, reason);
+        console.warn(`[autoplay] ${agentId} uncertain timeout: ${result.details}`);
       } else {
         failed++;
-        console.warn(`[autoplay] ${agentId} failed: ${result.details}`);
+        const errorCode = result.errorCode || 'failed';
+        addReasonCount(reasonCounts, errorCode);
+        addReasonCount(failureReasonCounts, errorCode);
+        console.warn(`[autoplay] ${agentId} failed (${errorCode}): ${result.details}`);
       }
     }
   });
 
   await Promise.all(workers);
 
-  return {
+  autoplayLastTickFinishedAt = new Date().toISOString();
+  autoplayLastTickResult = failed > 0 ? 'failed' : succeeded > 0 ? 'success' : 'skipped';
+  autoplayLastTickErrorCode = failed > 0
+    ? (Object.entries(failureReasonCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'failed')
+    : null;
+
+  const result: RunAutoplayTickResult = {
     attempted: agents.length,
     succeeded,
     failed,
     skipped,
     agents,
+    reason_counts: reasonCounts,
+    pass,
   };
+
+  const reasons = Object.entries(reasonCounts)
+    .map(([reason, count]) => `${reason}:${count}`)
+    .join(', ') || 'none';
+  console.log(
+    `[autoplay] Tick(${trigger}) pass=${pass} attempted=${result.attempted} succeeded=${result.succeeded} failed=${result.failed} skipped=${result.skipped} reasons=${reasons}`
+  );
+  return result;
 }
 
 async function startAutoplayLoop(): Promise<void> {
@@ -1204,41 +1509,46 @@ async function startAutoplayLoop(): Promise<void> {
     return;
   }
 
+  refreshAutoplayPrompt('startup');
+  autoplaySnapshotTimer = setInterval(() => {
+    refreshAutoplayPrompt('scheduled');
+  }, AUTOPLAY_SNAPSHOT_REFRESH_MS);
+
   console.log(
     `[autoplay] Enabled interval=${AUTOPLAY_INTERVAL_MS}ms timeout=${AUTOPLAY_TIMEOUT_MS}ms max_parallel=${AUTOPLAY_MAX_PARALLEL} max_agents_per_tick=${AUTOPLAY_MAX_AGENTS_PER_TICK}`
   );
 
   // Warm start shortly after boot so freshly deployed agents can act quickly.
-  setTimeout(() => {
-    void runAutoplayTick()
-      .then((result) => {
-        if (result.attempted > 0) {
-          console.log(`[autoplay] Warm tick: ${result.succeeded}/${result.attempted} succeeded (${result.failed} failed, ${result.skipped} skipped)`);
-        }
-      })
-      .catch((error) => {
-        console.warn('[autoplay] Warm tick failed:', error);
-      });
-  }, 15_000);
+  autoplayNextTickAtMs = Date.now() + AUTOPLAY_WARM_START_DELAY_MS;
+  autoplayWarmTimer = setTimeout(() => {
+    autoplayNextTickAtMs = Date.now() + AUTOPLAY_INTERVAL_MS;
+    void runAutoplayTick('warm').catch((error) => {
+      console.warn('[autoplay] Warm tick failed:', error);
+    });
+  }, AUTOPLAY_WARM_START_DELAY_MS);
 
   autoplayTimer = setInterval(() => {
-    void runAutoplayTick()
-      .then((result) => {
-        if (result.attempted > 0) {
-          console.log(`[autoplay] Tick: ${result.succeeded}/${result.attempted} succeeded (${result.failed} failed, ${result.skipped} skipped)`);
-        }
-      })
-      .catch((error) => {
+    autoplayNextTickAtMs = Date.now() + AUTOPLAY_INTERVAL_MS;
+    void runAutoplayTick('interval').catch((error) => {
         console.warn('[autoplay] Tick failed:', error);
       });
   }, AUTOPLAY_INTERVAL_MS);
 }
 
 function stopAutoplayLoop(): void {
+  if (autoplayWarmTimer) {
+    clearTimeout(autoplayWarmTimer);
+    autoplayWarmTimer = null;
+  }
   if (autoplayTimer) {
     clearInterval(autoplayTimer);
     autoplayTimer = null;
   }
+  if (autoplaySnapshotTimer) {
+    clearInterval(autoplaySnapshotTimer);
+    autoplaySnapshotTimer = null;
+  }
+  autoplayNextTickAtMs = null;
 }
 
 function getAgentDir(agentId: string): string {
