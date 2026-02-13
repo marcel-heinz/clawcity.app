@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import { generateSoulMarkdown } from '@/lib/agent-soul';
 
 const SOUL_MAX_LENGTH = 8000;
+const AUTO_MODE_FEEDBACK_POLL_MS = 15_000;
 
 interface AgentConfig {
   id?: string;
@@ -20,6 +21,7 @@ interface AgentConfig {
   builder_version?: number;
   is_active: boolean;
   agent_id: string | null;
+  auto_mode_enabled: boolean;
   engine?: string;
 }
 
@@ -38,11 +40,35 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+type AutoModeStatus = 'success' | 'failed' | 'busy' | 'skipped_disabled';
+
+interface AutoModeFeedbackEntry {
+  id: string;
+  agent_id: string;
+  started_at: string;
+  finished_at: string;
+  status: AutoModeStatus;
+  summary: string;
+  details?: string;
+}
+
 function formatCycleEnd(value: string | null | undefined): string {
   if (!value) return 'N/A';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'N/A';
   return date.toLocaleDateString();
+}
+
+function formatFeedbackTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Unknown time';
+  return date.toLocaleTimeString();
+}
+
+function statusClass(status: AutoModeStatus): string {
+  if (status === 'success') return 'text-[var(--accent)]';
+  if (status === 'failed') return 'text-[var(--red)]';
+  return 'text-[var(--muted)]';
 }
 
 export default function BuilderPage() {
@@ -57,6 +83,7 @@ export default function BuilderPage() {
     soul_md: generateSoulMarkdown('', 'custom', ''),
     is_active: false,
     agent_id: null,
+    auto_mode_enabled: true,
   });
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [saving, setSaving] = useState(false);
@@ -67,6 +94,9 @@ export default function BuilderPage() {
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
   const [activeTab, setActiveTab] = useState<'config' | 'chat'>('config');
+  const [autoModeSaving, setAutoModeSaving] = useState(false);
+  const [feedbackEntries, setFeedbackEntries] = useState<AutoModeFeedbackEntry[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const isFreeTier = profile?.tier === 'free';
@@ -103,6 +133,7 @@ export default function BuilderPage() {
       if (data.config) {
         setConfig({
           ...data.config,
+          auto_mode_enabled: data.config.auto_mode_enabled !== false,
           soul_md:
             typeof data.config.soul_md === 'string' && data.config.soul_md.trim()
               ? data.config.soul_md
@@ -128,6 +159,94 @@ export default function BuilderPage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
+
+  const fetchAutoModeFeedback = useCallback(async (limit = 25) => {
+    if (!config.id) {
+      setFeedbackEntries([]);
+      return;
+    }
+
+    setFeedbackLoading(true);
+    try {
+      const query = new URLSearchParams({
+        config_id: config.id,
+        limit: String(limit),
+      });
+      const res = await fetch(`/api/builder/auto-mode/feedback?${query.toString()}`);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setFeedbackEntries(Array.isArray(data.entries) ? data.entries : []);
+      }
+    } catch {
+      // ignore feedback fetch failures; toggle/manual chat remains available
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }, [config.id]);
+
+  useEffect(() => {
+    if (!config.id) {
+      setFeedbackEntries([]);
+      return;
+    }
+
+    void fetchAutoModeFeedback();
+    const shouldPoll = config.is_active || activeTab === 'chat';
+    if (!shouldPoll) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      void fetchAutoModeFeedback();
+    }, AUTO_MODE_FEEDBACK_POLL_MS);
+
+    return () => clearInterval(interval);
+  }, [activeTab, config.id, config.is_active, fetchAutoModeFeedback]);
+
+  const handleAutoModeToggle = async (enabled: boolean) => {
+    const previousEnabled = config.auto_mode_enabled !== false;
+    setConfig((prev) => ({ ...prev, auto_mode_enabled: enabled }));
+
+    if (!config.id) {
+      setMessage({
+        type: 'warning',
+        text: 'Auto-mode preference saved locally and will persist after your first draft save.',
+      });
+      return;
+    }
+
+    setAutoModeSaving(true);
+    try {
+      const res = await fetch('/api/builder/auto-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config_id: config.id, enabled }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setConfig((prev) => ({ ...prev, auto_mode_enabled: previousEnabled }));
+        setMessage({
+          type: 'error',
+          text: data.error || 'Failed to update auto-mode setting.',
+        });
+        return;
+      }
+
+      setConfig((prev) => ({ ...prev, auto_mode_enabled: data.auto_mode_enabled !== false }));
+      if (config.is_active) {
+        setMessage({
+          type: 'success',
+          text: `Auto-mode ${enabled ? 'enabled' : 'disabled'} for this agent.`,
+        });
+      }
+      void fetchAutoModeFeedback();
+    } catch {
+      setConfig((prev) => ({ ...prev, auto_mode_enabled: previousEnabled }));
+      setMessage({ type: 'error', text: 'Failed to update auto-mode setting.' });
+    } finally {
+      setAutoModeSaving(false);
+    }
+  };
 
   const saveConfigDraft = useCallback(async (
     overrides?: Partial<AgentConfig>,
@@ -161,6 +280,7 @@ export default function BuilderPage() {
       setConfig((prev) => ({
         ...prev,
         ...data.config,
+        auto_mode_enabled: data.config.auto_mode_enabled !== false,
         soul_md:
           typeof data.config.soul_md === 'string' && data.config.soul_md.trim()
             ? data.config.soul_md
@@ -451,6 +571,17 @@ export default function BuilderPage() {
               Powered by OpenClaw
             </span>
             <button
+              onClick={() => handleAutoModeToggle(!(config.auto_mode_enabled !== false))}
+              disabled={autoModeSaving}
+              className={`pixel-btn px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
+                config.auto_mode_enabled !== false
+                  ? 'bg-[var(--accent)] text-white'
+                  : 'bg-[var(--surface)] text-[var(--foreground)]'
+              }`}
+            >
+              {autoModeSaving ? 'Saving...' : `Auto-Mode: ${config.auto_mode_enabled !== false ? 'On' : 'Off'}`}
+            </button>
+            <button
               onClick={handleChatStop}
               disabled={deploying}
               className="pixel-btn px-3 py-1.5 bg-[var(--red)] text-white text-xs font-semibold disabled:opacity-50"
@@ -462,8 +593,16 @@ export default function BuilderPage() {
           <div className="bg-[var(--surface-alt)] border-2 border-[var(--border)] p-3 h-[400px] overflow-y-auto mb-3 space-y-3">
             {chatMessages.length === 0 && (
               <div className="text-center text-xs text-[var(--muted)] py-8">
-                <p className="mb-2">Your agent is active in auto-mode.</p>
-                <p>Background ticks keep it playing; chat messages act as live operator overrides.</p>
+                <p className="mb-2">
+                  {config.auto_mode_enabled !== false
+                    ? 'Your agent is active in auto-mode.'
+                    : 'Auto-mode is off for this agent.'}
+                </p>
+                <p>
+                  {config.auto_mode_enabled !== false
+                    ? 'Background ticks keep it playing; chat messages act as live operator overrides.'
+                    : 'You can still control the agent manually from chat.'}
+                </p>
               </div>
             )}
 
@@ -533,6 +672,40 @@ export default function BuilderPage() {
             >
               Send
             </button>
+          </div>
+
+          <div className="mt-4 border-2 border-[var(--border)] p-3 bg-[var(--surface-alt)]">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-semibold text-[var(--foreground)]">Recent Auto-Mode Activity</h3>
+              <span className="text-[10px] text-[var(--muted)]">
+                Polling every {AUTO_MODE_FEEDBACK_POLL_MS / 1000}s
+              </span>
+            </div>
+
+            {feedbackLoading && feedbackEntries.length === 0 ? (
+              <p className="text-xs text-[var(--muted)]">Loading activity...</p>
+            ) : feedbackEntries.length === 0 ? (
+              <p className="text-xs text-[var(--muted)]">No auto-mode activity in the last 24 hours yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {feedbackEntries.slice(0, 8).map((entry) => (
+                  <div key={entry.id} className="border border-[var(--border)] bg-[var(--surface)] p-2">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[10px] font-semibold uppercase ${statusClass(entry.status)}`}>
+                        {entry.status.replace('_', ' ')}
+                      </span>
+                      <span className="text-[10px] text-[var(--muted)]">
+                        {formatFeedbackTime(entry.finished_at)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--foreground)] mt-1">{entry.summary}</p>
+                    {entry.details && (
+                      <p className="text-[10px] text-[var(--muted)] mt-1">{entry.details}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -614,13 +787,32 @@ export default function BuilderPage() {
               </button>
             </div>
 
-            <div className="pixel-card p-4 h-[146px]">
+            <div className="pixel-card p-4">
               <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Agent Status</h3>
               <div className="flex items-center gap-2">
                 <div className={`w-2.5 h-2.5 rounded-full ${config.is_active ? 'bg-[var(--accent)]' : 'bg-[var(--muted)]'}`} />
                 <span className="text-sm text-[var(--foreground)]">
                   {config.is_active ? 'Active' : 'Paused'}
                 </span>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-2 border border-[var(--border)] bg-[var(--surface-alt)] p-2">
+                <div>
+                  <div className="text-xs font-semibold text-[var(--foreground)]">Auto-Mode</div>
+                  <div className="text-[10px] text-[var(--muted)]">
+                    Off stops background ticks; chat control still works.
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleAutoModeToggle(!(config.auto_mode_enabled !== false))}
+                  disabled={autoModeSaving}
+                  className={`pixel-btn px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
+                    config.auto_mode_enabled !== false
+                      ? 'bg-[var(--accent)] text-white'
+                      : 'bg-[var(--surface)] text-[var(--foreground)]'
+                  }`}
+                >
+                  {autoModeSaving ? 'Saving...' : config.auto_mode_enabled !== false ? 'On' : 'Off'}
+                </button>
               </div>
               {config.agent_id && (
                 <div className="mt-2 text-xs text-[var(--muted)]">
@@ -630,6 +822,11 @@ export default function BuilderPage() {
               {config.engine === 'openclaw' && (
                 <div className="mt-1 text-xs text-[var(--accent)]">
                   Engine: OpenClaw
+                </div>
+              )}
+              {feedbackEntries[0] && (
+                <div className="mt-2 text-xs text-[var(--muted)]">
+                  Last tick: <span className={statusClass(feedbackEntries[0].status)}>{feedbackEntries[0].summary}</span>
                 </div>
               )}
             </div>

@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import Link from 'next/link';
 
+const AUTO_MODE_FEEDBACK_POLL_MS = 15_000;
+
 interface DashboardData {
   profile: {
     tier: string;
@@ -17,6 +19,7 @@ interface DashboardData {
     id: string;
     agent_name: string;
     is_active: boolean;
+    auto_mode_enabled: boolean;
     agent_id: string | null;
     personality_preset: string;
     created_at: string;
@@ -39,9 +42,30 @@ interface DashboardData {
   };
 }
 
+type AutoModeStatus = 'success' | 'failed' | 'busy' | 'skipped_disabled';
+
+interface AutoModeFeedbackEntry {
+  id: string;
+  agent_id: string;
+  started_at: string;
+  finished_at: string;
+  status: AutoModeStatus;
+  summary: string;
+  details?: string;
+}
+
+function statusClass(status: AutoModeStatus): string {
+  if (status === 'success') return 'text-[var(--accent)]';
+  if (status === 'failed') return 'text-[var(--red)]';
+  return 'text-[var(--muted)]';
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [feedbackEntries, setFeedbackEntries] = useState<AutoModeFeedbackEntry[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [autoModeSaving, setAutoModeSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [portalLoading, setPortalLoading] = useState(false);
 
@@ -64,6 +88,109 @@ export default function DashboardPage() {
     const interval = setInterval(fetchDashboard, 30000);
     return () => clearInterval(interval);
   }, [fetchDashboard]);
+
+  const fetchAutoModeFeedback = useCallback(async () => {
+    const configId = data?.config?.id;
+    if (!configId) {
+      setFeedbackEntries([]);
+      return;
+    }
+
+    setFeedbackLoading(true);
+    try {
+      const query = new URLSearchParams({
+        config_id: configId,
+        limit: '3',
+      });
+      const res = await fetch(`/api/builder/auto-mode/feedback?${query.toString()}`);
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setFeedbackEntries(Array.isArray(json.entries) ? json.entries : []);
+      }
+    } catch {
+      // ignore feedback issues in dashboard
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }, [data?.config?.id]);
+
+  useEffect(() => {
+    if (!data?.config?.id) {
+      setFeedbackEntries([]);
+      return;
+    }
+
+    void fetchAutoModeFeedback();
+    const interval = setInterval(() => {
+      void fetchAutoModeFeedback();
+    }, AUTO_MODE_FEEDBACK_POLL_MS);
+
+    return () => clearInterval(interval);
+  }, [data?.config?.id, fetchAutoModeFeedback]);
+
+  const handleAutoModeToggle = async (enabled: boolean) => {
+    if (!data?.config?.id) return;
+
+    const previous = data.config.auto_mode_enabled !== false;
+    setData((prev) => {
+      if (!prev?.config) return prev;
+      return {
+        ...prev,
+        config: {
+          ...prev.config,
+          auto_mode_enabled: enabled,
+        },
+      };
+    });
+
+    setAutoModeSaving(true);
+    try {
+      const res = await fetch('/api/builder/auto-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config_id: data.config.id, enabled }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setData((prev) => {
+          if (!prev?.config) return prev;
+          return {
+            ...prev,
+            config: {
+              ...prev.config,
+              auto_mode_enabled: previous,
+            },
+          };
+        });
+        return;
+      }
+
+      setData((prev) => {
+        if (!prev?.config) return prev;
+        return {
+          ...prev,
+          config: {
+            ...prev.config,
+            auto_mode_enabled: json.auto_mode_enabled !== false,
+          },
+        };
+      });
+      void fetchAutoModeFeedback();
+    } catch {
+      setData((prev) => {
+        if (!prev?.config) return prev;
+        return {
+          ...prev,
+          config: {
+            ...prev.config,
+            auto_mode_enabled: previous,
+          },
+        };
+      });
+    } finally {
+      setAutoModeSaving(false);
+    }
+  };
 
   const handleManageBilling = async () => {
     setPortalLoading(true);
@@ -119,6 +246,44 @@ export default function DashboardPage() {
               <div className="text-xs space-y-1 text-[var(--muted)]">
                 <div>Status: <span className={data.config.is_active ? 'text-[var(--accent)]' : 'text-[var(--red)]'}>{data.config.is_active ? 'Active' : 'Paused'}</span></div>
                 <div>Preset: <span className="text-[var(--foreground)] capitalize">{data.config.personality_preset}</span></div>
+              </div>
+              <div className="mt-3 border border-[var(--border)] bg-[var(--surface-alt)] p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-semibold text-[var(--foreground)]">Auto-Mode</div>
+                    <div className="text-[10px] text-[var(--muted)]">Background gameplay loop</div>
+                  </div>
+                  <button
+                    onClick={() => handleAutoModeToggle(!(data.config!.auto_mode_enabled !== false))}
+                    disabled={autoModeSaving}
+                    className={`pixel-btn px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
+                      data.config!.auto_mode_enabled !== false
+                        ? 'bg-[var(--accent)] text-white'
+                        : 'bg-[var(--surface)] text-[var(--foreground)]'
+                    }`}
+                  >
+                    {autoModeSaving ? 'Saving...' : data.config!.auto_mode_enabled !== false ? 'On' : 'Off'}
+                  </button>
+                </div>
+                <div className="mt-2 text-[10px] text-[var(--muted)]">
+                  {feedbackLoading && feedbackEntries.length === 0
+                    ? 'Loading activity...'
+                    : feedbackEntries.length === 0
+                      ? 'No auto-mode activity in the last 24h.'
+                      : 'Recent activity:'}
+                </div>
+                {feedbackEntries.length > 0 && (
+                  <div className="mt-1 space-y-1">
+                    {feedbackEntries.map((entry) => (
+                      <div key={entry.id} className="text-[10px] text-[var(--muted)]">
+                        <span className={`${statusClass(entry.status)} font-semibold uppercase mr-1`}>
+                          {entry.status.replace('_', ' ')}
+                        </span>
+                        <span className="text-[var(--foreground)]">{entry.summary}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="mt-3">
                 <Link href="/builder" className="text-xs text-[var(--accent)] hover:underline font-medium">

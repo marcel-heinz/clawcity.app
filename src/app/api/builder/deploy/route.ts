@@ -180,6 +180,7 @@ export async function POST(request: NextRequest) {
       strategySocial: config.strategy_social ?? 50,
       customInstructions: config.custom_instructions || '',
       soulMd,
+      autoModeEnabled: config.auto_mode_enabled !== false,
     });
 
     if (!openclawResult.success) {
@@ -281,6 +282,7 @@ export async function PUT(request: NextRequest) {
         strategySocial: body.strategy_social,
         customInstructions: body.custom_instructions,
         soulMd,
+        autoModeEnabled: body.auto_mode_enabled !== false,
       });
     }
 

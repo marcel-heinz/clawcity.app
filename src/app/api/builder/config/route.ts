@@ -30,6 +30,7 @@ export async function GET() {
     const normalizedConfig = config
       ? {
           ...config,
+          auto_mode_enabled: config.auto_mode_enabled !== false,
           soul_md:
             typeof config.soul_md === 'string' && config.soul_md.trim()
               ? config.soul_md
@@ -93,6 +94,7 @@ export async function POST(request: NextRequest) {
         strategy_social: body.strategy_social ?? 50,
         custom_instructions: body.custom_instructions || '',
         soul_md: soulMd,
+        auto_mode_enabled: body.auto_mode_enabled !== false,
         builder_version: 2,
       })
       .select()
@@ -139,6 +141,7 @@ export async function PUT(request: NextRequest) {
         strategy_social: body.strategy_social ?? 50,
         custom_instructions: body.custom_instructions || '',
         soul_md: soulMd,
+        auto_mode_enabled: body.auto_mode_enabled !== false,
         builder_version: 2,
       })
       .eq('user_id', user.id)

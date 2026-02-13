@@ -33,6 +33,10 @@ const AUTOPLAY_PROMPT = (process.env.OPENCLAW_AUTOPLAY_PROMPT || '').trim() || [
     '- Respect gather cooldowns: if cooldown/depleted errors occur, wait and retry safely instead of failing.',
     '- Keep execution concise and robust; avoid unnecessary narration.',
 ].join('\n');
+const AGENT_SETTINGS_FILE = 'agent-settings.json';
+const AUTOPLAY_FEEDBACK_FILE = 'autoplay-feedback.jsonl';
+const AUTOPLAY_FEEDBACK_RETENTION_MS = 24 * 60 * 60 * 1000;
+const AUTOPLAY_FEEDBACK_DEFAULT_LIMIT = 50;
 const autoplayInFlight = new Set();
 let autoplayTimer = null;
 let autoplayCursor = 0;
@@ -75,6 +79,7 @@ app.get('/api/provision/:agentId', (req, res) => {
             id: agentId,
             soul: fs_1.default.existsSync(soulPath) ? fs_1.default.readFileSync(soulPath, 'utf-8') : null,
             agents: fs_1.default.existsSync(agentsPath) ? fs_1.default.readFileSync(agentsPath, 'utf-8') : null,
+            auto_mode_enabled: getAgentAutoplaySetting(agentId),
         },
     });
 });
@@ -133,10 +138,11 @@ app.post('/api/provision', async (req, res) => {
         if (fs_1.default.existsSync(heartbeatSource)) {
             fs_1.default.copyFileSync(heartbeatSource, path_1.default.join(workspaceDir, 'HEARTBEAT.md'));
         }
+        setAgentAutoplaySetting(agentId, body.autoModeEnabled !== false);
         // Update gateway config to include this agent
         await addAgentToConfig(agentId, agentDir, body.model);
         console.log(`[provision] Agent ${agentId} (${agentName}) provisioned successfully`);
-        res.json({ success: true, agentId });
+        res.json({ success: true, agentId, auto_mode_enabled: getAgentAutoplaySetting(agentId) });
     }
     catch (error) {
         console.error('[provision] Error:', error);
@@ -186,12 +192,37 @@ app.put('/api/provision/:agentId', (req, res) => {
             fs_1.default.writeFileSync(path_1.default.join(skillConfigDir, 'clawcity.json'), JSON.stringify({ apiKey: body.apiKey, serverUrl: 'https://www.clawcity.app' }, null, 2));
             fs_1.default.writeFileSync(path_1.default.join(agentDir, '.env'), `CLAWCITY_API_KEY=${body.apiKey}\nCLAWCITY_URL=https://www.clawcity.app\n`);
         }
+        if (typeof body.autoModeEnabled === 'boolean') {
+            setAgentAutoplaySetting(agentId, body.autoModeEnabled);
+        }
         console.log(`[provision] Agent ${agentId} updated`);
-        res.json({ success: true });
+        res.json({ success: true, auto_mode_enabled: getAgentAutoplaySetting(agentId) });
     }
     catch (error) {
         console.error('[provision] Update error:', error);
         res.status(500).json({ error: 'Failed to update agent' });
+    }
+});
+// Update per-agent autoplay setting
+app.put('/api/provision/:agentId/autoplay', (req, res) => {
+    try {
+        const { agentId } = req.params;
+        const enabled = req.body?.enabled;
+        if (typeof enabled !== 'boolean') {
+            res.status(400).json({ error: 'Missing enabled boolean' });
+            return;
+        }
+        const agentDir = getAgentDir(agentId);
+        if (!fs_1.default.existsSync(agentDir)) {
+            res.status(404).json({ error: 'Agent not found' });
+            return;
+        }
+        setAgentAutoplaySetting(agentId, enabled);
+        res.json({ success: true, agentId, enabled });
+    }
+    catch (error) {
+        console.error('[provision] Autoplay update error:', error);
+        res.status(500).json({ error: 'Failed to update autoplay setting' });
     }
 });
 // Deprovision an agent (stop but keep data)
@@ -294,6 +325,13 @@ app.post('/api/chat/stream', async (req, res) => {
     }
 });
 app.get('/api/autoplay/status', (_req, res) => {
+    const configuredAgents = listConfiguredAgentIds();
+    const agentStatus = configuredAgents.map((agentId) => ({
+        agent_id: agentId,
+        enabled: getAgentAutoplaySetting(agentId),
+        in_flight: autoplayInFlight.has(agentId),
+        last_tick: readAutoplayFeedback(agentId, 1)[0] || null,
+    }));
     res.json({
         success: true,
         enabled: AUTOPLAY_ENABLED,
@@ -302,15 +340,51 @@ app.get('/api/autoplay/status', (_req, res) => {
         max_parallel: AUTOPLAY_MAX_PARALLEL,
         max_agents_per_tick: AUTOPLAY_MAX_AGENTS_PER_TICK,
         running_agents: Array.from(autoplayInFlight),
-        configured_agents: listConfiguredAgentIds(),
+        configured_agents: configuredAgents,
+        agents: agentStatus,
     });
+});
+app.get('/api/autoplay/feedback/:agentId', (req, res) => {
+    try {
+        const { agentId } = req.params;
+        const rawLimit = parseInt(String(req.query.limit || AUTOPLAY_FEEDBACK_DEFAULT_LIMIT), 10);
+        const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : AUTOPLAY_FEEDBACK_DEFAULT_LIMIT;
+        if (!fs_1.default.existsSync(getAgentDir(agentId))) {
+            res.status(404).json({ error: 'Agent not found' });
+            return;
+        }
+        const entries = readAutoplayFeedback(agentId, limit);
+        res.json({
+            success: true,
+            agentId,
+            entries,
+            count: entries.length,
+            retention_ms: AUTOPLAY_FEEDBACK_RETENTION_MS,
+        });
+    }
+    catch (error) {
+        console.error('[autoplay] feedback read failed:', error);
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+        });
+    }
 });
 app.post('/api/autoplay/tick', async (req, res) => {
     try {
         const requestedAgentId = typeof req.body?.agentId === 'string' ? req.body.agentId : '';
         if (requestedAgentId) {
-            const result = await runAutoplayForAgent(requestedAgentId);
-            res.json({ success: result.success, agentId: requestedAgentId, details: result.details });
+            const result = await runAutoplayForAgent(requestedAgentId, {
+                manual: true,
+                recordDisabledFeedback: true,
+            });
+            res.json({
+                success: result.success,
+                agentId: requestedAgentId,
+                status: result.status,
+                summary: result.summary,
+                details: result.details,
+            });
             return;
         }
         const result = await runAutoplayTick();
@@ -344,6 +418,156 @@ function boolEnv(name, fallback) {
 }
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function truncate(value, max = 220) {
+    const normalized = value.trim().replace(/\s+/g, ' ');
+    if (normalized.length <= max)
+        return normalized;
+    return `${normalized.slice(0, max - 1)}…`;
+}
+function getAgentSettingsPath(agentId) {
+    return path_1.default.join(getAgentDir(agentId), AGENT_SETTINGS_FILE);
+}
+function getAutoplayFeedbackPath(agentId) {
+    return path_1.default.join(getAgentDir(agentId), AUTOPLAY_FEEDBACK_FILE);
+}
+function parseAgentSettings(agentId) {
+    const settingsPath = getAgentSettingsPath(agentId);
+    if (!fs_1.default.existsSync(settingsPath))
+        return {};
+    try {
+        const parsed = JSON.parse(fs_1.default.readFileSync(settingsPath, 'utf-8'));
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    }
+    catch (error) {
+        console.warn(`[autoplay] Failed to parse settings for ${agentId}:`, error);
+        return {};
+    }
+}
+function getAgentAutoplaySetting(agentId) {
+    const settings = parseAgentSettings(agentId);
+    return settings.autoplayEnabled !== false;
+}
+function setAgentAutoplaySetting(agentId, enabled) {
+    const agentDir = getAgentDir(agentId);
+    fs_1.default.mkdirSync(agentDir, { recursive: true });
+    const settingsPath = getAgentSettingsPath(agentId);
+    const payload = {
+        autoplayEnabled: enabled,
+        updatedAt: new Date().toISOString(),
+    };
+    fs_1.default.writeFileSync(settingsPath, JSON.stringify(payload, null, 2));
+}
+function makeFeedbackEntry(input) {
+    return {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        agent_id: input.agentId,
+        started_at: input.startedAt.toISOString(),
+        finished_at: input.finishedAt.toISOString(),
+        status: input.status,
+        summary: truncate(input.summary, 240),
+        details: input.details ? truncate(input.details, 400) : undefined,
+    };
+}
+function parseFeedbackLine(line) {
+    const trimmed = line.trim();
+    if (!trimmed)
+        return null;
+    try {
+        const parsed = JSON.parse(trimmed);
+        if (!parsed || typeof parsed !== 'object')
+            return null;
+        if (!parsed.agent_id || !parsed.started_at || !parsed.finished_at || !parsed.status || !parsed.summary) {
+            return null;
+        }
+        const startedAtMs = Date.parse(parsed.started_at);
+        const finishedAtMs = Date.parse(parsed.finished_at);
+        if (!Number.isFinite(startedAtMs) || !Number.isFinite(finishedAtMs)) {
+            return null;
+        }
+        return parsed;
+    }
+    catch {
+        return null;
+    }
+}
+function compactAutoplayFeedback(agentId, retentionMs = AUTOPLAY_FEEDBACK_RETENTION_MS) {
+    const feedbackPath = getAutoplayFeedbackPath(agentId);
+    if (!fs_1.default.existsSync(feedbackPath))
+        return;
+    const raw = fs_1.default.readFileSync(feedbackPath, 'utf-8');
+    const minTs = Date.now() - retentionMs;
+    const keptEntries = [];
+    for (const line of raw.split('\n')) {
+        const parsed = parseFeedbackLine(line);
+        if (!parsed)
+            continue;
+        const finishedAt = Date.parse(parsed.finished_at);
+        if (finishedAt >= minTs) {
+            keptEntries.push(parsed);
+        }
+    }
+    if (keptEntries.length === 0) {
+        fs_1.default.rmSync(feedbackPath, { force: true });
+        return;
+    }
+    keptEntries.sort((a, b) => Date.parse(a.finished_at) - Date.parse(b.finished_at));
+    const content = keptEntries.map((entry) => JSON.stringify(entry)).join('\n') + '\n';
+    fs_1.default.writeFileSync(feedbackPath, content);
+}
+function appendAutoplayFeedback(agentId, entry) {
+    const agentDir = getAgentDir(agentId);
+    fs_1.default.mkdirSync(agentDir, { recursive: true });
+    const feedbackPath = getAutoplayFeedbackPath(agentId);
+    fs_1.default.appendFileSync(feedbackPath, `${JSON.stringify(entry)}\n`);
+    compactAutoplayFeedback(agentId, AUTOPLAY_FEEDBACK_RETENTION_MS);
+}
+function readAutoplayFeedback(agentId, limit = AUTOPLAY_FEEDBACK_DEFAULT_LIMIT) {
+    const feedbackPath = getAutoplayFeedbackPath(agentId);
+    if (!fs_1.default.existsSync(feedbackPath))
+        return [];
+    const minTs = Date.now() - AUTOPLAY_FEEDBACK_RETENTION_MS;
+    const entries = [];
+    const raw = fs_1.default.readFileSync(feedbackPath, 'utf-8');
+    for (const line of raw.split('\n')) {
+        const parsed = parseFeedbackLine(line);
+        if (!parsed)
+            continue;
+        const finishedAt = Date.parse(parsed.finished_at);
+        if (finishedAt >= minTs) {
+            entries.push(parsed);
+        }
+    }
+    entries.sort((a, b) => Date.parse(b.finished_at) - Date.parse(a.finished_at));
+    return entries.slice(0, Math.max(1, Math.min(limit, 100)));
+}
+function extractAssistantText(content) {
+    if (typeof content === 'string')
+        return content;
+    if (Array.isArray(content)) {
+        const chunks = content
+            .map((part) => {
+            if (typeof part === 'string')
+                return part;
+            if (part && typeof part === 'object' && 'text' in part) {
+                const text = part.text;
+                return typeof text === 'string' ? text : '';
+            }
+            return '';
+        })
+            .filter(Boolean);
+        return chunks.join(' ');
+    }
+    return '';
+}
+function summarizeAssistantOutput(raw) {
+    const firstLine = raw
+        .split('\n')
+        .map((line) => line.trim())
+        .find((line) => line.length > 0);
+    if (!firstLine)
+        return 'Auto-mode tick completed.';
+    return truncate(firstLine, 220);
 }
 async function safeResponseText(response) {
     try {
@@ -448,9 +672,55 @@ function getAutoplayBatch(agentIds) {
     autoplayCursor = (start + limit) % agentIds.length;
     return batch;
 }
-async function runAutoplayForAgent(agentId) {
+function recordAutoplayFeedback(params) {
+    const finishedAt = new Date();
+    const entry = makeFeedbackEntry({
+        agentId: params.agentId,
+        startedAt: params.startedAt,
+        finishedAt,
+        status: params.status,
+        summary: params.summary,
+        details: params.details,
+    });
+    appendAutoplayFeedback(params.agentId, entry);
+}
+async function runAutoplayForAgent(agentId, options = {}) {
+    const startedAt = new Date();
+    if (!getAgentAutoplaySetting(agentId)) {
+        const result = {
+            success: false,
+            status: 'skipped_disabled',
+            summary: 'Auto-mode is disabled for this agent.',
+            details: 'disabled',
+        };
+        if (options.recordDisabledFeedback || options.manual) {
+            recordAutoplayFeedback({
+                agentId,
+                startedAt,
+                status: result.status,
+                summary: result.summary,
+                details: result.details,
+            });
+        }
+        return result;
+    }
     if (autoplayInFlight.has(agentId)) {
-        return { success: false, details: 'busy' };
+        const result = {
+            success: false,
+            status: 'busy',
+            summary: 'Tick skipped because the agent is already processing another tick.',
+            details: 'busy',
+        };
+        if (options.manual) {
+            recordAutoplayFeedback({
+                agentId,
+                startedAt,
+                status: result.status,
+                summary: result.summary,
+                details: result.details,
+            });
+        }
+        return result;
     }
     autoplayInFlight.add(agentId);
     try {
@@ -462,22 +732,59 @@ async function runAutoplayForAgent(agentId) {
         });
         if (!response.ok) {
             const detail = await safeResponseText(response);
-            return { success: false, details: `HTTP ${response.status}: ${detail}` };
+            const summary = `Gateway error (HTTP ${response.status}).`;
+            const details = detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`;
+            recordAutoplayFeedback({
+                agentId,
+                startedAt,
+                status: 'failed',
+                summary,
+                details,
+            });
+            return { success: false, status: 'failed', summary, details };
         }
+        const rawText = await safeResponseText(response);
         let finishReason = 'unknown';
-        try {
-            const data = await response.json();
-            finishReason = data.choices?.[0]?.finish_reason || finishReason;
+        let assistantText = '';
+        if (rawText) {
+            try {
+                const parsed = JSON.parse(rawText);
+                const firstChoice = parsed.choices?.[0];
+                finishReason = firstChoice?.finish_reason || finishReason;
+                assistantText = extractAssistantText(firstChoice?.message?.content);
+            }
+            catch {
+                assistantText = rawText;
+            }
         }
-        catch {
-            // Non-JSON response is still considered a successful request.
-        }
-        return { success: true, details: `finish_reason=${finishReason}` };
+        const summary = assistantText
+            ? summarizeAssistantOutput(assistantText)
+            : `Auto-mode tick completed (finish_reason=${finishReason}).`;
+        const details = `finish_reason=${finishReason}`;
+        recordAutoplayFeedback({
+            agentId,
+            startedAt,
+            status: 'success',
+            summary,
+            details,
+        });
+        return { success: true, status: 'success', summary, details };
     }
     catch (error) {
+        const details = error instanceof Error ? error.message : String(error);
+        const summary = 'Auto-mode tick failed.';
+        recordAutoplayFeedback({
+            agentId,
+            startedAt,
+            status: 'failed',
+            summary,
+            details,
+        });
         return {
             success: false,
-            details: error instanceof Error ? error.message : String(error),
+            status: 'failed',
+            summary,
+            details,
         };
     }
     finally {
@@ -486,7 +793,8 @@ async function runAutoplayForAgent(agentId) {
 }
 async function runAutoplayTick() {
     const allConfigured = listConfiguredAgentIds();
-    const agents = getAutoplayBatch(allConfigured);
+    const enabledConfigured = allConfigured.filter((agentId) => getAgentAutoplaySetting(agentId));
+    const agents = getAutoplayBatch(enabledConfigured);
     if (agents.length === 0) {
         return { attempted: 0, succeeded: 0, failed: 0, skipped: 0, agents: [] };
     }
@@ -500,10 +808,10 @@ async function runAutoplayTick() {
             if (!agentId)
                 break;
             const result = await runAutoplayForAgent(agentId);
-            if (result.success) {
+            if (result.status === 'success') {
                 succeeded++;
             }
-            else if (result.details === 'busy') {
+            else if (result.status === 'busy' || result.status === 'skipped_disabled') {
                 skipped++;
             }
             else {

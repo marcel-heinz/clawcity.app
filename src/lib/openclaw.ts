@@ -17,6 +17,7 @@ interface ProvisionRequest {
   strategySocial: number;
   customInstructions: string;
   soulMd?: string;
+  autoModeEnabled?: boolean;
 }
 
 interface ProvisionResponse {
@@ -45,6 +46,16 @@ interface ChatResponse {
   status?: number;
 }
 
+export interface AutoModeFeedbackEntry {
+  id: string;
+  agent_id: string;
+  started_at: string;
+  finished_at: string;
+  status: 'success' | 'failed' | 'busy' | 'skipped_disabled';
+  summary: string;
+  details?: string;
+}
+
 async function provisionFetch(
   path: string,
   options: RequestInit = {}
@@ -63,6 +74,16 @@ async function provisionFetch(
   return fetch(url, { ...options, headers });
 }
 
+async function parseJsonSafe<T>(res: Response): Promise<T | null> {
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Provision a new OpenClaw agent for a user.
  */
@@ -74,8 +95,12 @@ export async function provisionAgent(
       method: 'POST',
       body: JSON.stringify(config),
     });
-
-    return (await res.json()) as ProvisionResponse;
+    const data = await parseJsonSafe<ProvisionResponse>(res);
+    if (data) return data;
+    return {
+      success: false,
+      error: `Provisioning request failed (${res.status})`,
+    };
   } catch (error) {
     return {
       success: false,
@@ -98,7 +123,12 @@ export async function updateAgent(
       body: JSON.stringify(config),
     });
 
-    return (await res.json()) as ProvisionResponse;
+    const data = await parseJsonSafe<ProvisionResponse>(res);
+    if (data) return data;
+    return {
+      success: false,
+      error: `Agent update failed (${res.status})`,
+    };
   } catch (error) {
     return {
       success: false,
@@ -119,7 +149,12 @@ export async function deprovisionAgent(
       method: 'DELETE',
     });
 
-    return (await res.json()) as ProvisionResponse;
+    const data = await parseJsonSafe<ProvisionResponse>(res);
+    if (data) return data;
+    return {
+      success: false,
+      error: `Agent deprovision failed (${res.status})`,
+    };
   } catch (error) {
     return {
       success: false,
@@ -141,10 +176,15 @@ export async function chatWithAgent(
       method: 'POST',
       body: JSON.stringify({ agentId, messages }),
     });
-    const data = (await res.json()) as ChatResponse & {
-      error?: string;
-      details?: string;
-    };
+    const data = await parseJsonSafe<ChatResponse & { error?: string; details?: string }>(res);
+    if (!data) {
+      return {
+        id: '',
+        choices: [],
+        error: `Gateway returned invalid JSON (${res.status})`,
+        status: res.status,
+      };
+    }
 
     if (!res.ok) {
       return {
@@ -175,10 +215,73 @@ export async function checkGatewayHealth(): Promise<{
 }> {
   try {
     const res = await provisionFetch('/health');
-    const data = (await res.json()) as { status: string; agents: string[] };
+    const data = await parseJsonSafe<{ status: string; agents: string[] }>(res);
+    if (!data) {
+      return { healthy: false, agents: [] };
+    }
     return { healthy: data.status === 'ok', agents: data.agents || [] };
   } catch {
     return { healthy: false, agents: [] };
+  }
+}
+
+export async function setAgentAutoplay(
+  agentId: string,
+  enabled: boolean
+): Promise<ProvisionResponse> {
+  try {
+    const res = await provisionFetch(`/api/provision/${agentId}/autoplay`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    });
+    const data = await parseJsonSafe<ProvisionResponse>(res);
+    if (data) return data;
+    return {
+      success: false,
+      error: `Autoplay update failed (${res.status})`,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Failed to update autoplay setting',
+      details: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function getAgentAutoplayFeedback(
+  agentId: string,
+  limit = 50
+): Promise<{ success: boolean; entries: AutoModeFeedbackEntry[]; error?: string; details?: string }> {
+  try {
+    const query = new URLSearchParams({ limit: String(limit) });
+    const res = await provisionFetch(`/api/autoplay/feedback/${agentId}?${query.toString()}`);
+    const data = await parseJsonSafe<{
+      success: boolean;
+      entries?: AutoModeFeedbackEntry[];
+      error?: string;
+      details?: string;
+    }>(res);
+    if (!data) {
+      return {
+        success: false,
+        entries: [],
+        error: `Feedback request failed (${res.status})`,
+      };
+    }
+    return {
+      success: !!data.success,
+      entries: data.entries || [],
+      error: data.error,
+      details: data.details,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      entries: [],
+      error: 'Failed to fetch autoplay feedback',
+      details: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 

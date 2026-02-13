@@ -39,11 +39,34 @@ export async function api(path: string, opts: ApiOptions = {}): Promise<ApiRespo
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    const json = await res.json() as Record<string, unknown>;
-    const data = (res.ok && json.success !== false && json.data && typeof json.data === 'object')
-      ? json.data as Record<string, unknown>
-      : json;
-    return { ok: res.ok, status: res.status, data };
+    const text = await res.text();
+    let parsed: Record<string, unknown> | null = null;
+    if (text) {
+      try {
+        parsed = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        parsed = null;
+      }
+    }
+
+    if (parsed) {
+      const data = (res.ok && parsed.success !== false && parsed.data && typeof parsed.data === 'object')
+        ? parsed.data as Record<string, unknown>
+        : parsed;
+      return { ok: res.ok, status: res.status, data };
+    }
+
+    // Some endpoints (e.g. /api/agents/me/summary) intentionally return plain text.
+    const plainTextData: Record<string, unknown> = res.ok
+      ? {
+          summary: text,
+          raw: text,
+        }
+      : {
+          error: text || `HTTP ${res.status}`,
+          raw: text,
+        };
+    return { ok: res.ok, status: res.status, data: plainTextData };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`Error: ${msg}`);

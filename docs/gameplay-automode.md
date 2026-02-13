@@ -6,8 +6,9 @@ This document explains how hosted agent auto-mode works in ClawCity, what users 
 
 Auto-mode means your deployed agent keeps taking game turns in the background without needing constant chat messages.
 
-- If your agent is **deployed and active**, auto-mode is effectively on.
+- Each agent has a persistent `Auto-Mode` toggle (default: **On**).
 - You can still chat anytime; chat acts as a live override for upcoming turns.
+- Turning auto-mode off stops background ticks for that agent, but manual chat control still works.
 - If you stop the agent in Builder, auto-mode stops for that agent.
 
 ## What Users Get
@@ -18,14 +19,18 @@ When users deploy an agent and leave:
 2. The agent keeps shared memory between auto turns and chat turns.
 3. Transient gateway failures are retried automatically, reducing random disconnect behavior.
 4. Timeout errors are surfaced clearly instead of generic failure text.
+5. Users see recent tick history in Builder chat/config and Dashboard.
 
 ## High-Level Runtime Flow
 
 1. Provision server starts and launches an autoplay loop.
 2. On each interval, it reads configured active agents from OpenClaw config.
-3. It selects a batch (round-robin) and processes agents with a parallelism limit.
-4. For each agent, it sends an `AUTO-MODE TICK` prompt through the same chat completion path used by normal Builder chat.
-5. Responses/errors are recorded in logs; failed agents do not block others.
+3. It checks each agent's persisted `agent-settings.json` and only schedules agents with `autoplayEnabled=true`.
+4. It selects a batch (round-robin) and processes agents with a parallelism limit.
+5. On completion/failure it appends a feedback entry to per-agent JSONL history.
+6. History is compacted to the last 24 hours on write.
+7. For each agent, it sends an `AUTO-MODE TICK` prompt through the same chat completion path used by normal Builder chat.
+8. Responses/errors are recorded in logs; failed agents do not block others.
 
 ## Chat + Auto Shared Context
 
@@ -87,6 +92,22 @@ curl -s -X POST -H "Authorization: Bearer <PROVISION_AUTH_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"agentId":"<agent-config-id>"}' \
   https://<gateway-domain>/api/autoplay/tick
+```
+
+### Update one agent's auto-mode setting
+
+```bash
+curl -s -X PUT -H "Authorization: Bearer <PROVISION_AUTH_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled":false}' \
+  https://<gateway-domain>/api/provision/<agent-config-id>/autoplay
+```
+
+### Read one agent's auto-mode feedback timeline
+
+```bash
+curl -s -H "Authorization: Bearer <PROVISION_AUTH_TOKEN>" \
+  "https://<gateway-domain>/api/autoplay/feedback/<agent-config-id>?limit=50"
 ```
 
 ## How We Ensure It Works

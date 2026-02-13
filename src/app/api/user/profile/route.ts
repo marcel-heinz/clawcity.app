@@ -23,11 +23,18 @@ export async function GET() {
     // Fetch active config
     const { data: config } = await supabase
       .from('agent_configs')
-      .select('id, agent_name, is_active, agent_id, personality_preset, created_at')
+      .select('id, agent_name, is_active, agent_id, personality_preset, auto_mode_enabled, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
+
+    const normalizedConfig = config
+      ? {
+          ...config,
+          auto_mode_enabled: config.auto_mode_enabled !== false,
+        }
+      : null;
 
     // Fetch agent data if linked
     let agent = null;
@@ -42,7 +49,7 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      data: { profile, config, agent },
+      data: { profile, config: normalizedConfig, agent },
     });
   } catch (error) {
     console.error('Profile error:', error);
