@@ -77,28 +77,26 @@ export default function BuilderPage() {
 
   const isFreeTier = profile?.tier === 'free';
   const soulTooLong = config.soul_md.length > SOUL_MAX_LENGTH;
-  const canSave = !!config.agent_name.trim() && !!config.soul_md.trim() && !soulTooLong;
 
   const canDeployPaid = useMemo(() => {
     return Boolean(
-      config.id &&
       config.agent_name.trim() &&
       config.soul_md.trim() &&
       profile &&
       profile.tier !== 'free' &&
       !soulTooLong
     );
-  }, [config.id, config.agent_name, config.soul_md, profile, soulTooLong]);
+  }, [config.agent_name, config.soul_md, profile, soulTooLong]);
 
   const deployButtonDisabled = useMemo(() => {
     return Boolean(
       deploying ||
-      !config.id ||
+      saving ||
       !config.agent_name.trim() ||
       !config.soul_md.trim() ||
       soulTooLong
     );
-  }, [config.id, config.agent_name, config.soul_md, deploying, soulTooLong]);
+  }, [config.agent_name, config.soul_md, deploying, saving, soulTooLong]);
 
   const fetchConfig = useCallback(async () => {
     try {
@@ -139,6 +137,62 @@ export default function BuilderPage() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
+  const saveConfigDraft = useCallback(async (
+    overrides?: Partial<AgentConfig>,
+    options?: { syncActiveAgent?: boolean }
+  ) => {
+    const nextConfig: AgentConfig = { ...config, ...(overrides || {}) };
+    const hasAgentName = Boolean(nextConfig.agent_name?.trim());
+    const hasSoul = Boolean(nextConfig.soul_md?.trim());
+
+    if (!hasAgentName || !hasSoul) {
+      return { success: false as const, error: 'Agent name and SOUL.md are required.' };
+    }
+
+    if (nextConfig.soul_md.length > SOUL_MAX_LENGTH) {
+      return { success: false as const, error: `SOUL.md exceeds ${SOUL_MAX_LENGTH} characters.` };
+    }
+
+    setSaving(true);
+    try {
+      const method = nextConfig.id ? 'PUT' : 'POST';
+      const res = await fetch('/api/builder/config', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nextConfig),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        return { success: false as const, error: data.error || 'Failed to save draft' };
+      }
+
+      setConfig((prev) => ({
+        ...prev,
+        ...data.config,
+        soul_md:
+          typeof data.config.soul_md === 'string' && data.config.soul_md.trim()
+            ? data.config.soul_md
+            : nextConfig.soul_md,
+      }));
+
+      if (options?.syncActiveAgent && data.config.is_active) {
+        fetch('/api/builder/deploy', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...data.config, config_id: data.config.id }),
+        }).catch(() => {
+          // non-critical
+        });
+      }
+
+      return { success: true as const, config: data.config as AgentConfig };
+    } catch {
+      return { success: false as const, error: 'Failed to save draft' };
+    } finally {
+      setSaving(false);
+    }
+  }, [config]);
+
   const handleGenerateSoul = async () => {
     if (!config.agent_name.trim()) {
       setMessage({ type: 'error', text: 'Enter an agent name before generating SOUL.md.' });
@@ -170,64 +224,30 @@ export default function BuilderPage() {
       }
 
       setConfig((prev) => ({ ...prev, soul_md: data.soul_md }));
+      const saveResult = await saveConfigDraft(
+        { soul_md: data.soul_md },
+        { syncActiveAgent: true }
+      );
+      if (!saveResult.success) {
+        setMessage({
+          type: 'error',
+          text: `Generated SOUL.md locally but failed to save draft. ${saveResult.error}`,
+        });
+        return;
+      }
+
       if (data.fallback_used) {
         setMessage({
           type: 'warning',
-          text: data.warning || 'SOUL.md generated from fallback template because GLM-5 was unavailable.',
+          text: data.warning || 'SOUL.md generated from fallback template because model generation was unavailable.',
         });
       } else {
-        setMessage({ type: 'success', text: 'SOUL.md generated with GLM-5.' });
+        setMessage({ type: 'success', text: 'SOUL.md generated.' });
       }
     } catch {
       setMessage({ type: 'error', text: 'Failed to generate SOUL.md' });
     } finally {
       setGeneratingSoul(false);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!canSave) {
-      setMessage({ type: 'error', text: 'Agent name and SOUL.md are required.' });
-      return;
-    }
-
-    setSaving(true);
-    setMessage(null);
-    try {
-      const method = config.id ? 'PUT' : 'POST';
-      const res = await fetch('/api/builder/config', {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setConfig((prev) => ({
-          ...prev,
-          ...data.config,
-          soul_md:
-            typeof data.config.soul_md === 'string' && data.config.soul_md.trim()
-              ? data.config.soul_md
-              : prev.soul_md,
-        }));
-        setMessage({ type: 'success', text: 'Configuration saved.' });
-
-        if (data.config.is_active) {
-          fetch('/api/builder/deploy', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...data.config, config_id: data.config.id }),
-          }).catch(() => {
-            // non-critical
-          });
-        }
-      } else {
-        setMessage({ type: 'error', text: data.error || 'Failed to save' });
-      }
-    } catch {
-      setMessage({ type: 'error', text: 'Failed to save configuration' });
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -261,18 +281,27 @@ export default function BuilderPage() {
   };
 
   const deployAgent = async () => {
-    if (!canDeployPaid || !config.id) {
-      setMessage({ type: 'error', text: 'Save a valid SOUL.md config before deploying.' });
+    if (!canDeployPaid) {
+      setMessage({ type: 'error', text: 'A valid agent name and SOUL.md are required before deploying.' });
       return;
     }
 
     setDeploying(true);
     setMessage(null);
     try {
+      const draftSave = await saveConfigDraft();
+      if (!draftSave.success || !draftSave.config?.id) {
+        setMessage({
+          type: 'error',
+          text: `Could not save latest draft before deploy. ${draftSave.error || ''}`.trim(),
+        });
+        return;
+      }
+
       const res = await fetch('/api/builder/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config_id: config.id }),
+        body: JSON.stringify({ config_id: draftSave.config.id }),
       });
       const data = await res.json();
       if (data.success) {
@@ -402,7 +431,7 @@ export default function BuilderPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-[var(--foreground)] mb-1">Agent Builder</h1>
         <p className="text-sm text-[var(--muted)]">
-          Configure and deploy your AI agent. Powered by OpenClaw with GLM-5.
+          Configure and deploy your AI agent.
         </p>
       </div>
 
@@ -415,17 +444,6 @@ export default function BuilderPage() {
             : 'bg-[var(--red-light)] border-[var(--red)] text-[var(--red)]'
         }`}>
           {message.text}
-        </div>
-      )}
-
-      {isFreeTier && (
-        <div className="mb-6 pixel-card p-4 bg-[var(--gold-light)] border-[var(--gold)]">
-          <p className="text-sm font-semibold text-[var(--foreground)] mb-2">
-            Draft your agent for free
-          </p>
-          <p className="text-xs text-[var(--muted)]">
-            Free accounts can save builder drafts and spectate. Upgrade to Starter or Pro to deploy.
-          </p>
         </div>
       )}
 
@@ -554,7 +572,18 @@ export default function BuilderPage() {
       {(activeTab === 'config' || !config.is_active) && (
         <div className="grid lg:grid-cols-[1fr_360px] gap-6">
           <div className="space-y-6">
-            <div className="pixel-card p-4">
+            {isFreeTier && (
+              <div className="pixel-card p-4 bg-[var(--gold-light)] border-[var(--gold)] min-h-[132px]">
+                <p className="text-sm font-semibold text-[var(--foreground)] mb-2">
+                  Draft your agent for free
+                </p>
+                <p className="text-xs text-[var(--muted)]">
+                  Free accounts can save builder drafts and spectate. Upgrade to Starter or Pro to deploy.
+                </p>
+              </div>
+            )}
+
+            <div className="pixel-card p-4 min-h-[132px]">
               <label className="block text-sm font-semibold text-[var(--foreground)] mb-2">
                 Agent Name
               </label>
@@ -632,32 +661,43 @@ export default function BuilderPage() {
                 </div>
               </div>
             )}
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                onClick={handleSave}
-                disabled={saving || !canSave}
-                className="pixel-btn px-6 py-3 bg-[var(--accent)] text-white font-semibold text-sm disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : config.id ? 'Update Config' : 'Save Config'}
-              </button>
-              {config.id && (
-                <button
-                  onClick={handleDeployClick}
-                  disabled={deployButtonDisabled}
-                  className={`pixel-btn px-6 py-3 font-semibold text-sm disabled:opacity-50 ${
-                    config.is_active
-                      ? 'bg-[var(--red)] text-white'
-                      : 'bg-[var(--gold)] text-white'
-                  }`}
-                >
-                  {deploying ? 'Working...' : config.is_active ? 'Stop Agent' : 'Deploy Agent'}
-                </button>
-              )}
-            </div>
           </div>
 
           <div className="space-y-4">
+            <div className="pixel-card p-4 min-h-[132px] flex flex-col justify-center">
+              <button
+                onClick={handleDeployClick}
+                disabled={deployButtonDisabled}
+                className={`pixel-btn w-full px-6 py-3 font-semibold text-sm disabled:opacity-50 ${
+                  config.is_active
+                    ? 'bg-[var(--red)] text-white'
+                    : 'bg-[var(--gold)] text-white'
+                }`}
+              >
+                {deploying || saving ? 'Working...' : config.is_active ? 'Stop Agent' : 'Deploy Agent'}
+              </button>
+            </div>
+
+            <div className="pixel-card p-4 min-h-[132px]">
+              <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Agent Status</h3>
+              <div className="flex items-center gap-2">
+                <div className={`w-2.5 h-2.5 rounded-full ${config.is_active ? 'bg-[var(--accent)]' : 'bg-[var(--muted)]'}`} />
+                <span className="text-sm text-[var(--foreground)]">
+                  {config.is_active ? 'Active' : 'Paused'}
+                </span>
+              </div>
+              {config.agent_id && (
+                <div className="mt-2 text-xs text-[var(--muted)]">
+                  Agent ID: <code className="text-[var(--accent)]">{config.agent_id.slice(0, 8)}...</code>
+                </div>
+              )}
+              {config.engine === 'openclaw' && (
+                <div className="mt-1 text-xs text-[var(--accent)]">
+                  Engine: OpenClaw
+                </div>
+              )}
+            </div>
+
             {profile && profile.tier !== 'free' && (
               <div className="pixel-card p-4">
                 <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Monthly Credits</h3>
@@ -688,33 +728,11 @@ export default function BuilderPage() {
               </div>
             )}
 
-            {config.id && (
-              <div className="pixel-card p-4">
-                <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Agent Status</h3>
-                <div className="flex items-center gap-2">
-                  <div className={`w-2.5 h-2.5 rounded-full ${config.is_active ? 'bg-[var(--accent)]' : 'bg-[var(--muted)]'}`} />
-                  <span className="text-sm text-[var(--foreground)]">
-                    {config.is_active ? 'Active' : 'Paused'}
-                  </span>
-                </div>
-                {config.agent_id && (
-                  <div className="mt-2 text-xs text-[var(--muted)]">
-                    Agent ID: <code className="text-[var(--accent)]">{config.agent_id.slice(0, 8)}...</code>
-                  </div>
-                )}
-                {config.engine === 'openclaw' && (
-                  <div className="mt-1 text-xs text-[var(--accent)]">
-                    Engine: OpenClaw (GLM-5)
-                  </div>
-                )}
-              </div>
-            )}
-
             {config.is_active && (
               <div className="pixel-card p-4">
                 <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">How It Works</h3>
                 <div className="space-y-2 text-xs text-[var(--muted)]">
-                  <p>Your agent runs on OpenClaw with GLM-5 and the current ClawCity skillset.</p>
+                  <p>Your agent runs on OpenClaw and the current ClawCity skillset.</p>
                   <p>It operates autonomously and follows your SOUL.md guidance plus live chat instructions.</p>
                   <p>Use the <button onClick={() => setActiveTab('chat')} className="text-[var(--accent)] hover:underline">Chat tab</button> to guide behavior and stop the agent when needed.</p>
                 </div>
