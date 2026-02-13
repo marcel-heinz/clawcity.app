@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 import { generateApiKey, hashToken } from '@/lib/game-logic';
 import { WORLD_SIZE, STARTING_GOLD, STARTING_FOOD } from '@/lib/types';
 import { provisionAgent, deprovisionAgent, updateAgent, isOpenClawConfigured } from '@/lib/openclaw';
+import { generateSoulMarkdown } from '@/lib/agent-soul';
 import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
@@ -159,6 +160,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to resolve agent API key for provisioning' }, { status: 500 });
     }
 
+    const soulMd =
+      typeof config.soul_md === 'string' && config.soul_md.trim()
+        ? config.soul_md
+        : generateSoulMarkdown(
+            config.agent_name,
+            config.personality_preset,
+            config.custom_instructions
+          );
+
     const openclawResult = await provisionAgent({
       agentId: config_id, // Use config ID as the OpenClaw agent ID
       agentName: config.agent_name,
@@ -169,6 +179,7 @@ export async function POST(request: NextRequest) {
       strategyAggression: config.strategy_aggression ?? 50,
       strategySocial: config.strategy_social ?? 50,
       customInstructions: config.custom_instructions || '',
+      soulMd,
     });
 
     if (!openclawResult.success) {
@@ -252,6 +263,15 @@ export async function PUT(request: NextRequest) {
 
     // Sync personality updates to OpenClaw
     if (isOpenClawConfigured() && body.is_active) {
+      const soulMd =
+        typeof body.soul_md === 'string' && body.soul_md.trim()
+          ? body.soul_md
+          : generateSoulMarkdown(
+              body.agent_name || '',
+              body.personality_preset,
+              body.custom_instructions
+            );
+
       await updateAgent(configId, {
         agentName: body.agent_name,
         personalityPreset: body.personality_preset,
@@ -260,6 +280,7 @@ export async function PUT(request: NextRequest) {
         strategyAggression: body.strategy_aggression,
         strategySocial: body.strategy_social,
         customInstructions: body.custom_instructions,
+        soulMd,
       });
     }
 

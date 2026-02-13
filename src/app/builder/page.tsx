@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { generateSoulMarkdown } from '@/lib/agent-soul';
 
 const PERSONALITY_PRESETS = {
   explorer: { exploration: 80, trading: 30, aggression: 20, social: 40, label: 'Explorer' },
@@ -15,7 +16,10 @@ const PERSONALITY_PRESETS = {
   custom: { exploration: 50, trading: 50, aggression: 50, social: 50, label: 'Custom' },
 } as const;
 
+const SOUL_MAX_LENGTH = 8000;
+
 type Preset = keyof typeof PERSONALITY_PRESETS;
+type PaidTier = 'starter' | 'pro';
 
 interface AgentConfig {
   id?: string;
@@ -26,6 +30,8 @@ interface AgentConfig {
   strategy_aggression: number;
   strategy_social: number;
   custom_instructions: string;
+  soul_md: string;
+  builder_version?: number;
   is_active: boolean;
   agent_id: string | null;
   engine?: string;
@@ -45,6 +51,12 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+function normalizePreset(value?: string | null): Preset {
+  if (!value) return 'custom';
+  const normalized = value.toLowerCase() as Preset;
+  return normalized in PERSONALITY_PRESETS ? normalized : 'custom';
+}
+
 export default function BuilderPage() {
   const { user } = useAuth();
   const [config, setConfig] = useState<AgentConfig>({
@@ -55,6 +67,7 @@ export default function BuilderPage() {
     strategy_aggression: 20,
     strategy_social: 40,
     custom_instructions: '',
+    soul_md: generateSoulMarkdown('', 'explorer', ''),
     is_active: false,
     agent_id: null,
   });
@@ -62,6 +75,9 @@ export default function BuilderPage() {
   const [saving, setSaving] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<Preset>('explorer');
+  const [showUpgradePanel, setShowUpgradePanel] = useState(false);
+  const [upgradeLoading, setUpgradeLoading] = useState<PaidTier | null>(null);
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -69,12 +85,52 @@ export default function BuilderPage() {
   const [activeTab, setActiveTab] = useState<'config' | 'chat'>('config');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  const isFreeTier = profile?.tier === 'free';
+  const soulTooLong = config.soul_md.length > SOUL_MAX_LENGTH;
+  const canSave = !!config.agent_name.trim() && !!config.soul_md.trim() && !soulTooLong;
+
+  const canDeployPaid = useMemo(() => {
+    return Boolean(
+      config.id &&
+      config.agent_name.trim() &&
+      config.soul_md.trim() &&
+      profile &&
+      profile.tier !== 'free' &&
+      !soulTooLong
+    );
+  }, [config.id, config.agent_name, config.soul_md, profile, soulTooLong]);
+
+  const deployButtonDisabled = useMemo(() => {
+    return Boolean(
+      deploying ||
+      !config.id ||
+      !config.agent_name.trim() ||
+      !config.soul_md.trim() ||
+      soulTooLong
+    );
+  }, [config.id, config.agent_name, config.soul_md, deploying, soulTooLong]);
+
   const fetchConfig = useCallback(async () => {
     try {
       const res = await fetch('/api/builder/config');
       const data = await res.json();
       if (data.config) {
-        setConfig(data.config);
+        const preset = normalizePreset(data.config.personality_preset);
+        const soul =
+          typeof data.config.soul_md === 'string' && data.config.soul_md.trim()
+            ? data.config.soul_md
+            : generateSoulMarkdown(
+                data.config.agent_name || '',
+                data.config.personality_preset,
+                data.config.custom_instructions
+              );
+
+        setConfig({
+          ...data.config,
+          personality_preset: preset,
+          soul_md: soul,
+        });
+        setSelectedTemplate(preset);
       }
       if (data.profile) {
         setProfile(data.profile);
@@ -88,13 +144,20 @@ export default function BuilderPage() {
     fetchConfig();
   }, [fetchConfig]);
 
+  useEffect(() => {
+    if (!isFreeTier) {
+      setShowUpgradePanel(false);
+    }
+  }, [isFreeTier]);
+
   // Auto-scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
-  const handlePresetChange = (preset: Preset) => {
+  const handleTemplateSelect = (preset: Preset) => {
     const values = PERSONALITY_PRESETS[preset];
+    setSelectedTemplate(preset);
     setConfig((prev) => ({
       ...prev,
       personality_preset: preset,
@@ -105,15 +168,20 @@ export default function BuilderPage() {
     }));
   };
 
-  const handleSliderChange = (key: string, value: number) => {
+  const handleResetSoulFromTemplate = () => {
     setConfig((prev) => ({
       ...prev,
-      [key]: value,
-      personality_preset: 'custom' as Preset,
+      soul_md: generateSoulMarkdown(prev.agent_name, selectedTemplate, prev.custom_instructions),
     }));
+    setMessage({ type: 'success', text: 'SOUL.md regenerated from selected template.' });
   };
 
   const handleSave = async () => {
+    if (!canSave) {
+      setMessage({ type: 'error', text: 'Agent name and SOUL.md are required.' });
+      return;
+    }
+
     setSaving(true);
     setMessage(null);
     try {
@@ -125,16 +193,28 @@ export default function BuilderPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setConfig(data.config);
-        setMessage({ type: 'success', text: 'Configuration saved!' });
+        const preset = normalizePreset(data.config.personality_preset);
+        setConfig((prev) => ({
+          ...prev,
+          ...data.config,
+          personality_preset: preset,
+          soul_md:
+            typeof data.config.soul_md === 'string' && data.config.soul_md.trim()
+              ? data.config.soul_md
+              : prev.soul_md,
+        }));
+        setSelectedTemplate(preset);
+        setMessage({ type: 'success', text: 'Configuration saved.' });
 
-        // Sync personality to OpenClaw if agent is active
+        // Sync to OpenClaw if agent is active
         if (data.config.is_active) {
           fetch('/api/builder/deploy', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...data.config, config_id: data.config.id }),
-          }).catch(() => {/* non-critical */});
+          }).catch(() => {
+            // non-critical
+          });
         }
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to save' });
@@ -146,13 +226,14 @@ export default function BuilderPage() {
     }
   };
 
-  const handleDeploy = async () => {
+  const stopAgent = async (fromChat: boolean) => {
+    if (!config.id) return;
+
     setDeploying(true);
     setMessage(null);
     try {
-      const isActive = config.is_active;
       const res = await fetch('/api/builder/deploy', {
-        method: isActive ? 'DELETE' : 'POST',
+        method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ config_id: config.id }),
       });
@@ -160,21 +241,56 @@ export default function BuilderPage() {
       if (data.success) {
         setConfig((prev) => ({
           ...prev,
-          is_active: !isActive,
+          is_active: false,
+        }));
+        setMessage({ type: 'success', text: 'Agent stopped.' });
+        if (fromChat) {
+          setActiveTab('config');
+          setChatSending(false);
+        }
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to stop agent' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to stop agent' });
+    } finally {
+      setDeploying(false);
+    }
+  };
+
+  const deployAgent = async () => {
+    if (!canDeployPaid || !config.id) {
+      setMessage({ type: 'error', text: 'Save a valid SOUL.md config before deploying.' });
+      return;
+    }
+
+    setDeploying(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/builder/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config_id: config.id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setConfig((prev) => ({
+          ...prev,
+          is_active: true,
           agent_id: data.agent_id || prev.agent_id,
           engine: data.engine || prev.engine,
         }));
-        if (!isActive && data.engine === 'openclaw') {
-          setMessage({ type: 'success', text: 'Agent deployed with OpenClaw! You can now chat with your agent.' });
+        if (data.engine === 'openclaw') {
+          setMessage({ type: 'success', text: 'Agent deployed with OpenClaw. You can now chat with your agent.' });
           setActiveTab('chat');
           setChatMessages([{
             id: 'welcome',
             role: 'assistant',
-            content: `Hello! I'm ${config.agent_name}, your AI agent in ClawCity. I'm now active and will autonomously play the game based on your configured strategy. You can talk to me here to give me instructions, ask about my status, or adjust my strategy. What would you like me to do?`,
+            content: `Hello! I'm ${config.agent_name}, now active in ClawCity. I will follow your SOUL.md behavior and ongoing instructions from this chat.`,
             timestamp: new Date(),
           }]);
         } else {
-          setMessage({ type: 'success', text: isActive ? 'Agent stopped' : 'Agent deployed!' });
+          setMessage({ type: 'success', text: 'Agent deployed.' });
         }
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to deploy' });
@@ -186,8 +302,58 @@ export default function BuilderPage() {
     }
   };
 
+  const handleDeployClick = async () => {
+    if (deployButtonDisabled) return;
+
+    if (config.is_active) {
+      await stopAgent(false);
+      return;
+    }
+
+    if (isFreeTier) {
+      setShowUpgradePanel((prev) => !prev);
+      return;
+    }
+
+    await deployAgent();
+  };
+
+  const handleChatStop = async () => {
+    const confirmed = window.confirm(
+      'Stop this agent now? It will pause autonomous play until you deploy it again.'
+    );
+    if (!confirmed) return;
+    await stopAgent(true);
+  };
+
+  const handleUpgradeCheckout = async (tier: PaidTier) => {
+    if (!user) {
+      window.location.href = '/auth/login?redirect=/builder';
+      return;
+    }
+
+    setUpgradeLoading(tier);
+    try {
+      const res = await fetch('/api/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to start checkout' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to start checkout' });
+    } finally {
+      setUpgradeLoading(null);
+    }
+  };
+
   const handleChatSend = async () => {
-    if (!chatInput.trim() || chatSending) return;
+    if (!chatInput.trim() || chatSending || !config.is_active) return;
 
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -229,31 +395,12 @@ export default function BuilderPage() {
     }
   };
 
-  const buildPromptPreview = () => {
-    const lines = [
-      `You are "${config.agent_name || 'Unnamed Agent'}", an AI agent in ClawCity.`,
-      '',
-      `Personality: ${PERSONALITY_PRESETS[config.personality_preset]?.label || 'Custom'}`,
-      `- Exploration drive: ${config.strategy_exploration}%`,
-      `- Trading focus: ${config.strategy_trading}%`,
-      `- Aggression level: ${config.strategy_aggression}%`,
-      `- Social activity: ${config.strategy_social}%`,
-    ];
-    if (config.custom_instructions) {
-      lines.push('', `Custom instructions: ${config.custom_instructions}`);
-    }
-    return lines.join('\n');
-  };
-
-  const canDeploy = config.id && config.agent_name && profile && profile.tier !== 'free';
-
   return (
     <main className="min-h-screen p-4 md:p-6 max-w-[1200px] mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-[var(--foreground)] mb-1">Agent Builder</h1>
         <p className="text-sm text-[var(--muted)]">
-          Configure and deploy your AI agent. Powered by OpenClaw &mdash; your agent understands
-          all 31 game actions natively and plays autonomously.
+          Configure and deploy your AI agent. Powered by OpenClaw with the current ClawCity skillset.
         </p>
       </div>
 
@@ -267,18 +414,14 @@ export default function BuilderPage() {
         </div>
       )}
 
-      {/* Tier gate */}
-      {profile && profile.tier === 'free' && (
+      {isFreeTier && (
         <div className="mb-6 pixel-card p-4 bg-[var(--gold-light)] border-[var(--gold)]">
           <p className="text-sm font-semibold text-[var(--foreground)] mb-2">
-            Subscribe to deploy an agent
+            Draft your agent for free
           </p>
-          <p className="text-xs text-[var(--muted)] mb-3">
-            Free accounts can spectate. Upgrade to Starter ($19/mo) or Pro ($49/mo) to build and deploy your own AI agent.
+          <p className="text-xs text-[var(--muted)]">
+            Free accounts can save builder drafts and spectate. Upgrade to Starter or Pro to deploy.
           </p>
-          <Link href="/pricing" className="pixel-btn px-4 py-2 bg-[var(--gold)] text-white text-sm font-semibold inline-block">
-            View Pricing
-          </Link>
         </div>
       )}
 
@@ -319,16 +462,23 @@ export default function BuilderPage() {
             <span className="text-xs text-[var(--muted)] ml-auto">
               Powered by OpenClaw
             </span>
+            <button
+              onClick={handleChatStop}
+              disabled={deploying}
+              className="pixel-btn px-3 py-1.5 bg-[var(--red)] text-white text-xs font-semibold disabled:opacity-50"
+            >
+              {deploying ? 'Stopping...' : 'Stop Agent'}
+            </button>
           </div>
 
           {/* Messages */}
           <div className="bg-[var(--surface-alt)] border-2 border-[var(--border)] p-3 h-[400px] overflow-y-auto mb-3 space-y-3">
             {chatMessages.length === 0 && (
               <div className="text-center text-xs text-[var(--muted)] py-8">
-                <p className="mb-2">Your agent is active and playing autonomously.</p>
-                <p>Send a message to give instructions or ask about game status.</p>
+                <p className="mb-2">Your agent is active and operating autonomously.</p>
+                <p>Send a message to give instructions or ask about current status.</p>
                 <div className="mt-4 flex flex-wrap gap-2 justify-center">
-                  {['Check my status', 'What should I do next?', 'Move north and gather resources'].map((suggestion) => (
+                  {['Check my status', 'What should I prioritize?', 'Move north and gather resources'].map((suggestion) => (
                     <button
                       key={suggestion}
                       onClick={() => setChatInput(suggestion)}
@@ -399,11 +549,11 @@ export default function BuilderPage() {
               }}
               placeholder="Tell your agent what to do..."
               className="pixel-input flex-1"
-              disabled={chatSending}
+              disabled={chatSending || !config.is_active}
             />
             <button
               onClick={handleChatSend}
-              disabled={chatSending || !chatInput.trim()}
+              disabled={chatSending || !chatInput.trim() || !config.is_active}
               className="pixel-btn px-4 py-2 bg-[var(--accent)] text-white text-sm font-semibold disabled:opacity-50"
             >
               Send
@@ -432,18 +582,18 @@ export default function BuilderPage() {
               />
             </div>
 
-            {/* Personality Preset */}
+            {/* Behavior Template */}
             <div className="pixel-card p-4">
               <label className="block text-sm font-semibold text-[var(--foreground)] mb-3">
-                Personality Preset
+                Behavior Template <span className="text-[var(--muted)] font-normal">(optional scaffold)</span>
               </label>
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                 {(Object.entries(PERSONALITY_PRESETS) as [Preset, typeof PERSONALITY_PRESETS[Preset]][]).map(([key, preset]) => (
                   <button
                     key={key}
-                    onClick={() => handlePresetChange(key)}
+                    onClick={() => handleTemplateSelect(key)}
                     className={`px-3 py-2 text-xs font-semibold border-2 transition-all ${
-                      config.personality_preset === key
+                      selectedTemplate === key
                         ? 'bg-[var(--accent)] text-white border-[var(--foreground)] shadow-[2px_2px_0_var(--foreground)]'
                         : 'bg-[var(--surface)] text-[var(--foreground)] border-[var(--border)] hover:border-[var(--accent)]'
                     }`}
@@ -452,68 +602,87 @@ export default function BuilderPage() {
                   </button>
                 ))}
               </div>
+              <p className="text-xs text-[var(--muted)] mt-3">
+                Template selection does not overwrite your SOUL.md until you click reset.
+              </p>
             </div>
 
-            {/* Strategy Sliders */}
+            {/* SOUL.md */}
             <div className="pixel-card p-4">
-              <h3 className="text-sm font-semibold text-[var(--foreground)] mb-4">Strategy Sliders</h3>
-              <div className="space-y-4">
-                {[
-                  { key: 'strategy_exploration', label: 'Exploration', color: '#2d8f4e' },
-                  { key: 'strategy_trading', label: 'Trading', color: '#d4a017' },
-                  { key: 'strategy_aggression', label: 'Aggression', color: '#c94a4a' },
-                  { key: 'strategy_social', label: 'Social Activity', color: '#4a7ec9' },
-                ].map(({ key, label, color }) => (
-                  <div key={key}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="font-medium text-[var(--foreground)]">{label}</span>
-                      <span className="text-[var(--muted)]">{config[key as keyof AgentConfig] as number}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={config[key as keyof AgentConfig] as number}
-                      onChange={(e) => handleSliderChange(key, parseInt(e.target.value))}
-                      className="pixel-slider w-full"
-                      style={{ '--slider-color': color } as React.CSSProperties}
-                    />
-                  </div>
-                ))}
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <label className="text-sm font-semibold text-[var(--foreground)]">
+                  SOUL.md
+                </label>
+                <span className="text-xs text-[var(--muted)]">
+                  Primary behavior source used for deployment
+                </span>
+                <button
+                  onClick={handleResetSoulFromTemplate}
+                  className="ml-auto text-xs px-3 py-1.5 border-2 border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)]"
+                >
+                  Reset from Template
+                </button>
               </div>
-            </div>
 
-            {/* Custom Instructions */}
-            <div className="pixel-card p-4">
-              <label className="block text-sm font-semibold text-[var(--foreground)] mb-2">
-                Custom Instructions <span className="text-[var(--muted)] font-normal">(optional)</span>
-              </label>
               <textarea
-                value={config.custom_instructions}
-                onChange={(e) => setConfig((prev) => ({ ...prev, custom_instructions: e.target.value }))}
-                placeholder="Give your agent specific goals or rules. E.g., 'Focus on mountain territories' or 'Always accept trades involving gold'..."
-                rows={4}
-                maxLength={500}
-                className="pixel-input w-full resize-none"
+                value={config.soul_md}
+                onChange={(e) => setConfig((prev) => ({ ...prev, soul_md: e.target.value }))}
+                placeholder="# AgentName..."
+                rows={16}
+                className="pixel-input w-full resize-y font-mono text-xs"
               />
-              <div className="text-xs text-[var(--muted)] mt-1 text-right">
-                {config.custom_instructions.length}/500
+              <div className={`text-xs mt-1 text-right ${soulTooLong ? 'text-[var(--red)]' : 'text-[var(--muted)]'}`}>
+                {config.soul_md.length}/{SOUL_MAX_LENGTH}
               </div>
             </div>
+
+            {/* Inline upgrade panel for free tier */}
+            {isFreeTier && showUpgradePanel && (
+              <div className="pixel-card p-4 border-[var(--gold)] bg-[var(--gold-light)]">
+                <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Upgrade to Deploy</h3>
+                <p className="text-xs text-[var(--muted)] mb-3">
+                  Drafts are saved on Free. Choose a paid plan to deploy and run your agent.
+                </p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {[
+                    { tier: 'starter' as const, name: 'Starter', price: '$19/mo', decisions: '~200 decisions/day' },
+                    { tier: 'pro' as const, name: 'Pro', price: '$49/mo', decisions: '~800 decisions/day' },
+                  ].map((plan) => (
+                    <div key={plan.tier} className="border-2 border-[var(--gold)] bg-[var(--surface)] p-3">
+                      <p className="text-sm font-semibold text-[var(--foreground)]">{plan.name}</p>
+                      <p className="text-xs text-[var(--muted)] mb-2">{plan.price}</p>
+                      <p className="text-xs text-[var(--muted)] mb-3">{plan.decisions}</p>
+                      <button
+                        onClick={() => handleUpgradeCheckout(plan.tier)}
+                        disabled={upgradeLoading === plan.tier}
+                        className="pixel-btn w-full px-3 py-2 bg-[var(--gold)] text-white text-xs font-semibold disabled:opacity-50"
+                      >
+                        {upgradeLoading === plan.tier ? 'Loading...' : `Choose ${plan.name}`}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3">
+                  <Link href="/pricing" className="text-xs text-[var(--accent)] hover:underline">
+                    Compare plan details
+                  </Link>
+                </div>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={handleSave}
-                disabled={saving || !config.agent_name}
+                disabled={saving || !canSave}
                 className="pixel-btn px-6 py-3 bg-[var(--accent)] text-white font-semibold text-sm disabled:opacity-50"
               >
                 {saving ? 'Saving...' : config.id ? 'Update Config' : 'Save Config'}
               </button>
               {config.id && (
                 <button
-                  onClick={handleDeploy}
-                  disabled={deploying || !canDeploy}
+                  onClick={handleDeployClick}
+                  disabled={deployButtonDisabled}
                   className={`pixel-btn px-6 py-3 font-semibold text-sm disabled:opacity-50 ${
                     config.is_active
                       ? 'bg-[var(--red)] text-white'
@@ -549,7 +718,7 @@ export default function BuilderPage() {
                 <div className="mt-2 text-xs text-[var(--muted)]">
                   Plan: <span className="font-semibold text-[var(--foreground)] capitalize">{profile.tier}</span>
                   {' '}&middot;{' '}
-                  <Link href="/pricing" className="text-[var(--accent)] hover:underline">Upgrade</Link>
+                  <span>Max agents: {profile.max_agents}</span>
                 </div>
               </div>
             )}
@@ -582,21 +751,22 @@ export default function BuilderPage() {
               <div className="pixel-card p-4">
                 <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">How It Works</h3>
                 <div className="space-y-2 text-xs text-[var(--muted)]">
-                  <p>Your agent is powered by OpenClaw and understands all 31 game actions natively.</p>
-                  <p>Every 30 minutes, it automatically checks game state and takes actions based on your personality and strategy settings.</p>
-                  <p>Switch to the <button onClick={() => setActiveTab('chat')} className="text-[var(--accent)] hover:underline">Chat tab</button> to give your agent live instructions or ask questions.</p>
+                  <p>Your agent runs on OpenClaw with the current ClawCity skillset.</p>
+                  <p>It operates autonomously and follows your SOUL.md guidance plus live chat instructions.</p>
+                  <p>Use the <button onClick={() => setActiveTab('chat')} className="text-[var(--accent)] hover:underline">Chat tab</button> to guide behavior and stop the agent when needed.</p>
                 </div>
               </div>
             )}
 
-            {/* Prompt Preview */}
+            {/* SOUL Preview */}
             <div className="pixel-card p-4">
-              <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Prompt Preview</h3>
-              <pre className="text-xs text-[var(--muted)] whitespace-pre-wrap bg-[var(--surface-alt)] p-3 border-2 border-[var(--border)] max-h-[200px] overflow-y-auto">
-                {buildPromptPreview()}
-              </pre>
+              <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">SOUL Preview</h3>
+              <div className="text-xs text-[var(--foreground)] whitespace-pre-wrap bg-[var(--surface-alt)] p-3 border-2 border-[var(--border)] max-h-[260px] overflow-y-auto break-words [&_h1]:text-sm [&_h1]:font-bold [&_h1]:mb-1 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:mb-1 [&_p]:my-1 [&_ul]:pl-4 [&_ul]:list-disc [&_code]:bg-black/20 [&_code]:px-1 [&_code]:rounded">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {config.soul_md || '*SOUL.md is empty*'}
+                </ReactMarkdown>
+              </div>
             </div>
-
           </div>
         </div>
       )}

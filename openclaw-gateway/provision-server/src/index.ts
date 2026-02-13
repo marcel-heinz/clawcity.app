@@ -26,6 +26,7 @@ interface ProvisionRequest {
   strategyAggression: number;
   strategySocial: number;
   customInstructions: string;
+  soulMd?: string;
   model?: string; // Optional LLM model override
 }
 
@@ -103,8 +104,11 @@ app.post('/api/provision', async (req, res) => {
     fs.mkdirSync(skillsDir, { recursive: true });
     fs.mkdirSync(sessionsDir, { recursive: true });
 
-    // Generate SOUL.md from personality
-    const soulMd = generateSoulMd(agentName, personalityPreset);
+    // Prefer user-provided SOUL.md, fallback to generated template.
+    const soulMd =
+      typeof body.soulMd === 'string' && body.soulMd.trim()
+        ? body.soulMd
+        : generateSoulMd(agentName, personalityPreset);
     fs.writeFileSync(path.join(workspaceDir, 'SOUL.md'), soulMd);
 
     // Generate AGENTS.md from strategy + instructions
@@ -180,8 +184,11 @@ app.put('/api/provision/:agentId', (req, res) => {
 
     const workspaceDir = path.join(agentDir, 'workspace');
 
-    // Update SOUL.md if personality changed
-    if (body.personalityPreset && body.agentName) {
+    // Update SOUL.md using explicit content if provided.
+    if (typeof body.soulMd === 'string' && body.soulMd.trim()) {
+      fs.writeFileSync(path.join(workspaceDir, 'SOUL.md'), body.soulMd);
+    } else if (body.personalityPreset && body.agentName) {
+      // Fallback to generated SOUL.md when only personality metadata is provided.
       const soulMd = generateSoulMd(body.agentName, body.personalityPreset);
       fs.writeFileSync(path.join(workspaceDir, 'SOUL.md'), soulMd);
     }
