@@ -89,6 +89,10 @@ export default function BuilderPage() {
   }, [config.agent_name, config.soul_md, profile, soulTooLong]);
 
   const deployButtonDisabled = useMemo(() => {
+    if (isFreeTier) {
+      return Boolean(deploying || saving);
+    }
+
     return Boolean(
       deploying ||
       saving ||
@@ -96,7 +100,7 @@ export default function BuilderPage() {
       !config.soul_md.trim() ||
       soulTooLong
     );
-  }, [config.agent_name, config.soul_md, deploying, saving, soulTooLong]);
+  }, [config.agent_name, config.soul_md, deploying, isFreeTier, saving, soulTooLong]);
 
   const fetchConfig = useCallback(async () => {
     try {
@@ -573,7 +577,7 @@ export default function BuilderPage() {
         <div className="grid lg:grid-cols-[1fr_360px] gap-6">
           <div className="space-y-6">
             {isFreeTier && (
-              <div className="pixel-card p-4 bg-[var(--gold-light)] border-[var(--gold)] min-h-[132px]">
+              <div className="pixel-card p-4 bg-[var(--gold-light)] border-[var(--gold)] h-[146px] flex flex-col justify-center">
                 <p className="text-sm font-semibold text-[var(--foreground)] mb-2">
                   Draft your agent for free
                 </p>
@@ -583,7 +587,7 @@ export default function BuilderPage() {
               </div>
             )}
 
-            <div className="pixel-card p-4 min-h-[132px]">
+            <div className="pixel-card p-4 h-[146px] flex flex-col justify-center">
               <label className="block text-sm font-semibold text-[var(--foreground)] mb-2">
                 Agent Name
               </label>
@@ -629,13 +633,30 @@ export default function BuilderPage() {
               </div>
             </div>
 
+          </div>
+
+          <div className="space-y-4">
+            <div className="pixel-card p-4 h-[146px] flex flex-col justify-center">
+              <button
+                onClick={handleDeployClick}
+                disabled={deployButtonDisabled}
+                className={`pixel-btn w-full px-6 py-3 font-semibold text-sm disabled:opacity-50 ${
+                  config.is_active
+                    ? 'bg-[var(--red)] text-white'
+                    : 'bg-[var(--gold)] text-white'
+                }`}
+              >
+                {deploying || saving ? 'Working...' : config.is_active ? 'Stop Agent' : 'Deploy Agent'}
+              </button>
+            </div>
+
             {isFreeTier && showUpgradePanel && (
               <div className="pixel-card p-4 border-[var(--gold)] bg-[var(--gold-light)]">
                 <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Upgrade to Deploy</h3>
                 <p className="text-xs text-[var(--muted)] mb-3">
-                  Drafts are saved on Free. Choose a paid plan to deploy and run your agent.
+                  Choose a paid plan to deploy and run your agent.
                 </p>
-                <div className="grid sm:grid-cols-2 gap-3">
+                <div className="grid gap-3">
                   {[
                     { tier: 'starter' as const, name: 'Starter', price: '$19/mo', credits: '2,500 credits/month' },
                     { tier: 'pro' as const, name: 'Pro', price: '$39/mo', credits: '6,000 credits/month' },
@@ -661,24 +682,8 @@ export default function BuilderPage() {
                 </div>
               </div>
             )}
-          </div>
 
-          <div className="space-y-4">
-            <div className="pixel-card p-4 min-h-[132px] flex flex-col justify-center">
-              <button
-                onClick={handleDeployClick}
-                disabled={deployButtonDisabled}
-                className={`pixel-btn w-full px-6 py-3 font-semibold text-sm disabled:opacity-50 ${
-                  config.is_active
-                    ? 'bg-[var(--red)] text-white'
-                    : 'bg-[var(--gold)] text-white'
-                }`}
-              >
-                {deploying || saving ? 'Working...' : config.is_active ? 'Stop Agent' : 'Deploy Agent'}
-              </button>
-            </div>
-
-            <div className="pixel-card p-4 min-h-[132px]">
+            <div className="pixel-card p-4 h-[146px]">
               <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Agent Status</h3>
               <div className="flex items-center gap-2">
                 <div className={`w-2.5 h-2.5 rounded-full ${config.is_active ? 'bg-[var(--accent)]' : 'bg-[var(--muted)]'}`} />
