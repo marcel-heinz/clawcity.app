@@ -14,7 +14,7 @@ export async function GET() {
     // Fetch user profile
     const { data: profile } = await supabase
       .from('users')
-      .select('tier, max_agents, max_decisions_per_day, decisions_used_today')
+      .select('tier, max_agents, monthly_credit_limit, credits_used, credits_cycle_end')
       .eq('id', user.id)
       .single();
 

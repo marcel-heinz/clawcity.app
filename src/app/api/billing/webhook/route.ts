@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getStripe, getTierFromPriceId } from '@/lib/stripe';
+import { getStripe, getTierFromPriceId, TIER_CONFIG, type Tier } from '@/lib/stripe';
 import { createServerClient } from '@/lib/supabase';
+
+function toIsoOrNull(unixSeconds?: number | null): string | null {
+  if (!unixSeconds || unixSeconds <= 0) return null;
+  return new Date(unixSeconds * 1000).toISOString();
+}
+
+function monthlyLimitForTier(tier: Tier): number {
+  return TIER_CONFIG[tier].monthlyCreditLimit ?? 0;
+}
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
@@ -32,12 +41,26 @@ export async function POST(request: NextRequest) {
         const tier = session.metadata?.tier;
 
         if (userId && tier && (tier === 'starter' || tier === 'pro')) {
+          let creditsCycleStart: string | null = null;
+          let creditsCycleEnd: string | null = null;
+          const subscriptionId = session.subscription as string | null;
+
+          if (subscriptionId) {
+            const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
+            creditsCycleStart = toIsoOrNull((subscription as { current_period_start?: number }).current_period_start);
+            creditsCycleEnd = toIsoOrNull((subscription as { current_period_end?: number }).current_period_end);
+          }
+
           await supabase
             .from('users')
             .update({
               tier,
               stripe_customer_id: session.customer as string,
-              stripe_subscription_id: session.subscription as string,
+              stripe_subscription_id: subscriptionId,
+              monthly_credit_limit: monthlyLimitForTier(tier),
+              credits_used: 0,
+              credits_cycle_start: creditsCycleStart,
+              credits_cycle_end: creditsCycleEnd,
             })
             .eq('id', userId);
         }
@@ -48,13 +71,38 @@ export async function POST(request: NextRequest) {
         const subscription = event.data.object;
         const customerId = subscription.customer as string;
         const priceId = subscription.items.data[0]?.price?.id;
+        const nextCycleStart = toIsoOrNull(subscription.current_period_start as number | null | undefined);
+        const nextCycleEnd = toIsoOrNull(subscription.current_period_end as number | null | undefined);
 
         if (priceId) {
           const tier = getTierFromPriceId(priceId);
           if (tier) {
+            const limit = monthlyLimitForTier(tier);
+            const { data: userRow } = await supabase
+              .from('users')
+              .select('id, credits_used, credits_cycle_end')
+              .eq('stripe_customer_id', customerId)
+              .single();
+
+            const previousCycleEndMs = userRow?.credits_cycle_end
+              ? Date.parse(userRow.credits_cycle_end)
+              : null;
+            const nextCycleEndMs = nextCycleEnd ? Date.parse(nextCycleEnd) : null;
+            const rolledToNewCycle = !!nextCycleEndMs && previousCycleEndMs !== nextCycleEndMs;
+
+            let creditsUsed = rolledToNewCycle ? 0 : (userRow?.credits_used || 0);
+            if (creditsUsed > limit) creditsUsed = limit;
+
             await supabase
               .from('users')
-              .update({ tier, stripe_subscription_id: subscription.id })
+              .update({
+                tier,
+                stripe_subscription_id: subscription.id,
+                monthly_credit_limit: limit,
+                credits_used: creditsUsed,
+                credits_cycle_start: nextCycleStart,
+                credits_cycle_end: nextCycleEnd,
+              })
               .eq('stripe_customer_id', customerId);
           }
         }
@@ -71,6 +119,10 @@ export async function POST(request: NextRequest) {
           .update({
             tier: 'free',
             stripe_subscription_id: null,
+            monthly_credit_limit: 0,
+            credits_used: 0,
+            credits_cycle_start: null,
+            credits_cycle_end: null,
           })
           .eq('stripe_customer_id', customerId);
 

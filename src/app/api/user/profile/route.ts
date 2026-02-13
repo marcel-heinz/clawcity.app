@@ -16,7 +16,7 @@ export async function GET() {
     // Fetch profile
     const { data: profile } = await supabase
       .from('users')
-      .select('tier, max_decisions_per_day, decisions_used_today, stripe_subscription_id')
+      .select('tier, monthly_credit_limit, credits_used, credits_cycle_start, credits_cycle_end, stripe_subscription_id')
       .eq('id', user.id)
       .single();
 

@@ -16,14 +16,14 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "openrouter/anthropic/claude-sonnet-4.5",
+        "primary": "openrouter/z-ai/glm-5",
         "fallbacks": [
           "openrouter/moonshotai/kimi-k2.5"
         ]
       },
       "models": {
-        "openrouter/anthropic/claude-sonnet-4.5": {
-          "alias": "sonnet",
+        "openrouter/z-ai/glm-5": {
+          "alias": "glm5",
           "params": { "cacheRetention": "short" }
         },
         "openrouter/moonshotai/kimi-k2.5": {
@@ -32,7 +32,7 @@
       },
       "heartbeat": {
         "every": "30m",
-        "model": "openrouter/moonshotai/kimi-k2.5",
+        "model": "openrouter/z-ai/glm-5",
         "target": "last",
         "activeHours": {
           "start": "00:00",

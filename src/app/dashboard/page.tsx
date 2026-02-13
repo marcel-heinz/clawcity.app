@@ -7,8 +7,10 @@ import Link from 'next/link';
 interface DashboardData {
   profile: {
     tier: string;
-    max_decisions_per_day: number;
-    decisions_used_today: number;
+    monthly_credit_limit: number;
+    credits_used: number;
+    credits_cycle_start: string | null;
+    credits_cycle_end: string | null;
     stripe_subscription_id: string | null;
   };
   config: {
@@ -78,6 +80,13 @@ export default function DashboardPage() {
     }
   };
 
+  const formatDate = (value: string | null | undefined): string => {
+    if (!value) return 'N/A';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'N/A';
+    return date.toLocaleDateString();
+  };
+
   if (loading) {
     return (
       <main className="min-h-screen p-4 md:p-6 max-w-[1200px] mx-auto">
@@ -133,18 +142,23 @@ export default function DashboardPage() {
           {data?.profile && data.profile.tier !== 'free' ? (
             <div>
               <div className="flex justify-between text-xs mb-1">
-                <span className="text-[var(--muted)]">Decisions today</span>
+                <span className="text-[var(--muted)]">Credits used this cycle</span>
                 <span className="font-semibold text-[var(--foreground)]">
-                  {data.profile.decisions_used_today} / {data.profile.max_decisions_per_day}
+                  {data.profile.credits_used} / {data.profile.monthly_credit_limit}
                 </span>
               </div>
               <div className="pixel-progress-track">
                 <div
                   className="pixel-progress-fill"
                   style={{
-                    width: `${Math.min(100, (data.profile.decisions_used_today / data.profile.max_decisions_per_day) * 100)}%`,
+                    width: data.profile.monthly_credit_limit > 0
+                      ? `${Math.min(100, (data.profile.credits_used / data.profile.monthly_credit_limit) * 100)}%`
+                      : '0%',
                   }}
                 />
+              </div>
+              <div className="mt-2 text-xs text-[var(--muted)]">
+                Cycle ends: {formatDate(data.profile.credits_cycle_end)}
               </div>
               {data.stats && (
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">

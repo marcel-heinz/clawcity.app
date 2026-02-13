@@ -11,6 +11,7 @@ export function Navbar() {
   const [isAboutDropdownOpen, setIsAboutDropdownOpen] = useState(false);
   const [isMobileAboutOpen, setIsMobileAboutOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
@@ -35,6 +36,10 @@ export function Navbar() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [user?.user_metadata?.avatar_url]);
 
   const navLinks = [
     { href: '/', label: 'Home' },
@@ -162,13 +167,14 @@ export function Navbar() {
                     onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                     className="flex items-center gap-2 px-3 py-1.5 border-2 border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-alt)] transition-colors"
                   >
-                    {user.user_metadata?.avatar_url ? (
+                    {user.user_metadata?.avatar_url && !avatarLoadFailed ? (
                       <Image
                         src={user.user_metadata.avatar_url}
                         alt=""
                         width={24}
                         height={24}
                         className="rounded-full"
+                        onError={() => setAvatarLoadFailed(true)}
                       />
                     ) : (
                       <div className="w-6 h-6 rounded-full bg-[var(--accent)] flex items-center justify-center text-white text-xs font-bold">

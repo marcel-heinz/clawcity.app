@@ -7,24 +7,13 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { generateSoulMarkdown } from '@/lib/agent-soul';
 
-const PERSONALITY_PRESETS = {
-  explorer: { exploration: 80, trading: 30, aggression: 20, social: 40, label: 'Explorer' },
-  trader: { exploration: 40, trading: 85, aggression: 10, social: 60, label: 'Trader' },
-  gatherer: { exploration: 50, trading: 40, aggression: 10, social: 20, label: 'Gatherer' },
-  social: { exploration: 40, trading: 50, aggression: 10, social: 90, label: 'Social' },
-  warrior: { exploration: 60, trading: 20, aggression: 90, social: 20, label: 'Warrior' },
-  custom: { exploration: 50, trading: 50, aggression: 50, social: 50, label: 'Custom' },
-} as const;
-
 const SOUL_MAX_LENGTH = 8000;
-
-type Preset = keyof typeof PERSONALITY_PRESETS;
 type PaidTier = 'starter' | 'pro';
 
 interface AgentConfig {
   id?: string;
   agent_name: string;
-  personality_preset: Preset;
+  personality_preset: string;
   strategy_exploration: number;
   strategy_trading: number;
   strategy_aggression: number;
@@ -40,8 +29,9 @@ interface AgentConfig {
 interface UserProfile {
   tier: string;
   max_agents: number;
-  max_decisions_per_day: number;
-  decisions_used_today: number;
+  monthly_credit_limit: number;
+  credits_used: number;
+  credits_cycle_end: string | null;
 }
 
 interface ChatMessage {
@@ -51,34 +41,34 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-function normalizePreset(value?: string | null): Preset {
-  if (!value) return 'custom';
-  const normalized = value.toLowerCase() as Preset;
-  return normalized in PERSONALITY_PRESETS ? normalized : 'custom';
+function formatCycleEnd(value: string | null | undefined): string {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleDateString();
 }
 
 export default function BuilderPage() {
   const { user } = useAuth();
   const [config, setConfig] = useState<AgentConfig>({
     agent_name: '',
-    personality_preset: 'explorer',
-    strategy_exploration: 80,
-    strategy_trading: 30,
-    strategy_aggression: 20,
-    strategy_social: 40,
+    personality_preset: 'custom',
+    strategy_exploration: 50,
+    strategy_trading: 50,
+    strategy_aggression: 50,
+    strategy_social: 50,
     custom_instructions: '',
-    soul_md: generateSoulMarkdown('', 'explorer', ''),
+    soul_md: generateSoulMarkdown('', 'custom', ''),
     is_active: false,
     agent_id: null,
   });
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [saving, setSaving] = useState(false);
   const [deploying, setDeploying] = useState(false);
+  const [generatingSoul, setGeneratingSoul] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<Preset>('explorer');
   const [showUpgradePanel, setShowUpgradePanel] = useState(false);
   const [upgradeLoading, setUpgradeLoading] = useState<PaidTier | null>(null);
-  // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
@@ -115,22 +105,17 @@ export default function BuilderPage() {
       const res = await fetch('/api/builder/config');
       const data = await res.json();
       if (data.config) {
-        const preset = normalizePreset(data.config.personality_preset);
-        const soul =
-          typeof data.config.soul_md === 'string' && data.config.soul_md.trim()
-            ? data.config.soul_md
-            : generateSoulMarkdown(
-                data.config.agent_name || '',
-                data.config.personality_preset,
-                data.config.custom_instructions
-              );
-
         setConfig({
           ...data.config,
-          personality_preset: preset,
-          soul_md: soul,
+          soul_md:
+            typeof data.config.soul_md === 'string' && data.config.soul_md.trim()
+              ? data.config.soul_md
+              : generateSoulMarkdown(
+                  data.config.agent_name || '',
+                  data.config.personality_preset,
+                  data.config.custom_instructions
+                ),
         });
-        setSelectedTemplate(preset);
       }
       if (data.profile) {
         setProfile(data.profile);
@@ -150,30 +135,54 @@ export default function BuilderPage() {
     }
   }, [isFreeTier]);
 
-  // Auto-scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
-  const handleTemplateSelect = (preset: Preset) => {
-    const values = PERSONALITY_PRESETS[preset];
-    setSelectedTemplate(preset);
-    setConfig((prev) => ({
-      ...prev,
-      personality_preset: preset,
-      strategy_exploration: values.exploration,
-      strategy_trading: values.trading,
-      strategy_aggression: values.aggression,
-      strategy_social: values.social,
-    }));
-  };
+  const handleGenerateSoul = async () => {
+    if (!config.agent_name.trim()) {
+      setMessage({ type: 'error', text: 'Enter an agent name before generating SOUL.md.' });
+      return;
+    }
 
-  const handleResetSoulFromTemplate = () => {
-    setConfig((prev) => ({
-      ...prev,
-      soul_md: generateSoulMarkdown(prev.agent_name, selectedTemplate, prev.custom_instructions),
-    }));
-    setMessage({ type: 'success', text: 'SOUL.md regenerated from selected template.' });
+    if (config.soul_md.trim()) {
+      const confirmed = window.confirm('Replace the current SOUL.md draft with a newly generated version?');
+      if (!confirmed) return;
+    }
+
+    setGeneratingSoul(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch('/api/builder/soul/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agent_name: config.agent_name,
+          operator_notes: config.custom_instructions || '',
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data?.soul_md) {
+        setMessage({ type: 'error', text: data.error || 'Failed to generate SOUL.md' });
+        return;
+      }
+
+      setConfig((prev) => ({ ...prev, soul_md: data.soul_md }));
+      if (data.fallback_used) {
+        setMessage({
+          type: 'error',
+          text: data.warning || 'SOUL.md generated from fallback template because GLM-5 was unavailable.',
+        });
+      } else {
+        setMessage({ type: 'success', text: 'SOUL.md generated with GLM-5.' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to generate SOUL.md' });
+    } finally {
+      setGeneratingSoul(false);
+    }
   };
 
   const handleSave = async () => {
@@ -193,20 +202,16 @@ export default function BuilderPage() {
       });
       const data = await res.json();
       if (data.success) {
-        const preset = normalizePreset(data.config.personality_preset);
         setConfig((prev) => ({
           ...prev,
           ...data.config,
-          personality_preset: preset,
           soul_md:
             typeof data.config.soul_md === 'string' && data.config.soul_md.trim()
               ? data.config.soul_md
               : prev.soul_md,
         }));
-        setSelectedTemplate(preset);
         setMessage({ type: 'success', text: 'Configuration saved.' });
 
-        // Sync to OpenClaw if agent is active
         if (data.config.is_active) {
           fetch('/api/builder/deploy', {
             method: 'PUT',
@@ -239,10 +244,7 @@ export default function BuilderPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setConfig((prev) => ({
-          ...prev,
-          is_active: false,
-        }));
+        setConfig((prev) => ({ ...prev, is_active: false }));
         setMessage({ type: 'success', text: 'Agent stopped.' });
         if (fromChat) {
           setActiveTab('config');
@@ -400,7 +402,7 @@ export default function BuilderPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-[var(--foreground)] mb-1">Agent Builder</h1>
         <p className="text-sm text-[var(--muted)]">
-          Configure and deploy your AI agent. Powered by OpenClaw with the current ClawCity skillset.
+          Configure and deploy your AI agent. Powered by OpenClaw with GLM-5.
         </p>
       </div>
 
@@ -425,7 +427,6 @@ export default function BuilderPage() {
         </div>
       )}
 
-      {/* Tab switcher (only show if agent is active) */}
       {config.is_active && (
         <div className="flex gap-1 mb-6">
           <button
@@ -451,7 +452,6 @@ export default function BuilderPage() {
         </div>
       )}
 
-      {/* Chat Panel */}
       {activeTab === 'chat' && config.is_active && (
         <div className="pixel-card p-4 mb-6">
           <div className="flex items-center gap-2 mb-4">
@@ -471,23 +471,11 @@ export default function BuilderPage() {
             </button>
           </div>
 
-          {/* Messages */}
           <div className="bg-[var(--surface-alt)] border-2 border-[var(--border)] p-3 h-[400px] overflow-y-auto mb-3 space-y-3">
             {chatMessages.length === 0 && (
               <div className="text-center text-xs text-[var(--muted)] py-8">
                 <p className="mb-2">Your agent is active and operating autonomously.</p>
                 <p>Send a message to give instructions or ask about current status.</p>
-                <div className="mt-4 flex flex-wrap gap-2 justify-center">
-                  {['Check my status', 'What should I prioritize?', 'Move north and gather resources'].map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      onClick={() => setChatInput(suggestion)}
-                      className="text-xs px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--accent)] transition-all"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
               </div>
             )}
 
@@ -535,7 +523,6 @@ export default function BuilderPage() {
             <div ref={chatEndRef} />
           </div>
 
-          {/* Input */}
           <div className="flex gap-2">
             <input
               type="text"
@@ -562,12 +549,9 @@ export default function BuilderPage() {
         </div>
       )}
 
-      {/* Config Panel (shown by default, or when config tab is active) */}
       {(activeTab === 'config' || !config.is_active) && (
         <div className="grid lg:grid-cols-[1fr_360px] gap-6">
-          {/* Left: Config Form */}
           <div className="space-y-6">
-            {/* Agent Name */}
             <div className="pixel-card p-4">
               <label className="block text-sm font-semibold text-[var(--foreground)] mb-2">
                 Agent Name
@@ -582,32 +566,6 @@ export default function BuilderPage() {
               />
             </div>
 
-            {/* Behavior Template */}
-            <div className="pixel-card p-4">
-              <label className="block text-sm font-semibold text-[var(--foreground)] mb-3">
-                Behavior Template <span className="text-[var(--muted)] font-normal">(optional scaffold)</span>
-              </label>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                {(Object.entries(PERSONALITY_PRESETS) as [Preset, typeof PERSONALITY_PRESETS[Preset]][]).map(([key, preset]) => (
-                  <button
-                    key={key}
-                    onClick={() => handleTemplateSelect(key)}
-                    className={`px-3 py-2 text-xs font-semibold border-2 transition-all ${
-                      selectedTemplate === key
-                        ? 'bg-[var(--accent)] text-white border-[var(--foreground)] shadow-[2px_2px_0_var(--foreground)]'
-                        : 'bg-[var(--surface)] text-[var(--foreground)] border-[var(--border)] hover:border-[var(--accent)]'
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-[var(--muted)] mt-3">
-                Template selection does not overwrite your SOUL.md until you click reset.
-              </p>
-            </div>
-
-            {/* SOUL.md */}
             <div className="pixel-card p-4">
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <label className="text-sm font-semibold text-[var(--foreground)]">
@@ -617,10 +575,11 @@ export default function BuilderPage() {
                   Primary behavior source used for deployment
                 </span>
                 <button
-                  onClick={handleResetSoulFromTemplate}
-                  className="ml-auto text-xs px-3 py-1.5 border-2 border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)]"
+                  onClick={handleGenerateSoul}
+                  disabled={generatingSoul || !config.agent_name.trim()}
+                  className="ml-auto text-xs px-3 py-1.5 border-2 border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)] disabled:opacity-50"
                 >
-                  Reset from Template
+                  {generatingSoul ? 'Generating...' : 'Generate SOUL.md'}
                 </button>
               </div>
 
@@ -636,7 +595,6 @@ export default function BuilderPage() {
               </div>
             </div>
 
-            {/* Inline upgrade panel for free tier */}
             {isFreeTier && showUpgradePanel && (
               <div className="pixel-card p-4 border-[var(--gold)] bg-[var(--gold-light)]">
                 <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Upgrade to Deploy</h3>
@@ -645,13 +603,13 @@ export default function BuilderPage() {
                 </p>
                 <div className="grid sm:grid-cols-2 gap-3">
                   {[
-                    { tier: 'starter' as const, name: 'Starter', price: '$19/mo', decisions: '~200 decisions/day' },
-                    { tier: 'pro' as const, name: 'Pro', price: '$49/mo', decisions: '~800 decisions/day' },
+                    { tier: 'starter' as const, name: 'Starter', price: '$19/mo', credits: '2,500 credits/month' },
+                    { tier: 'pro' as const, name: 'Pro', price: '$39/mo', credits: '6,000 credits/month' },
                   ].map((plan) => (
                     <div key={plan.tier} className="border-2 border-[var(--gold)] bg-[var(--surface)] p-3">
                       <p className="text-sm font-semibold text-[var(--foreground)]">{plan.name}</p>
                       <p className="text-xs text-[var(--muted)] mb-2">{plan.price}</p>
-                      <p className="text-xs text-[var(--muted)] mb-3">{plan.decisions}</p>
+                      <p className="text-xs text-[var(--muted)] mb-3">{plan.credits}</p>
                       <button
                         onClick={() => handleUpgradeCheckout(plan.tier)}
                         disabled={upgradeLoading === plan.tier}
@@ -670,7 +628,6 @@ export default function BuilderPage() {
               </div>
             )}
 
-            {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={handleSave}
@@ -695,23 +652,23 @@ export default function BuilderPage() {
             </div>
           </div>
 
-          {/* Right: Preview + Status */}
           <div className="space-y-4">
-            {/* Usage Meter */}
             {profile && profile.tier !== 'free' && (
               <div className="pixel-card p-4">
-                <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Daily Usage</h3>
+                <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Monthly Credits</h3>
                 <div className="flex justify-between text-xs mb-1">
-                  <span className="text-[var(--muted)]">Decisions today</span>
+                  <span className="text-[var(--muted)]">Used this billing cycle</span>
                   <span className="font-semibold text-[var(--foreground)]">
-                    {profile.decisions_used_today} / {profile.max_decisions_per_day}
+                    {profile.credits_used} / {profile.monthly_credit_limit}
                   </span>
                 </div>
                 <div className="pixel-progress-track">
                   <div
                     className="pixel-progress-fill"
                     style={{
-                      width: `${Math.min(100, (profile.decisions_used_today / profile.max_decisions_per_day) * 100)}%`,
+                      width: profile.monthly_credit_limit > 0
+                        ? `${Math.min(100, (profile.credits_used / profile.monthly_credit_limit) * 100)}%`
+                        : '0%',
                     }}
                   />
                 </div>
@@ -720,10 +677,12 @@ export default function BuilderPage() {
                   {' '}&middot;{' '}
                   <span>Max agents: {profile.max_agents}</span>
                 </div>
+                <div className="mt-1 text-xs text-[var(--muted)]">
+                  Cycle ends: {formatCycleEnd(profile.credits_cycle_end)}
+                </div>
               </div>
             )}
 
-            {/* Status */}
             {config.id && (
               <div className="pixel-card p-4">
                 <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Agent Status</h3>
@@ -740,33 +699,22 @@ export default function BuilderPage() {
                 )}
                 {config.engine === 'openclaw' && (
                   <div className="mt-1 text-xs text-[var(--accent)]">
-                    Engine: OpenClaw (autonomous)
+                    Engine: OpenClaw (GLM-5)
                   </div>
                 )}
               </div>
             )}
 
-            {/* How it works */}
             {config.is_active && (
               <div className="pixel-card p-4">
                 <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">How It Works</h3>
                 <div className="space-y-2 text-xs text-[var(--muted)]">
-                  <p>Your agent runs on OpenClaw with the current ClawCity skillset.</p>
+                  <p>Your agent runs on OpenClaw with GLM-5 and the current ClawCity skillset.</p>
                   <p>It operates autonomously and follows your SOUL.md guidance plus live chat instructions.</p>
                   <p>Use the <button onClick={() => setActiveTab('chat')} className="text-[var(--accent)] hover:underline">Chat tab</button> to guide behavior and stop the agent when needed.</p>
                 </div>
               </div>
             )}
-
-            {/* SOUL Preview */}
-            <div className="pixel-card p-4">
-              <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">SOUL Preview</h3>
-              <div className="text-xs text-[var(--foreground)] whitespace-pre-wrap bg-[var(--surface-alt)] p-3 border-2 border-[var(--border)] max-h-[260px] overflow-y-auto break-words [&_h1]:text-sm [&_h1]:font-bold [&_h1]:mb-1 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:mb-1 [&_p]:my-1 [&_ul]:pl-4 [&_ul]:list-disc [&_code]:bg-black/20 [&_code]:px-1 [&_code]:rounded">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {config.soul_md || '*SOUL.md is empty*'}
-                </ReactMarkdown>
-              </div>
-            </div>
           </div>
         </div>
       )}
