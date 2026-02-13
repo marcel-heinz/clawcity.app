@@ -1,14 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useAuth } from '@/components/AuthProvider';
-import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { generateSoulMarkdown } from '@/lib/agent-soul';
 
 const SOUL_MAX_LENGTH = 8000;
-type PaidTier = 'starter' | 'pro';
 
 interface AgentConfig {
   id?: string;
@@ -49,7 +46,6 @@ function formatCycleEnd(value: string | null | undefined): string {
 }
 
 export default function BuilderPage() {
-  const { user } = useAuth();
   const [config, setConfig] = useState<AgentConfig>({
     agent_name: '',
     personality_preset: 'custom',
@@ -67,8 +63,6 @@ export default function BuilderPage() {
   const [deploying, setDeploying] = useState(false);
   const [generatingSoul, setGeneratingSoul] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
-  const [showUpgradePanel, setShowUpgradePanel] = useState(false);
-  const [upgradeLoading, setUpgradeLoading] = useState<PaidTier | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
@@ -130,12 +124,6 @@ export default function BuilderPage() {
   useEffect(() => {
     fetchConfig();
   }, [fetchConfig]);
-
-  useEffect(() => {
-    if (!isFreeTier) {
-      setShowUpgradePanel(false);
-    }
-  }, [isFreeTier]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -346,7 +334,7 @@ export default function BuilderPage() {
     }
 
     if (isFreeTier) {
-      setShowUpgradePanel((prev) => !prev);
+      window.location.href = '/pricing?from=builder&plan=starter';
       return;
     }
 
@@ -359,32 +347,6 @@ export default function BuilderPage() {
     );
     if (!confirmed) return;
     await stopAgent(true);
-  };
-
-  const handleUpgradeCheckout = async (tier: PaidTier) => {
-    if (!user) {
-      window.location.href = '/auth/login?redirect=/builder';
-      return;
-    }
-
-    setUpgradeLoading(tier);
-    try {
-      const res = await fetch('/api/billing/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tier }),
-      });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        setMessage({ type: 'error', text: data.error || 'Failed to start checkout' });
-      }
-    } catch {
-      setMessage({ type: 'error', text: 'Failed to start checkout' });
-    } finally {
-      setUpgradeLoading(null);
-    }
   };
 
   const handleChatSend = async () => {
@@ -635,7 +597,7 @@ export default function BuilderPage() {
 
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="pixel-card p-4 h-[146px] flex flex-col justify-center">
               <button
                 onClick={handleDeployClick}
@@ -649,39 +611,6 @@ export default function BuilderPage() {
                 {deploying || saving ? 'Working...' : config.is_active ? 'Stop Agent' : 'Deploy Agent'}
               </button>
             </div>
-
-            {isFreeTier && showUpgradePanel && (
-              <div className="pixel-card p-4 border-[var(--gold)] bg-[var(--gold-light)]">
-                <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Upgrade to Deploy</h3>
-                <p className="text-xs text-[var(--muted)] mb-3">
-                  Choose a paid plan to deploy and run your agent.
-                </p>
-                <div className="grid gap-3">
-                  {[
-                    { tier: 'starter' as const, name: 'Starter', price: '$19/mo', credits: '2,500 credits/month' },
-                    { tier: 'pro' as const, name: 'Pro', price: '$39/mo', credits: '6,000 credits/month' },
-                  ].map((plan) => (
-                    <div key={plan.tier} className="border-2 border-[var(--gold)] bg-[var(--surface)] p-3">
-                      <p className="text-sm font-semibold text-[var(--foreground)]">{plan.name}</p>
-                      <p className="text-xs text-[var(--muted)] mb-2">{plan.price}</p>
-                      <p className="text-xs text-[var(--muted)] mb-3">{plan.credits}</p>
-                      <button
-                        onClick={() => handleUpgradeCheckout(plan.tier)}
-                        disabled={upgradeLoading === plan.tier}
-                        className="pixel-btn w-full px-3 py-2 bg-[var(--gold)] text-white text-xs font-semibold disabled:opacity-50"
-                      >
-                        {upgradeLoading === plan.tier ? 'Loading...' : `Choose ${plan.name}`}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-3">
-                  <Link href="/pricing" className="text-xs text-[var(--accent)] hover:underline">
-                    Compare plan details
-                  </Link>
-                </div>
-              </div>
-            )}
 
             <div className="pixel-card p-4 h-[146px]">
               <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Agent Status</h3>
