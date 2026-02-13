@@ -66,7 +66,7 @@ export default function BuilderPage() {
   const [saving, setSaving] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [generatingSoul, setGeneratingSoul] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
   const [showUpgradePanel, setShowUpgradePanel] = useState(false);
   const [upgradeLoading, setUpgradeLoading] = useState<PaidTier | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -172,7 +172,7 @@ export default function BuilderPage() {
       setConfig((prev) => ({ ...prev, soul_md: data.soul_md }));
       if (data.fallback_used) {
         setMessage({
-          type: 'error',
+          type: 'warning',
           text: data.warning || 'SOUL.md generated from fallback template because GLM-5 was unavailable.',
         });
       } else {
@@ -410,6 +410,8 @@ export default function BuilderPage() {
         <div className={`mb-4 p-3 border-2 text-sm ${
           message.type === 'success'
             ? 'bg-[var(--accent-light)] border-[var(--accent)] text-[var(--accent)]'
+            : message.type === 'warning'
+              ? 'bg-[var(--gold-light)] border-[var(--gold)] text-[var(--foreground)]'
             : 'bg-[var(--red-light)] border-[var(--red)] text-[var(--red)]'
         }`}>
           {message.text}
@@ -582,6 +584,9 @@ export default function BuilderPage() {
                   {generatingSoul ? 'Generating...' : 'Generate SOUL.md'}
                 </button>
               </div>
+              <p className="text-[11px] text-[var(--muted)] mb-2">
+                Available on Free, Starter, and Pro.
+              </p>
 
               <textarea
                 value={config.soul_md}
