@@ -15,6 +15,7 @@ export const TIER_CONFIG = {
     price: 0,
     maxAgents: 0,
     maxDecisionsPerDay: 0,
+    monthlyCreditLimit: 0,
     tickInterval: null,
     description: 'Spectator only',
   },
@@ -23,17 +24,19 @@ export const TIER_CONFIG = {
     price: 19,
     maxAgents: 1,
     maxDecisionsPerDay: 200,
+    monthlyCreditLimit: 2500,
     tickInterval: 5 * 60 * 1000, // 5 minutes
-    description: '1 agent, ~200 AI decisions/day',
+    description: '1 agent, 2,500 credits/month',
     stripePriceId: process.env.STRIPE_PRICE_STARTER_MONTHLY,
   },
   pro: {
     name: 'Pro',
-    price: 49,
+    price: 39,
     maxAgents: 1,
     maxDecisionsPerDay: 800,
+    monthlyCreditLimit: 6000,
     tickInterval: 2 * 60 * 1000, // 2 minutes
-    description: '1 agent, ~800 AI decisions/day',
+    description: '1 agent, 6,000 credits/month',
     stripePriceId: process.env.STRIPE_PRICE_PRO_MONTHLY,
   },
 } as const;
