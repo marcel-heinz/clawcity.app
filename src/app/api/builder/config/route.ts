@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAuthServerClient } from '@/lib/supabase-auth-server';
+import { generateSoulMarkdown } from '@/lib/agent-soul';
 
 export async function GET() {
   try {
@@ -26,8 +27,22 @@ export async function GET() {
       .limit(1)
       .single();
 
+    const normalizedConfig = config
+      ? {
+          ...config,
+          soul_md:
+            typeof config.soul_md === 'string' && config.soul_md.trim()
+              ? config.soul_md
+              : generateSoulMarkdown(
+                  config.agent_name,
+                  config.personality_preset,
+                  config.custom_instructions
+                ),
+        }
+      : null;
+
     return NextResponse.json({
-      config: config || null,
+      config: normalizedConfig,
       profile: profile || null,
     });
   } catch (error) {
@@ -46,6 +61,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    const soulMd =
+      typeof body.soul_md === 'string' && body.soul_md.trim()
+        ? body.soul_md
+        : generateSoulMarkdown(
+            body.agent_name || '',
+            body.personality_preset,
+            body.custom_instructions
+          );
 
     // Check if user already has a config
     const { data: existing } = await supabase
@@ -69,6 +92,8 @@ export async function POST(request: NextRequest) {
         strategy_aggression: body.strategy_aggression ?? 50,
         strategy_social: body.strategy_social ?? 50,
         custom_instructions: body.custom_instructions || '',
+        soul_md: soulMd,
+        builder_version: 2,
       })
       .select()
       .single();
@@ -94,6 +119,14 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
+    const soulMd =
+      typeof body.soul_md === 'string' && body.soul_md.trim()
+        ? body.soul_md
+        : generateSoulMarkdown(
+            body.agent_name || '',
+            body.personality_preset,
+            body.custom_instructions
+          );
 
     const { data: config, error } = await supabase
       .from('agent_configs')
@@ -105,6 +138,8 @@ export async function PUT(request: NextRequest) {
         strategy_aggression: body.strategy_aggression ?? 50,
         strategy_social: body.strategy_social ?? 50,
         custom_instructions: body.custom_instructions || '',
+        soul_md: soulMd,
+        builder_version: 2,
       })
       .eq('user_id', user.id)
       .eq('id', body.id)

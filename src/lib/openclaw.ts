@@ -16,6 +16,7 @@ interface ProvisionRequest {
   strategyAggression: number;
   strategySocial: number;
   customInstructions: string;
+  soulMd?: string;
 }
 
 interface ProvisionResponse {
