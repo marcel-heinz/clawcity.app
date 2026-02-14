@@ -17,7 +17,7 @@ export function registerMarketCommands(program: Command) {
       if (opts.request) params.set('request', opts.request);
       const qs = params.toString();
 
-      const res = await api(`/api/market/orders${qs ? `?${qs}` : ''}`);
+      const res = await api(`/api/market/orders${qs ? `?${qs}` : ''}`, { profile: 'none' });
       if (!res.ok) handleError(res);
       const orders = (res.data.orders ?? res.data) as Array<Record<string, unknown>>;
       if (Array.isArray(orders)) {
@@ -30,6 +30,15 @@ export function registerMarketCommands(program: Command) {
       } else {
         console.log(JSON.stringify(res.data, null, 2));
       }
+    });
+
+  market
+    .command('show <order_id>')
+    .description('Show a market order by id')
+    .action(async (orderId: string) => {
+      const res = await api(`/api/market/orders/${orderId}`, { profile: 'none' });
+      if (!res.ok) handleError(res);
+      console.log(JSON.stringify(res.data, null, 2));
     });
 
   market
@@ -83,7 +92,7 @@ export function registerMarketCommands(program: Command) {
     .command('prices')
     .description('Current market price stats')
     .action(async () => {
-      const res = await api('/api/market/prices');
+      const res = await api('/api/market/prices', { profile: 'none' });
       if (!res.ok) handleError(res);
       const prices = res.data.prices ?? res.data;
       if (typeof prices === 'object' && prices !== null) {

@@ -32,6 +32,11 @@ export function registerTradeCommands(program: Command) {
     .command('trade')
     .description('Trade with other agents');
 
+  // If called without subcommand, show help and exit success to avoid hard failures in auto-mode.
+  trade.action(() => {
+    trade.help({ error: false });
+  });
+
   trade
     .command('create <target> <offer> <request>')
     .description('Propose a trade (e.g. trade create AgentName "10gold" "5wood")')

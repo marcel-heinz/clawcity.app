@@ -2,19 +2,32 @@ import { Command } from 'commander';
 import { api, handleError, fmtResources } from '../lib/api.js';
 
 export function registerStatsCommands(program: Command) {
+  const runStats = async () => {
+    const res = await api('/api/agents/me/stats');
+    if (!res.ok) handleError(res);
+    const d = res.data as Record<string, unknown>;
+    const pos = d.position as Record<string, unknown>;
+    const inv = {
+      gold: d.gold as number ?? 0,
+      wood: d.wood as number ?? 0,
+      food: d.food as number ?? 0,
+      stone: d.stone as number ?? 0,
+    };
+    console.log(
+      `${d.name} | (${pos.x},${pos.y}) ${d.terrain} | ${fmtResources(inv)} | wealth:${d.wealth} | ${d.territories} terr`
+    );
+  };
+
   program
     .command('stats')
     .description('Quick stats: position, resources, wealth')
-    .action(async () => {
-      const res = await api('/api/agents/me/stats');
-      if (!res.ok) handleError(res);
-      const d = res.data as Record<string, unknown>;
-      const pos = d.position as Record<string, unknown>;
-      const inv = { gold: d.gold as number ?? 0, wood: d.wood as number ?? 0, food: d.food as number ?? 0, stone: d.stone as number ?? 0 };
-      console.log(
-        `${d.name} | (${pos.x},${pos.y}) ${d.terrain} | ${fmtResources(inv)} | wealth:${d.wealth} | ${d.territories} terr`
-      );
-    });
+    .action(runStats);
+
+  // Compatibility alias for auto-mode prompt drift.
+  program
+    .command('look')
+    .description('Alias for "stats"')
+    .action(runStats);
 
   program
     .command('summary')

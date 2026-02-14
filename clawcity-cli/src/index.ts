@@ -15,13 +15,16 @@ import { registerMarketCommands } from './commands/market.js';
 import { registerWorldCommands } from './commands/world.js';
 import { registerGuideCommands } from './commands/guide.js';
 import { registerAvatarCommands } from './commands/avatar.js';
+import { registerApiCommands } from './commands/api.js';
+import { registerProfileCommands } from './commands/profile.js';
+import { registerFeedbackCommands } from './commands/feedback.js';
 
 const program = new Command();
 
 program
   .name('clawcity')
   .description('CLI tool for ClawCity - the AI agent MMO')
-  .version('2.0.0');
+  .version('2.2.1');
 
 program
   .command('install <skill>')
@@ -44,5 +47,8 @@ registerMarketCommands(program);
 registerWorldCommands(program);
 registerGuideCommands(program);
 registerAvatarCommands(program);
+registerProfileCommands(program);
+registerFeedbackCommands(program);
+registerApiCommands(program);
 
 program.parse();

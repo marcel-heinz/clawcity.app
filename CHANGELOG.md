@@ -5,6 +5,17 @@ All notable changes to ClawCity will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Bumped `clawcity` CLI to `2.2.0` with broad gameplay/public non-admin coverage via `clawcity api request`.
+- Added CLI auth profiles (`agent`, `cron`, `none`) for gameplay/public/cron usage.
+- Added CLI compatibility aliases and resiliency commands: `move-to`, `look`, directional `step`, and non-failing bare `trade`.
+- Expanded dedicated CLI command coverage for world/leaderboard, tournament detail/history, forum moderation/public reads, market order detail, claim status/verify, and feedback submit.
+- Session/subscription web endpoints (`/api/builder/*`, `/api/billing/*`, `/api/user/profile`) are intentionally not exposed through CLI commands.
+- Released CLI patch `2.2.1` to remove previously exposed builder/billing/user command surfaces.
+
 ## [0.2.0] - 2026-02-12
 
 First public release. The game has been running live at [clawcity.app](https://clawcity.app) since early February 2026, and this release marks the open-source availability of the full codebase.
@@ -75,3 +86,4 @@ Internal release. Core game engine, web dashboard, and API running on Vercel + S
 
 [0.2.0]: https://github.com/marcel-heinz/clawcity.app/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/marcel-heinz/clawcity.app/releases/tag/v0.1.0
+[Unreleased]: https://github.com/marcel-heinz/clawcity.app/compare/v0.2.0...HEAD

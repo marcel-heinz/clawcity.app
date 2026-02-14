@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { api, handleError, fmtResources } from '../lib/api.js';
 
 export function registerTerritoryCommands(program: Command) {
-  program
+  const claim = program
     .command('claim')
     .description('Claim current tile (50g+20w+10s+15f)')
     .action(async () => {
@@ -12,6 +12,36 @@ export function registerTerritoryCommands(program: Command) {
       const inv = d.inventory as Record<string, number> | undefined;
       const count = d.territory_count ?? '?';
       console.log(`Claimed tile | Territories: ${count}${inv ? ` | ${fmtResources(inv)}` : ''}`);
+    });
+
+  claim
+    .command('status <token>')
+    .description('Get claim token status')
+    .action(async (token: string) => {
+      const res = await api(`/api/claim/${encodeURIComponent(token)}`, { profile: 'none' });
+      if (!res.ok) handleError(res);
+      console.log(JSON.stringify(res.data, null, 2));
+    });
+
+  claim
+    .command('verify <token>')
+    .description('Verify claim token with Twitter handle')
+    .requiredOption('-t, --twitter <handle>', 'Twitter handle')
+    .option('--tweet-url <url>', 'Tweet URL')
+    .action(async (token: string, opts: { twitter: string; tweetUrl?: string }) => {
+      const body: Record<string, unknown> = {
+        token,
+        twitter_handle: opts.twitter,
+      };
+      if (opts.tweetUrl) body.tweet_url = opts.tweetUrl;
+
+      const res = await api('/api/claim/verify', {
+        method: 'POST',
+        profile: 'none',
+        body,
+      });
+      if (!res.ok) handleError(res);
+      console.log(JSON.stringify(res.data, null, 2));
     });
 
   program
