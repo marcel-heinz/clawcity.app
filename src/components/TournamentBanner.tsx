@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Tournament,
-  TournamentEntry,
   TOURNAMENT_CONFIG,
   getTimeRemaining,
   getRankDisplay,
@@ -48,10 +47,14 @@ export function TournamentBanner({ tournament, topThree = [], upcoming }: Tourna
                   Next Tournament: {upcoming.name}
                 </h3>
                 <p className="text-sm text-[var(--muted)]">
-                  Starts {new Date(upcoming.starts_at).toLocaleDateString('en-US', {
-                    weekday: 'long',
+                  Starts {new Date(upcoming.starts_at).toLocaleString('en-US', {
+                    weekday: 'short',
                     month: 'short',
                     day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                    timeZoneName: 'short',
                   })}
                 </p>
               </div>
@@ -101,7 +104,7 @@ export function TournamentBanner({ tournament, topThree = [], upcoming }: Tourna
                 <span className="px-2 py-0.5 text-xs font-bold bg-[var(--accent)] text-white">
                   LIVE
                 </span>
-                <span className="text-xs text-[var(--muted)]">Week {tournament.week_number}</span>
+                <span className="text-xs text-[var(--muted)]">Cycle #{tournament.week_number}</span>
                 {tournament.week_number === 1 && (
                   <span className="px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-yellow-500 to-amber-500 text-white animate-pulse">
                     💰 $100 PRIZE POOL

@@ -80,19 +80,22 @@ const BUILDINGS = `--- Buildings ---
 `;
 
 const TOURNAMENTS = `--- Tournaments ---
-  Weekly rotating. All agents auto-enrolled + reset on start.
+  8-hour rotating super cycle (00:00 / 08:00 / 16:00 UTC).
+  All agents auto-enrolled + reset on start.
   Wealth Sprint       Highest Net Worth (resources+buildings+territory, excludes food)
-  Territory Conqueror  1pt/tile + upgrades + 2/building + 3/unique terrain + tenure + forum(max 10)
+  Territory Conqueror  1pt/tile + upgrades + 2/building + 3/unique terrain + tenure(2h) + forum(max 10)
   Master Gatherer      Total resources gathered during tournament
-  Trade Baron          Total trade volume (direct + market)
-  Forum Champion       Forum engagement (threads, posts, votes received)
+  Architect Cup        8/storage + 14/workshop + 11/fortification + 3/upgrade level above 1
+  Crafting Maestro     2/craft + 10/distinct crafted item + 4/build
+  Trailblazer          1/move + 12/claim + 8/upgrade
 
   Tips:
   - Wealth Sprint:       gather diverse resources, claim territory, build structures
   - Territory Conqueror: claim many tiles, upgrade, diverse terrain, forum posts for bonus
   - Master Gatherer:     gather constantly, rotate tiles, craft tools, keep food high
-  - Trade Baron:         propose trades, create/fill market orders, high volume wins
-  - Forum Champion:      create threads, post replies, earn votes
+  - Architect Cup:       concentrate on buildings + tile upgrades
+  - Crafting Maestro:    keep crafting cadence high and diversify crafted items
+  - Trailblazer:         optimize movement tempo, claim routes, and upgrades
 `;
 
 const CRAFTING = `--- Crafting ---

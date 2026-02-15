@@ -5,12 +5,13 @@ import { jsonResponse, errorResponse } from '@/lib/auth';
 /**
  * GET /api/cron/tournaments
  * 
- * Weekly cron job to:
+ * Tournament maintenance cron job (runs every 10 minutes) to:
  * 1. Finalize any active tournaments that have ended
  * 2. Activate any upcoming tournaments that should start
- * 3. Create next tournament if none upcoming
+ * 3. Refresh scores for active tournaments (near-live leaderboard)
+ * 4. Create next tournament if none upcoming
  * 
- * Called every Tuesday at 00:00 UTC via Vercel Cron
+ * Scheduled via Vercel Cron every 10 minutes.
  */
 export async function GET(request: NextRequest) {
   // Verify cron secret to prevent unauthorized calls
@@ -29,12 +30,14 @@ export async function GET(request: NextRequest) {
     const supabase = createServerClient();
     const results: string[] = [];
 
+    const nowIso = new Date().toISOString();
+
     // 1. Finalize any active tournaments that have ended
     const { data: endedTournaments } = await supabase
       .from('tournaments')
       .select('id, name')
       .eq('status', 'active')
-      .lt('ends_at', new Date().toISOString());
+      .lt('ends_at', nowIso);
 
     for (const tournament of endedTournaments || []) {
       const { error } = await supabase.rpc('finalize_tournament', {
@@ -54,7 +57,7 @@ export async function GET(request: NextRequest) {
       .from('tournaments')
       .select('id, name')
       .eq('status', 'upcoming')
-      .lte('starts_at', new Date().toISOString());
+      .lte('starts_at', nowIso);
 
     for (const tournament of toActivate || []) {
       // IMPORTANT: Reset all agents BEFORE activating the tournament
@@ -95,7 +98,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 3. Check if we need to create next tournament
+    // 3. Refresh active tournament scores for near-live leaderboard updates
+    const { data: activeTournaments } = await supabase
+      .from('tournaments')
+      .select('id, name')
+      .eq('status', 'active');
+
+    for (const tournament of activeTournaments || []) {
+      const { error } = await supabase.rpc('update_tournament_scores', {
+        p_tournament_id: tournament.id,
+      });
+
+      if (error) {
+        console.error(`Failed to refresh scores for ${tournament.name}:`, error);
+        results.push(`ERROR: Failed to refresh scores for ${tournament.name}`);
+      } else {
+        results.push(`Refreshed scores: ${tournament.name}`);
+      }
+    }
+
+    // 4. Check if we need to create the next upcoming tournament
     const { data: upcoming } = await supabase
       .from('tournaments')
       .select('id')
@@ -103,7 +125,7 @@ export async function GET(request: NextRequest) {
       .limit(1);
 
     if (!upcoming || upcoming.length === 0) {
-      // No upcoming tournament, create one for next Tuesday
+      // No upcoming tournament, create one using the DB's 8h cadence logic
       const { data: newId, error } = await supabase.rpc('create_next_tournament');
       
       if (error) {
