@@ -63,6 +63,8 @@ export async function GET(request: NextRequest) {
         last_tick_finished_at: agentStatus?.last_tick_finished_at || statusResult.status.last_tick_finished_at || null,
         last_tick_result: agentStatus?.last_tick_result || statusResult.status.last_tick_result || null,
         last_tick_error_code: agentStatus?.last_tick_error_code || statusResult.status.last_tick_error_code || null,
+        memory: agentStatus?.memory || null,
+        budget: agentStatus?.budget || null,
       },
     });
   } catch (error) {

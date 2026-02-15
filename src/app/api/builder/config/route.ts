@@ -14,7 +14,7 @@ export async function GET() {
     // Fetch user profile
     const { data: profile } = await supabase
       .from('users')
-      .select('tier, max_agents, monthly_credit_limit, credits_used, credits_cycle_end')
+      .select('tier, max_agents, monthly_credit_limit, credits_used, llm_calls_used, autoplay_calls_used, credits_cycle_end')
       .eq('id', user.id)
       .single();
 
@@ -42,9 +42,19 @@ export async function GET() {
         }
       : null;
 
+    const normalizedProfile = profile
+      ? {
+          ...profile,
+          monthly_credit_limit: Number(profile.monthly_credit_limit || 0),
+          credits_used: Number(profile.credits_used || 0),
+          llm_calls_used: Number(profile.llm_calls_used || 0),
+          autoplay_calls_used: Number(profile.autoplay_calls_used || 0),
+        }
+      : null;
+
     return NextResponse.json({
       config: normalizedConfig,
-      profile: profile || null,
+      profile: normalizedProfile,
     });
   } catch (error) {
     console.error('Config GET error:', error);

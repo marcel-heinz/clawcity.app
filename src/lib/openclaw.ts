@@ -23,6 +23,12 @@ interface ProvisionRequest {
 interface ProvisionResponse {
   success: boolean;
   agentId?: string;
+  autoplay_disabled?: boolean;
+  removed_from_config?: boolean;
+  in_flight_at_stop?: boolean;
+  verified_not_configured?: boolean;
+  message?: string;
+  stopped?: boolean;
   error?: string;
   details?: string;
 }
@@ -68,6 +74,23 @@ export interface AutoModeAgentStatus {
   last_tick_result: string | null;
   last_tick_error_code: string | null;
   last_tick: AutoModeFeedbackEntry | null;
+  memory?: {
+    last_distilled_at: string | null;
+    ticks_since_distill: number;
+    memory_version: number;
+    memory_bytes: number;
+  };
+  budget?: {
+    tier: string | null;
+    interval_ms: number | null;
+    call_ceiling: number;
+    reserve_calls: number;
+    remaining_calls_total: number;
+    remaining_calls_autoplay: number;
+    scheduled_ticks_remaining: number;
+    affordable_ticks_remaining: number;
+    run_fraction: number;
+  };
 }
 
 export interface AutoModeProvisionStatus {
@@ -87,6 +110,21 @@ export interface AutoModeProvisionStatus {
   running_agents: string[];
   configured_agents: string[];
   agents: AutoModeAgentStatus[];
+  error?: string;
+  details?: string;
+}
+
+export interface AgentMemoryPayload {
+  success: boolean;
+  agentId?: string;
+  content?: string;
+  state?: {
+    last_distilled_at: string | null;
+    ticks_since_distill: number;
+    memory_version: number;
+    memory_digest: string | null;
+    memory_bytes: number;
+  };
   error?: string;
   details?: string;
 }
@@ -451,6 +489,104 @@ export async function updateGatewayModelSettings(
     return {
       success: false,
       error: 'Failed to update gateway model settings',
+      details: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function getAgentMemory(
+  agentId: string
+): Promise<AgentMemoryPayload> {
+  try {
+    const res = await provisionFetch(`/api/provision/${agentId}/memory`);
+    const data = await parseJsonSafe<AgentMemoryPayload>(res);
+    if (!data) {
+      return {
+        success: false,
+        error: `Memory request failed (${res.status})`,
+      };
+    }
+    return data;
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Failed to fetch agent memory',
+      details: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function updateAgentMemory(
+  agentId: string,
+  content: string
+): Promise<AgentMemoryPayload> {
+  try {
+    const res = await provisionFetch(`/api/provision/${agentId}/memory`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    });
+    const data = await parseJsonSafe<AgentMemoryPayload>(res);
+    if (!data) {
+      return {
+        success: false,
+        error: `Memory update failed (${res.status})`,
+      };
+    }
+    return data;
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Failed to update agent memory',
+      details: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function distillAgentMemory(
+  agentId: string
+): Promise<AgentMemoryPayload> {
+  try {
+    const res = await provisionFetch(`/api/provision/${agentId}/memory/distill`, {
+      method: 'POST',
+    });
+    const data = await parseJsonSafe<AgentMemoryPayload>(res);
+    if (!data) {
+      return {
+        success: false,
+        error: `Memory distill failed (${res.status})`,
+      };
+    }
+    return data;
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Failed to distill agent memory',
+      details: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function resetAgentMemory(
+  agentId: string,
+  mode: 'soft' | 'hard' = 'soft'
+): Promise<AgentMemoryPayload> {
+  try {
+    const res = await provisionFetch(`/api/provision/${agentId}/memory/reset`, {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+    });
+    const data = await parseJsonSafe<AgentMemoryPayload>(res);
+    if (!data) {
+      return {
+        success: false,
+        error: `Memory reset failed (${res.status})`,
+      };
+    }
+    return data;
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Failed to reset agent memory',
       details: error instanceof Error ? error.message : String(error),
     };
   }

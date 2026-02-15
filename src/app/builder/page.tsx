@@ -30,6 +30,8 @@ interface UserProfile {
   max_agents: number;
   monthly_credit_limit: number;
   credits_used: number;
+  llm_calls_used?: number;
+  autoplay_calls_used?: number;
   credits_cycle_end: string | null;
 }
 
@@ -66,6 +68,31 @@ interface AutoModeSchedulerStatus {
   last_tick_finished_at: string | null;
   last_tick_result: string | null;
   last_tick_error_code: string | null;
+  memory?: {
+    last_distilled_at: string | null;
+    ticks_since_distill: number;
+    memory_version: number;
+    memory_bytes: number;
+  } | null;
+  budget?: {
+    tier: string | null;
+    interval_ms: number | null;
+    call_ceiling: number;
+    reserve_calls: number;
+    remaining_calls_total: number;
+    remaining_calls_autoplay: number;
+    scheduled_ticks_remaining: number;
+    affordable_ticks_remaining: number;
+    run_fraction: number;
+  } | null;
+}
+
+interface AgentMemoryState {
+  last_distilled_at: string | null;
+  ticks_since_distill: number;
+  memory_version: number;
+  memory_digest: string | null;
+  memory_bytes: number;
 }
 
 function formatCycleEnd(value: string | null | undefined): string {
@@ -139,6 +166,12 @@ export default function BuilderPage() {
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [schedulerStatus, setSchedulerStatus] = useState<AutoModeSchedulerStatus | null>(null);
   const [schedulerLoading, setSchedulerLoading] = useState(false);
+  const [memoryContent, setMemoryContent] = useState('');
+  const [memoryState, setMemoryState] = useState<AgentMemoryState | null>(null);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const [memorySaving, setMemorySaving] = useState(false);
+  const [memoryDistilling, setMemoryDistilling] = useState(false);
+  const [memoryResetting, setMemoryResetting] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const isFreeTier = profile?.tier === 'free';
@@ -247,6 +280,29 @@ export default function BuilderPage() {
     }
   }, [config.id]);
 
+  const fetchMemory = useCallback(async () => {
+    if (!config.id) {
+      setMemoryContent('');
+      setMemoryState(null);
+      return;
+    }
+
+    setMemoryLoading(true);
+    try {
+      const query = new URLSearchParams({ config_id: config.id });
+      const res = await fetch(`/api/builder/memory?${query.toString()}`);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMemoryContent(typeof data.content === 'string' ? data.content : '');
+        setMemoryState(data.state || null);
+      }
+    } catch {
+      // ignore - memory controls are optional
+    } finally {
+      setMemoryLoading(false);
+    }
+  }, [config.id]);
+
   useEffect(() => {
     if (!config.id) {
       setFeedbackEntries([]);
@@ -255,6 +311,7 @@ export default function BuilderPage() {
 
     void fetchAutoModeFeedback();
     void fetchAutoModeStatus();
+    void fetchMemory();
     const shouldPoll = config.is_active || activeTab === 'chat';
     if (!shouldPoll) {
       return;
@@ -263,10 +320,11 @@ export default function BuilderPage() {
     const interval = setInterval(() => {
       void fetchAutoModeFeedback();
       void fetchAutoModeStatus();
+      void fetchMemory();
     }, AUTO_MODE_FEEDBACK_POLL_MS);
 
     return () => clearInterval(interval);
-  }, [activeTab, config.id, config.is_active, fetchAutoModeFeedback, fetchAutoModeStatus]);
+  }, [activeTab, config.id, config.is_active, fetchAutoModeFeedback, fetchAutoModeStatus, fetchMemory]);
 
   const handleAutoModeToggle = async (enabled: boolean) => {
     const previousEnabled = config.auto_mode_enabled !== false;
@@ -311,6 +369,111 @@ export default function BuilderPage() {
       setMessage({ type: 'error', text: 'Failed to update auto-mode setting.' });
     } finally {
       setAutoModeSaving(false);
+    }
+  };
+
+  const handleMemorySave = async () => {
+    if (!config.id) {
+      setMessage({ type: 'warning', text: 'Save the draft once before editing Memory.md.' });
+      return;
+    }
+
+    setMemorySaving(true);
+    try {
+      const res = await fetch('/api/builder/memory', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          config_id: config.id,
+          content: memoryContent,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setMessage({ type: 'error', text: data.error || 'Failed to save Memory.md' });
+        return;
+      }
+      setMemoryContent(typeof data.content === 'string' ? data.content : memoryContent);
+      setMemoryState(data.state || null);
+      setMessage({ type: 'success', text: 'Memory.md saved.' });
+      void fetchAutoModeStatus();
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to save Memory.md' });
+    } finally {
+      setMemorySaving(false);
+    }
+  };
+
+  const handleMemoryDistill = async () => {
+    if (!config.id) {
+      setMessage({ type: 'warning', text: 'Save the draft once before distilling memory.' });
+      return;
+    }
+
+    setMemoryDistilling(true);
+    try {
+      const res = await fetch('/api/builder/memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          config_id: config.id,
+          action: 'distill',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setMessage({ type: 'error', text: data.error || 'Failed to distill Memory.md' });
+        return;
+      }
+      setMemoryContent(typeof data.content === 'string' ? data.content : memoryContent);
+      setMemoryState(data.state || null);
+      setMessage({ type: 'success', text: 'Memory.md distilled and applied.' });
+      void fetchAutoModeStatus();
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to distill Memory.md' });
+    } finally {
+      setMemoryDistilling(false);
+    }
+  };
+
+  const handleMemoryReset = async (mode: 'soft' | 'hard') => {
+    if (!config.id) return;
+    const confirmed = window.confirm(
+      mode === 'hard'
+        ? 'Hard reset will clear Memory.md and sessions. Continue?'
+        : 'Soft reset will clear volatile sessions but retain Memory.md. Continue?'
+    );
+    if (!confirmed) return;
+
+    setMemoryResetting(true);
+    try {
+      const res = await fetch('/api/builder/memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          config_id: config.id,
+          action: 'reset',
+          mode,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setMessage({ type: 'error', text: data.error || 'Failed to reset memory' });
+        return;
+      }
+      setMemoryContent(typeof data.content === 'string' ? data.content : '');
+      setMemoryState(data.state || null);
+      setMessage({
+        type: 'success',
+        text: mode === 'hard'
+          ? 'Hard memory reset complete.'
+          : 'Soft memory reset complete (distilled memory retained).',
+      });
+      void fetchAutoModeStatus();
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to reset memory' });
+    } finally {
+      setMemoryResetting(false);
     }
   };
 
@@ -441,20 +604,31 @@ export default function BuilderPage() {
         body: JSON.stringify({ config_id: config.id }),
       });
       const data = await res.json();
-      if (data.success) {
+      const stopped = Boolean(data?.success && data?.stopped && data?.verified_not_configured);
+      if (stopped) {
         setConfig((prev) => ({ ...prev, is_active: false }));
-        setMessage({ type: 'success', text: 'Agent stopped.' });
+        setMessage({
+          type: 'success',
+          text: data?.in_flight_at_stop
+            ? 'Stop accepted. Current tick may finish, then the agent remains stopped.'
+            : 'Agent stopped.',
+        });
         if (fromChat) {
           setActiveTab('config');
           setChatSending(false);
         }
       } else {
-        setMessage({ type: 'error', text: data.error || 'Failed to stop agent' });
+        const details = typeof data?.details === 'string' && data.details.trim()
+          ? ` (${data.details})`
+          : '';
+        setMessage({ type: 'error', text: `${data?.error || 'Failed to stop agent'}${details}` });
       }
     } catch {
       setMessage({ type: 'error', text: 'Failed to stop agent' });
     } finally {
       setDeploying(false);
+      void fetchAutoModeStatus();
+      void fetchAutoModeFeedback();
     }
   };
 
@@ -851,6 +1025,63 @@ export default function BuilderPage() {
               </div>
             </div>
 
+            <div className="pixel-card p-4">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <label className="text-sm font-semibold text-[var(--foreground)]">
+                  Memory.md
+                </label>
+                <span className="text-xs text-[var(--muted)]">
+                  Distilled long-term memory (auto-maintained every 100 autoplay ticks)
+                </span>
+                <button
+                  onClick={handleMemoryDistill}
+                  disabled={memoryDistilling || !config.id}
+                  className="ml-auto text-xs px-3 py-1.5 border-2 border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)] disabled:opacity-50"
+                >
+                  {memoryDistilling ? 'Distilling...' : 'Distill Memory Now'}
+                </button>
+              </div>
+              <p className="text-[11px] text-[var(--muted)] mb-2">
+                You and the agent can update memory facts. Structured `MEMORY_OP` payloads are auto-applied.
+              </p>
+              <textarea
+                value={memoryContent}
+                onChange={(e) => setMemoryContent(e.target.value)}
+                placeholder={memoryLoading ? 'Loading memory...' : '# Memory\\n\\n## Active Context\\n- ...'}
+                rows={10}
+                className="pixel-input w-full resize-y font-mono text-xs"
+                disabled={memoryLoading}
+              />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  onClick={handleMemorySave}
+                  disabled={memorySaving || memoryLoading || !config.id}
+                  className="pixel-btn px-3 py-1.5 bg-[var(--accent)] text-white text-xs font-semibold disabled:opacity-50"
+                >
+                  {memorySaving ? 'Saving...' : 'Save Memory.md'}
+                </button>
+                <button
+                  onClick={() => handleMemoryReset('soft')}
+                  disabled={memoryResetting || !config.id}
+                  className="pixel-btn px-3 py-1.5 bg-[var(--surface)] text-[var(--foreground)] text-xs font-semibold disabled:opacity-50"
+                >
+                  Soft Reset
+                </button>
+                <button
+                  onClick={() => handleMemoryReset('hard')}
+                  disabled={memoryResetting || !config.id}
+                  className="pixel-btn px-3 py-1.5 bg-[var(--red)] text-white text-xs font-semibold disabled:opacity-50"
+                >
+                  Hard Reset
+                </button>
+                {memoryState && (
+                  <span className="text-[10px] text-[var(--muted)] ml-auto">
+                    v{memoryState.memory_version} · {memoryState.memory_bytes} bytes · ticks {memoryState.ticks_since_distill}
+                  </span>
+                )}
+              </div>
+            </div>
+
           </div>
 
           <div className="space-y-6">
@@ -915,6 +1146,17 @@ export default function BuilderPage() {
                   Scheduler: {formatEta(schedulerStatus.next_tick_at)}
                 </div>
               )}
+              {schedulerStatus?.budget && (
+                <div className="mt-1 text-xs text-[var(--muted)]">
+                  Budget: {schedulerStatus.budget.remaining_calls_autoplay} auto calls left
+                  {' '}({Math.round((schedulerStatus.budget.run_fraction || 0) * 100)}% pace)
+                </div>
+              )}
+              {schedulerStatus?.memory && (
+                <div className="mt-1 text-xs text-[var(--muted)]">
+                  Memory: v{schedulerStatus.memory.memory_version}, {schedulerStatus.memory.ticks_since_distill}/100 ticks
+                </div>
+              )}
               {schedulerStatus?.last_tick_error_code && (
                 <div className="mt-1 text-xs text-[var(--red)]">
                   Reason: {schedulerStatus.last_tick_error_code}
@@ -949,6 +1191,12 @@ export default function BuilderPage() {
                 <div className="mt-1 text-xs text-[var(--muted)]">
                   Cycle ends: {formatCycleEnd(profile.credits_cycle_end)}
                 </div>
+                {typeof profile.llm_calls_used === 'number' && (
+                  <div className="mt-1 text-xs text-[var(--muted)]">
+                    Calls used: {profile.llm_calls_used}
+                    {typeof profile.autoplay_calls_used === 'number' ? ` (auto: ${profile.autoplay_calls_used})` : ''}
+                  </div>
+                )}
               </div>
             )}
 
