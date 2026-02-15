@@ -59,6 +59,8 @@ export async function POST(request: NextRequest) {
               stripe_subscription_id: subscriptionId,
               monthly_credit_limit: monthlyLimitForTier(tier),
               credits_used: 0,
+              llm_calls_used: 0,
+              autoplay_calls_used: 0,
               credits_cycle_start: creditsCycleStart,
               credits_cycle_end: creditsCycleEnd,
             })
@@ -100,6 +102,12 @@ export async function POST(request: NextRequest) {
                 stripe_subscription_id: subscription.id,
                 monthly_credit_limit: limit,
                 credits_used: creditsUsed,
+                ...(rolledToNewCycle
+                  ? {
+                      llm_calls_used: 0,
+                      autoplay_calls_used: 0,
+                    }
+                  : {}),
                 credits_cycle_start: nextCycleStart,
                 credits_cycle_end: nextCycleEnd,
               })
@@ -121,6 +129,8 @@ export async function POST(request: NextRequest) {
             stripe_subscription_id: null,
             monthly_credit_limit: 0,
             credits_used: 0,
+            llm_calls_used: 0,
+            autoplay_calls_used: 0,
             credits_cycle_start: null,
             credits_cycle_end: null,
           })

@@ -16,7 +16,7 @@ export async function GET() {
     // Fetch profile
     const { data: profile } = await supabase
       .from('users')
-      .select('tier, monthly_credit_limit, credits_used, credits_cycle_start, credits_cycle_end, stripe_subscription_id')
+      .select('tier, monthly_credit_limit, credits_used, llm_calls_used, autoplay_calls_used, credits_cycle_start, credits_cycle_end, stripe_subscription_id')
       .eq('id', user.id)
       .single();
 
@@ -47,9 +47,19 @@ export async function GET() {
       agent = agentData;
     }
 
+    const normalizedProfile = profile
+      ? {
+          ...profile,
+          monthly_credit_limit: Number(profile.monthly_credit_limit || 0),
+          credits_used: Number(profile.credits_used || 0),
+          llm_calls_used: Number(profile.llm_calls_used || 0),
+          autoplay_calls_used: Number(profile.autoplay_calls_used || 0),
+        }
+      : null;
+
     return NextResponse.json({
       success: true,
-      data: { profile, config: normalizedConfig, agent },
+      data: { profile: normalizedProfile, config: normalizedConfig, agent },
     });
   } catch (error) {
     console.error('Profile error:', error);

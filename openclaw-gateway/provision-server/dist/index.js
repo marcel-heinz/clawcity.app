@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const child_process_1 = require("child_process");
+const crypto_1 = require("crypto");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const templates_1 = require("./templates");
@@ -17,6 +18,11 @@ const OPENCLAW_CONFIG_PATH = path_1.default.join(OPENCLAW_HOME, 'openclaw.json')
 const MODEL_OVERRIDE_PATH = path_1.default.join(OPENCLAW_HOME, 'model.override.json');
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789';
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || '';
+const CLAWCITY_API_URL = (process.env.CLAWCITY_API_URL || process.env.APP_BASE_URL || 'https://www.clawcity.app').replace(/\/+$/, '');
+const INTERNAL_API_TOKEN = process.env.OPENCLAW_INTERNAL_API_TOKEN ||
+    process.env.OPENCLAW_PROVISION_TOKEN ||
+    process.env.PROVISION_AUTH_TOKEN ||
+    '';
 // Shared skill source directory (SKILL.md format, auto-discovered by OpenClaw)
 const SKILL_SOURCE_DIR = path_1.default.join(OPENCLAW_HOME, 'workspace', 'skills', 'clawcity');
 const CHAT_TIMEOUT_MS = intEnv('OPENCLAW_CHAT_TIMEOUT_MS', 240_000);
@@ -34,8 +40,18 @@ const AGENT_SETTINGS_FILE = 'agent-settings.json';
 const AUTOPLAY_FEEDBACK_FILE = 'autoplay-feedback.jsonl';
 const AUTOPLAY_FEEDBACK_RETENTION_MS = 24 * 60 * 60 * 1000;
 const AUTOPLAY_FEEDBACK_DEFAULT_LIMIT = 50;
+const AUTOPLAY_EXPECTED_CALLS_PER_TICK = 1.05;
+const AUTOPLAY_DISTILL_EVERY_TICKS = intEnv('OPENCLAW_MEMORY_DISTILL_EVERY_TICKS', 100);
 const OPENROUTER_PREFIX = 'openrouter/';
 const ALLOWED_MODELS = ['z-ai/glm-5', 'minimax/minimax-m2.5'];
+const MEMORY_FILE = 'Memory.md';
+const MEMORY_DIR = 'memory';
+const MEMORY_RECENT_DIR = 'recent';
+const MEMORY_STATE_FILE = 'state.json';
+const MEMORY_RECENT_EVENTS_FILE = 'events.jsonl';
+const MEMORY_MAX_CHARS = 4_000;
+const MEMORY_CONTEXT_MAX_CHARS = 700;
+const MEMORY_RECENT_MAX_LINES = 300;
 const autoplayInFlight = new Set();
 let autoplayTimer = null;
 let autoplayWarmTimer = null;
@@ -157,6 +173,7 @@ app.post('/api/provision', async (req, res) => {
         // Create directory structure
         fs_1.default.mkdirSync(skillsDir, { recursive: true });
         fs_1.default.mkdirSync(sessionsDir, { recursive: true });
+        ensureMemoryScaffold(agentId);
         // Prefer user-provided SOUL.md, fallback to generated template.
         const soulMd = typeof body.soulMd === 'string' && body.soulMd.trim()
             ? body.soulMd
@@ -221,6 +238,7 @@ app.put('/api/provision/:agentId', (req, res) => {
             return;
         }
         const workspaceDir = path_1.default.join(agentDir, 'workspace');
+        ensureMemoryScaffold(agentId);
         // Update SOUL.md using explicit content if provided.
         if (typeof body.soulMd === 'string' && body.soulMd.trim()) {
             fs_1.default.writeFileSync(path_1.default.join(workspaceDir, 'SOUL.md'), body.soulMd);
@@ -283,19 +301,185 @@ app.put('/api/provision/:agentId/autoplay', (req, res) => {
         res.status(500).json({ error: 'Failed to update autoplay setting' });
     }
 });
+app.get('/api/provision/:agentId/memory', (req, res) => {
+    try {
+        const { agentId } = req.params;
+        if (!fs_1.default.existsSync(getAgentDir(agentId))) {
+            res.status(404).json({ error: 'Agent not found' });
+            return;
+        }
+        ensureMemoryScaffold(agentId);
+        const content = readMemoryFile(agentId);
+        const state = readMemoryState(agentId);
+        res.json({
+            success: true,
+            agentId,
+            content,
+            state: withMemoryStateMetadata(agentId, state),
+        });
+    }
+    catch (error) {
+        console.error('[memory] Read error:', error);
+        res.status(500).json({ error: 'Failed to read memory' });
+    }
+});
+app.put('/api/provision/:agentId/memory', (req, res) => {
+    try {
+        const { agentId } = req.params;
+        const content = typeof req.body?.content === 'string' ? req.body.content : '';
+        if (!fs_1.default.existsSync(getAgentDir(agentId))) {
+            res.status(404).json({ error: 'Agent not found' });
+            return;
+        }
+        if (content.length > MEMORY_MAX_CHARS * 3) {
+            res.status(400).json({ error: `Memory content too large (max ${MEMORY_MAX_CHARS * 3} chars)` });
+            return;
+        }
+        ensureMemoryScaffold(agentId);
+        const normalized = sanitizeMemoryMarkdown(content);
+        const state = writeMemoryFile(agentId, normalized, { bumpVersion: true });
+        void syncMemoryTelemetry(agentId, state);
+        res.json({
+            success: true,
+            agentId,
+            content: normalized,
+            state: withMemoryStateMetadata(agentId, state),
+        });
+    }
+    catch (error) {
+        console.error('[memory] Update error:', error);
+        res.status(500).json({ error: 'Failed to update memory' });
+    }
+});
+app.post('/api/provision/:agentId/memory/distill', async (req, res) => {
+    try {
+        const { agentId } = req.params;
+        if (!fs_1.default.existsSync(getAgentDir(agentId))) {
+            res.status(404).json({ error: 'Agent not found' });
+            return;
+        }
+        const distilled = await distillMemoryForAgent(agentId, 'manual');
+        if (!distilled.success) {
+            res.status(distilled.statusCode || 500).json({
+                success: false,
+                error: distilled.error || 'Failed to distill memory',
+                details: distilled.details || null,
+            });
+            return;
+        }
+        res.json({
+            success: true,
+            agentId,
+            content: distilled.content,
+            state: withMemoryStateMetadata(agentId, distilled.state || readMemoryState(agentId)),
+        });
+    }
+    catch (error) {
+        console.error('[memory] Distill error:', error);
+        res.status(500).json({ error: 'Failed to distill memory' });
+    }
+});
+app.post('/api/provision/:agentId/memory/op', async (req, res) => {
+    try {
+        const { agentId } = req.params;
+        if (!fs_1.default.existsSync(getAgentDir(agentId))) {
+            res.status(404).json({ error: 'Agent not found' });
+            return;
+        }
+        const validatedOp = validateMemoryOpPayload(req.body);
+        if (!validatedOp.valid) {
+            res.status(400).json({
+                success: false,
+                error: 'Invalid memory op payload',
+                details: validatedOp.error,
+            });
+            return;
+        }
+        const applied = await applyMemoryOp(agentId, validatedOp.op);
+        if (!applied.success) {
+            res.status(applied.statusCode || 400).json({
+                success: false,
+                error: applied.error || 'Failed to apply memory op',
+                details: applied.details || null,
+            });
+            return;
+        }
+        res.json({
+            success: true,
+            agentId,
+            content: applied.content,
+            state: withMemoryStateMetadata(agentId, applied.state || readMemoryState(agentId)),
+            operation: applied.operation,
+        });
+    }
+    catch (error) {
+        console.error('[memory] Op error:', error);
+        res.status(500).json({ error: 'Failed to apply memory op' });
+    }
+});
+app.post('/api/provision/:agentId/memory/reset', (req, res) => {
+    try {
+        const { agentId } = req.params;
+        const mode = req.body?.mode === 'hard' ? 'hard' : 'soft';
+        if (!fs_1.default.existsSync(getAgentDir(agentId))) {
+            res.status(404).json({ error: 'Agent not found' });
+            return;
+        }
+        resetAgentMemory(agentId, mode);
+        const content = readMemoryFile(agentId);
+        const state = readMemoryState(agentId);
+        res.json({
+            success: true,
+            agentId,
+            mode,
+            content,
+            state: withMemoryStateMetadata(agentId, state),
+        });
+    }
+    catch (error) {
+        console.error('[memory] Reset error:', error);
+        res.status(500).json({ error: 'Failed to reset memory' });
+    }
+});
 // Deprovision an agent (stop but keep data)
 app.delete('/api/provision/:agentId', async (req, res) => {
     try {
         const { agentId } = req.params;
-        const agentDir = getAgentDir(agentId);
-        if (!fs_1.default.existsSync(agentDir)) {
-            res.status(404).json({ error: 'Agent not found' });
+        const inFlightAtStop = autoplayInFlight.has(agentId);
+        // Stop future ticks immediately; in-flight work is allowed to complete.
+        setAgentAutoplaySetting(agentId, false);
+        clearAutoplayTransientState(agentId);
+        const removedFromConfig = await removeAgentFromConfig(agentId);
+        const verifiedNotConfigured = !listConfiguredAgentIds().includes(agentId);
+        if (!verifiedNotConfigured) {
+            const message = inFlightAtStop
+                ? 'Stop requested; in-flight tick will finish, but runtime removal verification failed.'
+                : 'Stop requested, but runtime removal verification failed.';
+            console.error(`[provision] Deprovision verification failed for ${agentId}`);
+            res.status(500).json({
+                success: false,
+                agentId,
+                autoplay_disabled: true,
+                removed_from_config: removedFromConfig,
+                in_flight_at_stop: inFlightAtStop,
+                verified_not_configured: false,
+                message,
+            });
             return;
         }
-        // Remove from gateway config (don't delete files — keep for potential reactivation)
-        await removeAgentFromConfig(agentId);
-        console.log(`[provision] Agent ${agentId} deprovisioned`);
-        res.json({ success: true });
+        const message = inFlightAtStop
+            ? 'Stop accepted. Current in-flight tick will finish; no future ticks will run.'
+            : (removedFromConfig ? 'Agent stopped and removed from runtime config.' : 'Agent already stopped.');
+        console.log(`[provision] Agent ${agentId} deprovisioned (removed=${removedFromConfig}, in_flight=${inFlightAtStop})`);
+        res.json({
+            success: true,
+            agentId,
+            autoplay_disabled: true,
+            removed_from_config: removedFromConfig,
+            in_flight_at_stop: inFlightAtStop,
+            verified_not_configured: true,
+            message,
+        });
     }
     catch (error) {
         console.error('[provision] Delete error:', error);
@@ -308,6 +492,14 @@ app.post('/api/chat', async (req, res) => {
         const { agentId, messages } = req.body;
         if (!agentId || !messages?.length) {
             res.status(400).json({ error: 'Missing agentId or messages' });
+            return;
+        }
+        const callBudget = await consumeCallBudget(agentId, 'manual', `manual-chat:${agentId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`);
+        if (!callBudget.allowed) {
+            res.status(402).json({
+                error: 'Call budget exhausted',
+                details: callBudget.reason,
+            });
             return;
         }
         const response = await proxyGatewayChat({
@@ -325,6 +517,17 @@ app.post('/api/chat', async (req, res) => {
             return;
         }
         const data = await response.json();
+        const assistantText = extractAssistantText(data?.choices?.[0]?.message?.content);
+        if (assistantText) {
+            appendRecentMemoryEvent(agentId, {
+                source: 'chat',
+                summary: summarizeAssistantOutput(assistantText),
+            });
+            const memoryOps = extractMemoryOpsFromText(assistantText);
+            for (const op of memoryOps) {
+                await applyMemoryOp(agentId, op);
+            }
+        }
         res.json(data);
     }
     catch (error) {
@@ -343,6 +546,14 @@ app.post('/api/chat/stream', async (req, res) => {
         const { agentId, messages } = req.body;
         if (!agentId || !messages?.length) {
             res.status(400).json({ error: 'Missing agentId or messages' });
+            return;
+        }
+        const callBudget = await consumeCallBudget(agentId, 'manual', `manual-stream:${agentId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`);
+        if (!callBudget.allowed) {
+            res.status(402).json({
+                error: 'Call budget exhausted',
+                details: callBudget.reason,
+            });
             return;
         }
         const response = await proxyGatewayChat({
@@ -382,44 +593,71 @@ app.post('/api/chat/stream', async (req, res) => {
         }
     }
 });
-app.get('/api/autoplay/status', (_req, res) => {
-    const configuredAgents = listConfiguredAgentIds();
-    const agentStatus = configuredAgents.map((agentId) => {
-        const lastTick = readAutoplayFeedback(agentId, 1)[0] || null;
-        const runtime = getAutoplayAgentState(agentId);
-        const deferUntilPass = autoplayDeferredUntilPass.get(agentId);
-        const deferredOnce = Number.isFinite(deferUntilPass) && deferUntilPass > autoplayPassCounter;
-        return {
-            agent_id: agentId,
-            enabled: getAgentAutoplaySetting(agentId),
-            in_flight: autoplayInFlight.has(agentId),
-            deferred_once: deferredOnce,
-            next_tick_at: computeNextTickAtIso(agentId),
-            last_tick: lastTick,
-            last_tick_started_at: runtime.last_tick_started_at || lastTick?.started_at || null,
-            last_tick_finished_at: runtime.last_tick_finished_at || lastTick?.finished_at || null,
-            last_tick_result: runtime.last_tick_result || lastTick?.status || null,
-            last_tick_error_code: runtime.last_tick_error_code || lastTick?.error_code || null,
-        };
-    });
-    res.json({
-        success: true,
-        enabled: AUTOPLAY_ENABLED,
-        interval_ms: AUTOPLAY_INTERVAL_MS,
-        timeout_ms: AUTOPLAY_TIMEOUT_MS,
-        max_parallel: AUTOPLAY_MAX_PARALLEL,
-        max_agents_per_tick: AUTOPLAY_MAX_AGENTS_PER_TICK,
-        running_agents: Array.from(autoplayInFlight),
-        configured_agents: configuredAgents,
-        pass: autoplayPassCounter,
-        next_tick_at: autoplayNextTickAtMs ? new Date(autoplayNextTickAtMs).toISOString() : null,
-        last_tick_started_at: autoplayLastTickStartedAt,
-        last_tick_finished_at: autoplayLastTickFinishedAt,
-        last_tick_result: autoplayLastTickResult,
-        last_tick_error_code: autoplayLastTickErrorCode,
-        prompt_updated_at: autoplayPromptUpdatedAt,
-        agents: agentStatus,
-    });
+app.get('/api/autoplay/status', async (_req, res) => {
+    try {
+        const configuredAgents = listConfiguredAgentIds();
+        const agentStatus = await Promise.all(configuredAgents.map(async (agentId) => {
+            const lastTick = readAutoplayFeedback(agentId, 1)[0] || null;
+            const runtime = getAutoplayAgentState(agentId);
+            const deferUntilPass = autoplayDeferredUntilPass.get(agentId);
+            const deferredOnce = Number.isFinite(deferUntilPass) && deferUntilPass > autoplayPassCounter;
+            const memoryState = withMemoryStateMetadata(agentId, readMemoryState(agentId));
+            const budget = await getAutoplayBudget(agentId);
+            return {
+                agent_id: agentId,
+                enabled: getAgentAutoplaySetting(agentId),
+                in_flight: autoplayInFlight.has(agentId),
+                deferred_once: deferredOnce,
+                next_tick_at: computeNextTickAtIso(agentId),
+                last_tick: lastTick,
+                last_tick_started_at: runtime.last_tick_started_at || lastTick?.started_at || null,
+                last_tick_finished_at: runtime.last_tick_finished_at || lastTick?.finished_at || null,
+                last_tick_result: runtime.last_tick_result || lastTick?.status || null,
+                last_tick_error_code: runtime.last_tick_error_code || lastTick?.error_code || null,
+                memory: {
+                    last_distilled_at: memoryState.last_distilled_at,
+                    ticks_since_distill: memoryState.ticks_since_distill,
+                    memory_version: memoryState.memory_version,
+                    memory_bytes: memoryState.memory_bytes,
+                },
+                budget: budget
+                    ? {
+                        tier: budget.tier || null,
+                        interval_ms: budget.interval_ms,
+                        call_ceiling: budget.call_ceiling,
+                        reserve_calls: budget.reserve_calls,
+                        remaining_calls_total: budget.remaining_calls_total,
+                        remaining_calls_autoplay: budget.remaining_calls_autoplay,
+                        scheduled_ticks_remaining: budget.scheduled_ticks_remaining,
+                        affordable_ticks_remaining: budget.affordable_ticks_remaining,
+                        run_fraction: budget.run_fraction,
+                    }
+                    : null,
+            };
+        }));
+        res.json({
+            success: true,
+            enabled: AUTOPLAY_ENABLED,
+            interval_ms: AUTOPLAY_INTERVAL_MS,
+            timeout_ms: AUTOPLAY_TIMEOUT_MS,
+            max_parallel: AUTOPLAY_MAX_PARALLEL,
+            max_agents_per_tick: AUTOPLAY_MAX_AGENTS_PER_TICK,
+            running_agents: Array.from(autoplayInFlight),
+            configured_agents: configuredAgents,
+            pass: autoplayPassCounter,
+            next_tick_at: autoplayNextTickAtMs ? new Date(autoplayNextTickAtMs).toISOString() : null,
+            last_tick_started_at: autoplayLastTickStartedAt,
+            last_tick_finished_at: autoplayLastTickFinishedAt,
+            last_tick_result: autoplayLastTickResult,
+            last_tick_error_code: autoplayLastTickErrorCode,
+            prompt_updated_at: autoplayPromptUpdatedAt,
+            agents: agentStatus,
+        });
+    }
+    catch (error) {
+        console.error('[autoplay] status error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch autoplay status' });
+    }
 });
 app.get('/api/autoplay/feedback/:agentId', (req, res) => {
     try {
@@ -525,6 +763,71 @@ function normalizeAutoplayErrorCode(details, statusCode) {
     }
     return 'execution_error';
 }
+function extractMemoryOpsFromText(text) {
+    if (!text)
+        return [];
+    const ops = [];
+    const regex = /\[\[MEMORY_OP:(\{[\s\S]*?\})\]\]/g;
+    let match = regex.exec(text);
+    while (match) {
+        const raw = match[1];
+        try {
+            const parsed = JSON.parse(raw);
+            const validated = validateMemoryOpPayload(parsed);
+            if (validated.valid) {
+                ops.push(validated.op);
+            }
+        }
+        catch {
+            // ignore malformed op payloads
+        }
+        match = regex.exec(text);
+    }
+    return ops;
+}
+function validateMemoryOpPayload(input) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+        return { valid: false, error: 'Memory op payload must be an object' };
+    }
+    const payload = input;
+    const op = typeof payload.op === 'string' ? payload.op : '';
+    const keys = Object.keys(payload);
+    if (op === 'request_distill') {
+        if (keys.some((key) => key !== 'op')) {
+            return { valid: false, error: 'request_distill accepts only { op }' };
+        }
+        return { valid: true, op: { op: 'request_distill' } };
+    }
+    if (op === 'remove_fact') {
+        if (keys.some((key) => key !== 'op' && key !== 'key')) {
+            return { valid: false, error: 'remove_fact accepts only { op, key }' };
+        }
+        if (typeof payload.key !== 'string' || !payload.key.trim()) {
+            return { valid: false, error: 'remove_fact requires a non-empty string key' };
+        }
+        return { valid: true, op: { op: 'remove_fact', key: payload.key } };
+    }
+    if (op === 'upsert_fact') {
+        if (keys.some((key) => key !== 'op' && key !== 'key' && key !== 'value')) {
+            return { valid: false, error: 'upsert_fact accepts only { op, key, value }' };
+        }
+        if (typeof payload.key !== 'string' || !payload.key.trim()) {
+            return { valid: false, error: 'upsert_fact requires a non-empty string key' };
+        }
+        if (typeof payload.value !== 'string' || !payload.value.trim()) {
+            return { valid: false, error: 'upsert_fact requires a non-empty string value' };
+        }
+        return {
+            valid: true,
+            op: {
+                op: 'upsert_fact',
+                key: payload.key,
+                value: payload.value,
+            },
+        };
+    }
+    return { valid: false, error: 'Unsupported memory op' };
+}
 function getAutoplayAgentState(agentId) {
     const existing = autoplayAgentState.get(agentId);
     if (existing)
@@ -628,6 +931,27 @@ function refreshAutoplayPrompt(reason) {
 function getAgentSettingsPath(agentId) {
     return path_1.default.join(getAgentDir(agentId), AGENT_SETTINGS_FILE);
 }
+function getWorkspaceDir(agentId) {
+    return path_1.default.join(getAgentDir(agentId), 'workspace');
+}
+function getMemoryDir(agentId) {
+    return path_1.default.join(getWorkspaceDir(agentId), MEMORY_DIR);
+}
+function getMemoryRecentDir(agentId) {
+    return path_1.default.join(getMemoryDir(agentId), MEMORY_RECENT_DIR);
+}
+function getMemoryStatePath(agentId) {
+    return path_1.default.join(getMemoryDir(agentId), MEMORY_STATE_FILE);
+}
+function getMemoryRecentEventsPath(agentId) {
+    return path_1.default.join(getMemoryRecentDir(agentId), MEMORY_RECENT_EVENTS_FILE);
+}
+function getLegacyMemoryRecentEventsPath(agentId) {
+    return path_1.default.join(getMemoryDir(agentId), MEMORY_RECENT_EVENTS_FILE);
+}
+function getMemoryPath(agentId) {
+    return path_1.default.join(getWorkspaceDir(agentId), MEMORY_FILE);
+}
 function getAutoplayFeedbackPath(agentId) {
     return path_1.default.join(getAgentDir(agentId), AUTOPLAY_FEEDBACK_FILE);
 }
@@ -648,15 +972,377 @@ function getAgentAutoplaySetting(agentId) {
     const settings = parseAgentSettings(agentId);
     return settings.autoplayEnabled !== false;
 }
-function setAgentAutoplaySetting(agentId, enabled) {
+function writeAgentSettings(agentId, patch) {
     const agentDir = getAgentDir(agentId);
     fs_1.default.mkdirSync(agentDir, { recursive: true });
     const settingsPath = getAgentSettingsPath(agentId);
+    const current = parseAgentSettings(agentId);
     const payload = {
-        autoplayEnabled: enabled,
+        ...current,
+        ...patch,
         updatedAt: new Date().toISOString(),
     };
     fs_1.default.writeFileSync(settingsPath, JSON.stringify(payload, null, 2));
+    return payload;
+}
+function setAgentAutoplaySetting(agentId, enabled) {
+    writeAgentSettings(agentId, {
+        autoplayEnabled: enabled,
+    });
+}
+function clearAutoplayTransientState(agentId) {
+    autoplayDeferredUntilPass.delete(agentId);
+    autoplayAgentState.delete(agentId);
+}
+function defaultMemoryMarkdown(agentId) {
+    return [
+        '# Memory',
+        '',
+        '## Active Context',
+        '- Keep food >= 50 when possible.',
+        '- Prefer concise, high-signal actions.',
+        '',
+        '## Durable Facts',
+        '- home_terrain: unknown',
+        '',
+        '## Recent Signals',
+        '- none',
+        '',
+        '## Constraints',
+        '- Maximize progress without risky loops.',
+        `- Agent ID: ${agentId}`,
+        '',
+    ].join('\n');
+}
+function defaultMemoryState() {
+    return {
+        ticks_since_distill: 0,
+        last_distilled_at: null,
+        memory_version: 1,
+        memory_digest: null,
+    };
+}
+function sanitizeMemoryMarkdown(content) {
+    const trimmed = content.replace(/\r\n/g, '\n').trim();
+    if (!trimmed) {
+        return [
+            '# Memory',
+            '',
+            '## Active Context',
+            '- none',
+            '',
+            '## Durable Facts',
+            '- none',
+            '',
+            '## Recent Signals',
+            '- none',
+            '',
+            '## Constraints',
+            '- none',
+            '',
+        ].join('\n');
+    }
+    if (trimmed.length <= MEMORY_MAX_CHARS)
+        return trimmed;
+    return `${trimmed.slice(0, MEMORY_MAX_CHARS - 1)}…`;
+}
+function computeMemoryDigest(content) {
+    return (0, crypto_1.createHash)('sha1').update(content, 'utf-8').digest('hex');
+}
+function readMemoryState(agentId) {
+    const statePath = getMemoryStatePath(agentId);
+    if (!fs_1.default.existsSync(statePath))
+        return defaultMemoryState();
+    try {
+        const parsed = JSON.parse(fs_1.default.readFileSync(statePath, 'utf-8'));
+        return {
+            ticks_since_distill: Number.isFinite(parsed.ticks_since_distill) ? Math.max(0, Math.floor(parsed.ticks_since_distill || 0)) : 0,
+            last_distilled_at: parsed.last_distilled_at || null,
+            memory_version: Number.isFinite(parsed.memory_version) ? Math.max(1, Math.floor(parsed.memory_version || 1)) : 1,
+            memory_digest: parsed.memory_digest || null,
+        };
+    }
+    catch {
+        return defaultMemoryState();
+    }
+}
+function writeMemoryState(agentId, patch) {
+    const memoryDir = getMemoryDir(agentId);
+    fs_1.default.mkdirSync(memoryDir, { recursive: true });
+    const next = {
+        ...readMemoryState(agentId),
+        ...patch,
+    };
+    fs_1.default.writeFileSync(getMemoryStatePath(agentId), JSON.stringify(next, null, 2));
+    return next;
+}
+function readMemoryFile(agentId) {
+    const memoryPath = getMemoryPath(agentId);
+    if (!fs_1.default.existsSync(memoryPath))
+        return defaultMemoryMarkdown(agentId);
+    return fs_1.default.readFileSync(memoryPath, 'utf-8');
+}
+function writeMemoryFile(agentId, content, options) {
+    const workspaceDir = getWorkspaceDir(agentId);
+    fs_1.default.mkdirSync(workspaceDir, { recursive: true });
+    const normalized = sanitizeMemoryMarkdown(content);
+    fs_1.default.writeFileSync(getMemoryPath(agentId), `${normalized}\n`);
+    const current = readMemoryState(agentId);
+    const digest = computeMemoryDigest(normalized);
+    return writeMemoryState(agentId, {
+        memory_digest: digest,
+        memory_version: options?.bumpVersion ? current.memory_version + 1 : current.memory_version,
+        ticks_since_distill: options?.resetTicks ? 0 : current.ticks_since_distill,
+        last_distilled_at: options?.lastDistilledAt !== undefined ? options.lastDistilledAt : current.last_distilled_at,
+    });
+}
+function withMemoryStateMetadata(agentId, state) {
+    const memoryPath = getMemoryPath(agentId);
+    const bytes = fs_1.default.existsSync(memoryPath) ? fs_1.default.statSync(memoryPath).size : 0;
+    return {
+        ...state,
+        memory_bytes: bytes,
+    };
+}
+function ensureMemoryScaffold(agentId) {
+    const workspaceDir = getWorkspaceDir(agentId);
+    const memoryDir = getMemoryDir(agentId);
+    const memoryRecentDir = getMemoryRecentDir(agentId);
+    fs_1.default.mkdirSync(workspaceDir, { recursive: true });
+    fs_1.default.mkdirSync(memoryDir, { recursive: true });
+    fs_1.default.mkdirSync(memoryRecentDir, { recursive: true });
+    if (!fs_1.default.existsSync(getMemoryPath(agentId))) {
+        const base = defaultMemoryMarkdown(agentId);
+        fs_1.default.writeFileSync(getMemoryPath(agentId), `${base}\n`);
+        const digest = computeMemoryDigest(base);
+        writeMemoryState(agentId, {
+            ticks_since_distill: 0,
+            last_distilled_at: null,
+            memory_version: 1,
+            memory_digest: digest,
+        });
+    }
+    else if (!fs_1.default.existsSync(getMemoryStatePath(agentId))) {
+        writeMemoryState(agentId, defaultMemoryState());
+    }
+    const recentPath = getMemoryRecentEventsPath(agentId);
+    const legacyRecentPath = getLegacyMemoryRecentEventsPath(agentId);
+    if (!fs_1.default.existsSync(recentPath) && fs_1.default.existsSync(legacyRecentPath)) {
+        fs_1.default.renameSync(legacyRecentPath, recentPath);
+    }
+    if (!fs_1.default.existsSync(getMemoryRecentEventsPath(agentId))) {
+        fs_1.default.writeFileSync(getMemoryRecentEventsPath(agentId), '');
+    }
+}
+function memoryContextSnippet(agentId) {
+    ensureMemoryScaffold(agentId);
+    const content = readMemoryFile(agentId);
+    const compact = content
+        .split('\n')
+        .map((line) => line.trimEnd())
+        .filter((line) => line.trim().length > 0)
+        .join('\n');
+    if (!compact)
+        return '';
+    if (compact.length <= MEMORY_CONTEXT_MAX_CHARS)
+        return compact;
+    return `${compact.slice(0, MEMORY_CONTEXT_MAX_CHARS - 1)}…`;
+}
+function appendRecentMemoryEvent(agentId, event) {
+    ensureMemoryScaffold(agentId);
+    const payload = {
+        at: new Date().toISOString(),
+        source: event.source,
+        summary: truncate(event.summary, 220),
+        details: event.details ? truncate(event.details, 300) : undefined,
+    };
+    const eventsPath = getMemoryRecentEventsPath(agentId);
+    fs_1.default.appendFileSync(eventsPath, `${JSON.stringify(payload)}\n`);
+    const raw = fs_1.default.readFileSync(eventsPath, 'utf-8');
+    const lines = raw
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+    if (lines.length > MEMORY_RECENT_MAX_LINES) {
+        const kept = lines.slice(lines.length - MEMORY_RECENT_MAX_LINES).join('\n');
+        fs_1.default.writeFileSync(eventsPath, `${kept}\n`);
+    }
+}
+function readRecentMemoryEvents(agentId, limit = 60) {
+    ensureMemoryScaffold(agentId);
+    const eventsPath = getMemoryRecentEventsPath(agentId);
+    const raw = fs_1.default.readFileSync(eventsPath, 'utf-8');
+    const parsed = [];
+    for (const line of raw.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed)
+            continue;
+        try {
+            const item = JSON.parse(trimmed);
+            if (!item || typeof item.summary !== 'string' || typeof item.source !== 'string')
+                continue;
+            parsed.push({
+                at: item.at || new Date().toISOString(),
+                source: item.source,
+                summary: item.summary,
+                details: item.details,
+            });
+        }
+        catch {
+            // ignore invalid lines
+        }
+    }
+    return parsed.slice(Math.max(0, parsed.length - Math.max(1, limit)));
+}
+function parseDurableFacts(memory) {
+    const lines = memory.split('\n');
+    const facts = new Map();
+    let inFacts = false;
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (/^##\s+/i.test(trimmed)) {
+            inFacts = /^##\s+Durable Facts$/i.test(trimmed);
+            continue;
+        }
+        if (!inFacts)
+            continue;
+        const match = trimmed.match(/^-\s*([^:]+):\s*(.+)$/);
+        if (!match)
+            continue;
+        const key = match[1].trim();
+        const value = match[2].trim();
+        if (key && value)
+            facts.set(key, value);
+    }
+    return facts;
+}
+function setDurableFacts(memory, nextFacts) {
+    const lines = memory.split('\n');
+    const out = [];
+    let i = 0;
+    let sectionWritten = false;
+    while (i < lines.length) {
+        const line = lines[i];
+        if (/^##\s+Durable Facts$/i.test(line.trim())) {
+            out.push('## Durable Facts');
+            if (nextFacts.size === 0) {
+                out.push('- none');
+            }
+            else {
+                Array.from(nextFacts.entries())
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .forEach(([key, value]) => out.push(`- ${key}: ${value}`));
+            }
+            sectionWritten = true;
+            i += 1;
+            while (i < lines.length && !/^##\s+/i.test(lines[i].trim())) {
+                i += 1;
+            }
+            continue;
+        }
+        out.push(line);
+        i += 1;
+    }
+    if (!sectionWritten) {
+        if (out.length > 0 && out[out.length - 1].trim() !== '')
+            out.push('');
+        out.push('## Durable Facts');
+        if (nextFacts.size === 0) {
+            out.push('- none');
+        }
+        else {
+            Array.from(nextFacts.entries())
+                .sort(([a], [b]) => a.localeCompare(b))
+                .forEach(([key, value]) => out.push(`- ${key}: ${value}`));
+        }
+    }
+    return out.join('\n').trim();
+}
+async function applyMemoryOp(agentId, op) {
+    ensureMemoryScaffold(agentId);
+    const operation = op.op;
+    if (operation === 'request_distill') {
+        const distilled = await distillMemoryForAgent(agentId, 'requested');
+        if (!distilled.success) {
+            return {
+                success: false,
+                statusCode: distilled.statusCode || 500,
+                error: distilled.error,
+                details: distilled.details,
+            };
+        }
+        return {
+            success: true,
+            content: distilled.content,
+            state: distilled.state,
+            operation,
+        };
+    }
+    if (operation === 'upsert_fact') {
+        const key = typeof op.key === 'string' ? truncate(op.key, 80) : '';
+        const value = typeof op.value === 'string' ? truncate(op.value, 180) : '';
+        if (!key || !value) {
+            return { success: false, statusCode: 400, error: 'upsert_fact requires non-empty key and value' };
+        }
+        const current = readMemoryFile(agentId);
+        const facts = parseDurableFacts(current);
+        facts.set(key, value);
+        const next = setDurableFacts(current, facts);
+        const state = writeMemoryFile(agentId, next, { bumpVersion: true });
+        await syncMemoryTelemetry(agentId, state);
+        appendRecentMemoryEvent(agentId, {
+            source: 'memory',
+            summary: `upsert_fact: ${key}`,
+            details: value,
+        });
+        return { success: true, content: next, state, operation };
+    }
+    if (operation === 'remove_fact') {
+        const key = typeof op.key === 'string' ? truncate(op.key, 80) : '';
+        if (!key) {
+            return { success: false, statusCode: 400, error: 'remove_fact requires a key' };
+        }
+        const current = readMemoryFile(agentId);
+        const facts = parseDurableFacts(current);
+        facts.delete(key);
+        const next = setDurableFacts(current, facts);
+        const state = writeMemoryFile(agentId, next, { bumpVersion: true });
+        await syncMemoryTelemetry(agentId, state);
+        appendRecentMemoryEvent(agentId, {
+            source: 'memory',
+            summary: `remove_fact: ${key}`,
+        });
+        return { success: true, content: next, state, operation };
+    }
+    return { success: false, statusCode: 400, error: `Unsupported memory operation: ${operation}` };
+}
+function resetAgentMemory(agentId, mode) {
+    ensureMemoryScaffold(agentId);
+    const sessionsDir = path_1.default.join(getAgentDir(agentId), 'sessions');
+    fs_1.default.rmSync(sessionsDir, { recursive: true, force: true });
+    fs_1.default.mkdirSync(sessionsDir, { recursive: true });
+    if (mode === 'hard') {
+        const base = defaultMemoryMarkdown(agentId);
+        fs_1.default.writeFileSync(getMemoryPath(agentId), `${base}\n`);
+        writeMemoryState(agentId, {
+            ticks_since_distill: 0,
+            last_distilled_at: null,
+            memory_version: 1,
+            memory_digest: computeMemoryDigest(base),
+        });
+        void syncMemoryTelemetry(agentId, readMemoryState(agentId));
+        fs_1.default.writeFileSync(getMemoryRecentEventsPath(agentId), '');
+        const legacyRecentPath = getLegacyMemoryRecentEventsPath(agentId);
+        if (legacyRecentPath !== getMemoryRecentEventsPath(agentId)) {
+            fs_1.default.rmSync(legacyRecentPath, { force: true });
+        }
+        return;
+    }
+    appendRecentMemoryEvent(agentId, {
+        source: 'memory',
+        summary: 'soft_reset performed',
+    });
+    void syncMemoryTelemetry(agentId, readMemoryState(agentId));
 }
 function makeFeedbackEntry(input) {
     return {
@@ -778,6 +1464,194 @@ async function safeResponseText(response) {
         return '';
     }
 }
+async function internalApiFetch(pathname, options = {}) {
+    if (!INTERNAL_API_TOKEN) {
+        throw new Error('OPENCLAW_INTERNAL_API_TOKEN is not configured');
+    }
+    const headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${INTERNAL_API_TOKEN}`,
+        ...(options.headers || {}),
+    };
+    return fetch(`${CLAWCITY_API_URL}${pathname}`, {
+        ...options,
+        headers,
+    });
+}
+async function syncMemoryTelemetry(agentId, state) {
+    if (!INTERNAL_API_TOKEN)
+        return;
+    try {
+        await internalApiFetch('/api/internal/autoplay/memory-telemetry', {
+            method: 'POST',
+            body: JSON.stringify({
+                config_id: agentId,
+                last_distilled_at: state.last_distilled_at,
+                memory_version: state.memory_version,
+                memory_digest: state.memory_digest,
+            }),
+        });
+    }
+    catch (error) {
+        console.warn('[memory] telemetry sync failed:', error instanceof Error ? error.message : String(error));
+    }
+}
+async function getAutoplayBudget(agentId) {
+    if (!INTERNAL_API_TOKEN)
+        return null;
+    try {
+        const query = new URLSearchParams({ config_id: agentId });
+        const response = await internalApiFetch(`/api/internal/autoplay/budget?${query.toString()}`, {
+            method: 'GET',
+        });
+        const data = JSON.parse(await response.text());
+        if (!response.ok || !data.success)
+            return null;
+        return data;
+    }
+    catch (error) {
+        console.warn('[autoplay] budget fetch failed:', error instanceof Error ? error.message : String(error));
+        return null;
+    }
+}
+async function consumeCallBudget(agentId, mode, idempotencyKey) {
+    if (!INTERNAL_API_TOKEN) {
+        return {
+            success: true,
+            allowed: true,
+            consumed: false,
+            reason: 'internal_token_missing',
+            remaining_calls_total: Number.MAX_SAFE_INTEGER,
+            remaining_calls_autoplay: Number.MAX_SAFE_INTEGER,
+            call_ceiling: Number.MAX_SAFE_INTEGER,
+            reserve_calls: 0,
+            llm_calls_used: 0,
+            autoplay_calls_used: 0,
+            credits_used: 0,
+            credits_remaining: 0,
+            credits_cycle_end: null,
+        };
+    }
+    const response = await internalApiFetch('/api/internal/billing/consume-call', {
+        method: 'POST',
+        body: JSON.stringify({
+            config_id: agentId,
+            mode,
+            idempotency_key: idempotencyKey,
+        }),
+    });
+    const text = await response.text();
+    let data;
+    try {
+        data = JSON.parse(text);
+    }
+    catch {
+        throw new Error(`Invalid consume-call payload: ${text || '(empty)'}`);
+    }
+    if (!data.success) {
+        throw new Error(data.error || `consume-call failed (${response.status})`);
+    }
+    return data;
+}
+async function distillMemoryForAgent(agentId, trigger) {
+    ensureMemoryScaffold(agentId);
+    const current = readMemoryFile(agentId);
+    const recent = readRecentMemoryEvents(agentId, 80);
+    const budgetId = `memory-distill:${agentId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+    let budget;
+    try {
+        budget = await consumeCallBudget(agentId, 'memory_distill', budgetId);
+    }
+    catch (error) {
+        return {
+            success: false,
+            statusCode: 502,
+            error: 'Failed to consume distill budget',
+            details: error instanceof Error ? error.message : String(error),
+        };
+    }
+    if (!budget.allowed) {
+        return {
+            success: false,
+            statusCode: 402,
+            error: 'Memory distillation blocked by call budget',
+            details: budget.reason,
+        };
+    }
+    const recentText = recent.length
+        ? recent.map((item) => `- [${item.source}] ${item.summary}${item.details ? ` (${item.details})` : ''}`).join('\n')
+        : '- none';
+    const distillPrompt = [
+        'Rewrite the agent memory into compact markdown.',
+        'Output only markdown with these headings exactly:',
+        '# Memory',
+        '## Active Context',
+        '## Durable Facts',
+        '## Recent Signals',
+        '## Constraints',
+        '',
+        `Hard limit: ${MEMORY_MAX_CHARS} characters.`,
+        'Keep concise and action-relevant.',
+        '',
+        'CURRENT MEMORY:',
+        current,
+        '',
+        'RECENT EVENTS:',
+        recentText,
+        '',
+        `TRIGGER: ${trigger}`,
+    ].join('\n');
+    const response = await proxyGatewayChat({
+        agentId,
+        userKey: `${agentId}:memory-distill`,
+        injectMemory: false,
+        timeoutMs: AUTOPLAY_TIMEOUT_MS,
+        retries: 1,
+        messages: [
+            { role: 'system', content: 'You are a strict memory compactor. Return markdown only.' },
+            { role: 'user', content: distillPrompt },
+        ],
+    });
+    if (!response.ok) {
+        const detail = await safeResponseText(response);
+        return {
+            success: false,
+            statusCode: response.status,
+            error: 'Gateway error during memory distillation',
+            details: detail || `HTTP ${response.status}`,
+        };
+    }
+    const text = await safeResponseText(response);
+    let distilled = text;
+    try {
+        const parsed = JSON.parse(text);
+        distilled = extractAssistantText(parsed.choices?.[0]?.message?.content) || distilled;
+    }
+    catch {
+        // noop - raw text fallback
+    }
+    if (!distilled.trim()) {
+        distilled = current;
+    }
+    const nowIso = new Date().toISOString();
+    const normalized = sanitizeMemoryMarkdown(distilled);
+    const state = writeMemoryFile(agentId, normalized, {
+        bumpVersion: true,
+        resetTicks: true,
+        lastDistilledAt: nowIso,
+    });
+    await syncMemoryTelemetry(agentId, state);
+    appendRecentMemoryEvent(agentId, {
+        source: 'memory',
+        summary: `memory_distilled (${trigger})`,
+        details: `chars=${normalized.length}`,
+    });
+    return {
+        success: true,
+        content: normalized,
+        state,
+    };
+}
 function isTransientFetchError(error) {
     const message = error instanceof Error ? error.message : String(error);
     return [
@@ -891,13 +1765,17 @@ function listConfiguredAgentIds() {
         return [];
     }
 }
-async function proxyGatewayChat({ agentId, messages, stream = false, timeoutMs = CHAT_TIMEOUT_MS, retries = CHAT_RETRIES, }) {
+async function proxyGatewayChat({ agentId, messages, stream = false, timeoutMs = CHAT_TIMEOUT_MS, retries = CHAT_RETRIES, userKey, injectMemory = true, }) {
     const maxAttempts = Math.max(1, retries + 1);
     let lastError = null;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
         try {
+            const memoryPrelude = injectMemory ? memoryContextSnippet(agentId) : '';
+            const outboundMessages = memoryPrelude
+                ? [{ role: 'system', content: `Long-term memory (compact):\n${memoryPrelude}` }, ...messages]
+                : messages;
             const response = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
                 method: 'POST',
                 headers: {
@@ -907,8 +1785,8 @@ async function proxyGatewayChat({ agentId, messages, stream = false, timeoutMs =
                 },
                 body: JSON.stringify({
                     model: `openclaw:${agentId}`,
-                    messages,
-                    user: agentId, // shared memory between chat and auto-mode
+                    messages: outboundMessages,
+                    user: userKey || agentId, // shared memory between chat and auto-mode
                     stream,
                 }),
                 signal: controller.signal,
@@ -975,6 +1853,7 @@ function recordAutoplayFeedback(params) {
 }
 async function runAutoplayForAgent(agentId, options = {}) {
     const startedAt = new Date();
+    let attemptedModelCall = false;
     if (!autoplayPrompt) {
         refreshAutoplayPrompt('lazy-init');
     }
@@ -1023,6 +1902,23 @@ async function runAutoplayForAgent(agentId, options = {}) {
     }
     autoplayInFlight.add(agentId);
     try {
+        const budget = await consumeCallBudget(agentId, 'autoplay', `autoplay:${agentId}:${startedAt.getTime()}:${Math.random().toString(36).slice(2, 8)}`);
+        if (!budget.allowed) {
+            const summary = budget.reason === 'manual_reserve'
+                ? 'Auto-mode skipped to preserve manual reserve.'
+                : 'Auto-mode blocked by call budget.';
+            const details = `budget_denied:${budget.reason}`;
+            recordAutoplayFeedback({
+                agentId,
+                startedAt,
+                status: 'failed',
+                summary,
+                details,
+                errorCode: budget.reason || 'budget_denied',
+            });
+            return { success: false, status: 'failed', summary, details, errorCode: budget.reason || 'budget_denied' };
+        }
+        attemptedModelCall = true;
         const response = await proxyGatewayChat({
             agentId,
             messages: [{ role: 'user', content: autoplayPrompt }],
@@ -1064,6 +1960,17 @@ async function runAutoplayForAgent(agentId, options = {}) {
             ? summarizeAssistantOutput(assistantText)
             : `Auto-mode tick completed (finish_reason=${finishReason}).`;
         const details = `finish_reason=${finishReason}`;
+        if (assistantText) {
+            appendRecentMemoryEvent(agentId, {
+                source: 'autoplay',
+                summary,
+                details,
+            });
+            const memoryOps = extractMemoryOpsFromText(assistantText);
+            for (const op of memoryOps) {
+                await applyMemoryOp(agentId, op);
+            }
+        }
         recordAutoplayFeedback({
             agentId,
             startedAt,
@@ -1115,6 +2022,20 @@ async function runAutoplayForAgent(agentId, options = {}) {
     }
     finally {
         autoplayInFlight.delete(agentId);
+        if (attemptedModelCall) {
+            const state = writeMemoryState(agentId, {
+                ticks_since_distill: readMemoryState(agentId).ticks_since_distill + 1,
+            });
+            if (state.ticks_since_distill >= AUTOPLAY_DISTILL_EVERY_TICKS) {
+                const distilled = await distillMemoryForAgent(agentId, 'scheduled');
+                if (!distilled.success) {
+                    console.warn(`[memory] Scheduled distill failed for ${agentId}: ${distilled.error} ${distilled.details || ''}`.trim());
+                }
+                else {
+                    console.log(`[memory] Scheduled distill applied for ${agentId} (version=${distilled.state?.memory_version || 'n/a'})`);
+                }
+            }
+        }
     }
 }
 async function runAutoplayTick(trigger = 'interval') {
@@ -1169,6 +2090,45 @@ async function runAutoplayTick(trigger = 'interval') {
                     continue;
                 }
             }
+            const budget = await getAutoplayBudget(agentId);
+            if (budget) {
+                if (budget.remaining_calls_total <= 0) {
+                    skipped++;
+                    addReasonCount(reasonCounts, 'cap_exhausted');
+                    continue;
+                }
+                if (budget.remaining_calls_autoplay <= 0) {
+                    skipped++;
+                    addReasonCount(reasonCounts, 'manual_reserve');
+                    continue;
+                }
+            }
+            const settings = parseAgentSettings(agentId);
+            const intervalMs = budget?.interval_ms && budget.interval_ms > 0
+                ? budget.interval_ms
+                : AUTOPLAY_INTERVAL_MS;
+            const lastAttemptMs = settings.lastAutoplayAttemptAt ? Date.parse(settings.lastAutoplayAttemptAt) : NaN;
+            if (Number.isFinite(lastAttemptMs) && Date.now() - lastAttemptMs < intervalMs) {
+                skipped++;
+                addReasonCount(reasonCounts, 'tier_cadence');
+                continue;
+            }
+            const runFraction = budget
+                ? Math.max(0, Math.min(1, Number(budget.run_fraction || 0)))
+                : 1;
+            const nextAccumulator = Math.max(0, (settings.autoplayPacingAccumulator || 0) + runFraction);
+            if (nextAccumulator < 1) {
+                writeAgentSettings(agentId, {
+                    autoplayPacingAccumulator: nextAccumulator,
+                });
+                skipped++;
+                addReasonCount(reasonCounts, 'pacing_skip');
+                continue;
+            }
+            writeAgentSettings(agentId, {
+                autoplayPacingAccumulator: nextAccumulator - 1,
+                lastAutoplayAttemptAt: new Date().toISOString(),
+            });
             const result = await runAutoplayForAgent(agentId);
             if (result.status === 'success') {
                 succeeded++;
@@ -1289,11 +2249,17 @@ async function addAgentToConfig(agentId, agentDir, model) {
 }
 async function removeAgentFromConfig(agentId) {
     const config = readGatewayConfig();
+    const beforeCount = (config.agents?.list || []).length;
     if (config.agents?.list) {
         config.agents.list = config.agents.list.filter((a) => a.id !== agentId);
     }
+    else {
+        config.agents = { ...(config.agents || {}), list: [] };
+    }
+    const afterCount = (config.agents?.list || []).length;
     writeGatewayConfig(config);
     await signalConfigReload();
+    return afterCount < beforeCount;
 }
 async function signalConfigReload() {
     // The gateway watches its config file for changes.

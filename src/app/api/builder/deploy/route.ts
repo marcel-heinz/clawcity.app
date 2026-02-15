@@ -224,21 +224,83 @@ export async function DELETE(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // Deprovision from OpenClaw if configured
-    if (isOpenClawConfigured()) {
-      const result = await deprovisionAgent(config_id);
-      if (!result.success) {
-        console.error('OpenClaw deprovision failed:', result.error);
-      }
+    const { data: config, error: configError } = await supabase
+      .from('agent_configs')
+      .select('id, user_id, is_active')
+      .eq('id', config_id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (configError || !config) {
+      return NextResponse.json({ error: 'Config not found' }, { status: 404 });
     }
 
-    await supabase
+    if (!isOpenClawConfigured()) {
+      if (config.is_active) {
+        return NextResponse.json(
+          {
+            success: false,
+            stopped: false,
+            verified_not_configured: false,
+            error: 'OpenClaw gateway not configured for runtime stop verification',
+            details: 'runtime_unavailable',
+          },
+          { status: 503 }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        stopped: true,
+        verified_not_configured: true,
+        details: null,
+      });
+    }
+
+    const stopResult = await deprovisionAgent(config_id);
+    const verifiedNotConfigured = stopResult.verified_not_configured === true;
+    if (!stopResult.success || !verifiedNotConfigured) {
+      console.error('OpenClaw deprovision failed:', stopResult.error, stopResult.details, {
+        verified_not_configured: stopResult.verified_not_configured,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          stopped: false,
+          verified_not_configured: false,
+          error: stopResult.error || 'Failed to verify runtime stop',
+          details: stopResult.details || stopResult.message || null,
+          in_flight_at_stop: stopResult.in_flight_at_stop ?? null,
+        },
+        { status: 502 }
+      );
+    }
+
+    const { error: deactivateError } = await supabase
       .from('agent_configs')
       .update({ is_active: false })
       .eq('id', config_id)
       .eq('user_id', user.id);
+    if (deactivateError) {
+      console.error('Failed to persist stopped state:', deactivateError);
+      return NextResponse.json(
+        {
+          success: false,
+          stopped: false,
+          verified_not_configured: true,
+          error: 'Runtime stopped but failed to persist agent inactive state',
+          details: deactivateError.message,
+        },
+        { status: 500 }
+      );
+    }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      stopped: true,
+      verified_not_configured: true,
+      details: stopResult.message || null,
+      in_flight_at_stop: stopResult.in_flight_at_stop ?? false,
+    });
   } catch (error) {
     console.error('Stop error:', error);
     return NextResponse.json({ error: 'Failed to stop agent' }, { status: 500 });
