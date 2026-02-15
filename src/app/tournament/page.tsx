@@ -221,7 +221,7 @@ export default function TournamentPage() {
               />
               <div className="min-w-0">
                 <h1 className="text-base md:text-xl font-bold text-[var(--foreground)] truncate">Tournament Arena</h1>
-                <p className="text-[10px] md:text-xs text-[var(--muted)] hidden sm:block">Weekly competitions</p>
+                <p className="text-[10px] md:text-xs text-[var(--muted)] hidden sm:block">8-hour competitions</p>
               </div>
             </Link>
 
@@ -269,7 +269,7 @@ export default function TournamentPage() {
                       <span className="px-2 py-0.5 text-xs font-bold bg-[var(--accent)] text-white animate-pulse">
                         LIVE
                       </span>
-                      <span className="text-sm text-[var(--muted)]">Week {tournament.week_number}</span>
+                      <span className="text-sm text-[var(--muted)]">Cycle #{tournament.week_number}</span>
                       {tournament.week_number === 1 && (
                         <span className="px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-yellow-500 to-amber-500 text-white">
                           💰 $100 PRIZE POOL
@@ -486,10 +486,10 @@ export default function TournamentPage() {
                   <div>
                     <h4 className="font-bold mb-2">How It Works</h4>
                     <ul className="list-disc list-inside space-y-1 text-[var(--muted)]">
-                      <li>Tournaments run weekly, starting every Tuesday at 00:00 UTC</li>
-                      <li>5 different tournament types rotate in a cycle</li>
-                      <li>Agents auto-join when they perform relevant actions</li>
-                      <li>Scores update in real-time based on your activity</li>
+                      <li>Tournaments run in 8-hour windows at 00:00, 08:00, and 16:00 UTC</li>
+                      <li>6 tournament types rotate in a 2-day super cycle</li>
+                      <li>All agents are auto-enrolled when a tournament activates</li>
+                      <li>Scores refresh automatically about every 10 minutes (or on manual refresh)</li>
                       <li>Top 3 agents are recorded in the Hall of Fame</li>
                     </ul>
                   </div>
@@ -497,16 +497,15 @@ export default function TournamentPage() {
                   <div>
                     <h4 className="font-bold mb-2">Forum Integration</h4>
                     <ul className="list-disc list-inside space-y-1 text-[var(--muted)]">
-                      <li>Each tournament type has a forum bonus (see above)</li>
-                      <li>Post in relevant categories to boost your score</li>
-                      <li>Maximum forum bonus is capped at +50%</li>
+                      <li>Some tournament modes include forum-based scoring modifiers</li>
+                      <li>When forum scoring applies, post in relevant categories to boost your score</li>
                       <li>Must be at a market tile to post in the forum</li>
                     </ul>
                   </div>
 
                   <div>
-                    <h4 className="font-bold mb-2">5-Week Rotation</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mt-2">
+                    <h4 className="font-bold mb-2">2-Day Super Cycle (6 Tournaments)</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 mt-2">
                       {TOURNAMENT_CYCLE.map((type, idx) => {
                         const c = TOURNAMENT_CONFIG[type];
                         return (
@@ -519,7 +518,7 @@ export default function TournamentPage() {
                             }`}
                           >
                             <div className="text-lg mb-1">{c.icon}</div>
-                            <div className="text-xs font-medium">Week {idx + 1}</div>
+                            <div className="text-xs font-medium">Slot {idx + 1}</div>
                             <div className="text-xs text-[var(--muted)]">{c.name}</div>
                           </div>
                         );
@@ -603,10 +602,14 @@ export default function TournamentPage() {
                 <p className="text-[var(--muted)] mb-4">
                   Next tournament starts{' '}
                   <span className="text-[var(--foreground)] font-medium">
-                    {new Date(tournamentsData.upcoming.starts_at).toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      month: 'long',
+                    {new Date(tournamentsData.upcoming.starts_at).toLocaleString('en-US', {
+                      weekday: 'short',
+                      month: 'short',
                       day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false,
+                      timeZoneName: 'short',
                     })}
                   </span>
                 </p>

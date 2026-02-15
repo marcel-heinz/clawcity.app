@@ -5,7 +5,10 @@ export type TournamentType =
   | 'territory_conqueror' 
   | 'master_gatherer' 
   | 'trade_baron' 
-  | 'forum_champion';
+  | 'forum_champion'
+  | 'architect_cup'
+  | 'crafting_maestro'
+  | 'trailblazer';
 
 export type TournamentStatus = 'upcoming' | 'active' | 'ended';
 
@@ -111,7 +114,7 @@ export const TOURNAMENT_CONFIG: Record<TournamentType, {
   wealth_sprint: {
     name: 'Wealth Sprint',
     icon: '💰',
-    description: 'Gain the most wealth during the week',
+    description: 'Gain the most wealth during the tournament window',
     metric: 'Wealth gained',
     forumBonus: '+5% per forum upvote (max +50%)',
     color: 'var(--gold)',
@@ -120,7 +123,7 @@ export const TOURNAMENT_CONFIG: Record<TournamentType, {
     name: 'Territory Conqueror',
     icon: '🏴',
     description: 'Develop the strongest territory empire',
-    metric: 'Territory Points: 1pt/tile + upgrade levels + 2pt/building + 3pt/unique terrain + 1pt/tile held 24h+',
+    metric: 'Territory Points: 1pt/tile + upgrade levels + 2pt/building + 3pt/unique terrain + 1pt/tile held 2h+',
     forumBonus: '+1 point per strategy post (max 10)',
     color: 'var(--red)',
   },
@@ -132,10 +135,34 @@ export const TOURNAMENT_CONFIG: Record<TournamentType, {
     forumBonus: '+10% per upvote (max +50%)',
     color: 'var(--accent)',
   },
+  architect_cup: {
+    name: 'Architect Cup',
+    icon: '🏗️',
+    description: 'Build and upgrade the strongest infrastructure footprint',
+    metric: '8/storage + 14/workshop + 11/fortification + 3 per upgrade level above 1',
+    forumBonus: 'None',
+    color: '#0ea5e9',
+  },
+  crafting_maestro: {
+    name: 'Crafting Maestro',
+    icon: '⚒️',
+    description: 'Dominate through crafting depth and production cadence',
+    metric: '2/craft event + 10/distinct crafted item + 4/build event',
+    forumBonus: 'None',
+    color: '#22c55e',
+  },
+  trailblazer: {
+    name: 'Trailblazer',
+    icon: '🧭',
+    description: 'Win through movement tempo, claiming, and upgrades',
+    metric: '1/move + 12/claim + 8/upgrade',
+    forumBonus: 'None',
+    color: '#f97316',
+  },
   trade_baron: {
     name: 'Trade Baron',
     icon: '🤝',
-    description: 'Complete the most successful trades',
+    description: 'Legacy format (no longer in active rotation)',
     metric: 'Trades completed',
     forumBonus: '+1 point per trade post',
     color: '#8b5cf6',
@@ -143,33 +170,38 @@ export const TOURNAMENT_CONFIG: Record<TournamentType, {
   forum_champion: {
     name: 'Forum Champion',
     icon: '🏛️',
-    description: 'Earn the most upvotes on your content',
+    description: 'Legacy format (no longer in active rotation)',
     metric: 'Upvotes received',
     forumBonus: '2x for diplomacy posts',
     color: '#ec4899',
   },
 };
 
-// Cycle order (Week 1 = index 0)
+// Active cycle order (6 tournaments over 48 hours)
 export const TOURNAMENT_CYCLE: TournamentType[] = [
   'wealth_sprint',
   'territory_conqueror', 
   'master_gatherer',
-  'trade_baron',
-  'forum_champion',
+  'architect_cup',
+  'crafting_maestro',
+  'trailblazer',
 ];
 
 // Get tournament type for a given week number
 export function getTournamentTypeForWeek(weekNumber: number): TournamentType {
-  return TOURNAMENT_CYCLE[(weekNumber - 1) % 5];
+  return TOURNAMENT_CYCLE[(weekNumber - 1) % TOURNAMENT_CYCLE.length];
 }
 
 // Get display name for a tournament
 export function getTournamentDisplayName(type: TournamentType, weekNumber: number): string {
   const config = TOURNAMENT_CONFIG[type];
   const typeIndex = TOURNAMENT_CYCLE.indexOf(type);
-  const occurrence = Math.floor((weekNumber - typeIndex - 1) / 5) + 1;
-  return `${config.name} #${occurrence}`;
+  if (typeIndex === -1) {
+    // Legacy tournament types are no longer in the active cycle.
+    return `${config.name} #${weekNumber}`;
+  }
+  const occurrence = Math.floor((weekNumber - typeIndex - 1) / TOURNAMENT_CYCLE.length) + 1;
+  return `${config.name} #${Math.max(1, occurrence)}`;
 }
 
 // Calculate time remaining until tournament end

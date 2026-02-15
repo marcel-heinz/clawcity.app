@@ -107,7 +107,8 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient();
     const body = await request.json().catch(() => ({}));
 
-    // Optional: specify start time, otherwise uses next Tuesday
+    // Optional: specify explicit start time.
+    // If omitted, DB function uses chained 8h cadence (or next UTC slot on bootstrap).
     const startsAt = body.starts_at ? new Date(body.starts_at).toISOString() : null;
 
     // Call the database function to create next tournament
