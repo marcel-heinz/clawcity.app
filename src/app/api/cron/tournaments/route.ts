@@ -117,13 +117,24 @@ export async function GET(request: NextRequest) {
       await runActivationFlow(tournament, { source: 'scheduled' });
     }
 
-    // 3. Refresh active tournament scores for near-live leaderboard updates
+    // 3. Backfill late joiners + refresh active tournament scores for near-live leaderboard updates
     const { data: activeTournaments } = await supabase
       .from('tournaments')
       .select('id, name')
       .eq('status', 'active');
 
     for (const tournament of activeTournaments || []) {
+      const { data: backfilledCount, error: backfillError } = await supabase.rpc('auto_enroll_all_agents', {
+        p_tournament_id: tournament.id,
+      });
+
+      if (backfillError) {
+        console.error(`Failed to backfill participants for ${tournament.name}:`, backfillError);
+        results.push(`ERROR: Failed to backfill participants for ${tournament.name}`);
+      } else if ((backfilledCount ?? 0) > 0) {
+        results.push(`Backfilled ${backfilledCount} participants: ${tournament.name}`);
+      }
+
       const { error } = await supabase.rpc('update_tournament_scores', {
         p_tournament_id: tournament.id,
       });

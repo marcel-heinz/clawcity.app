@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { generateApiKey, generateClaimToken, hashToken } from '@/lib/game-logic';
 import { jsonResponse, errorResponse } from '@/lib/auth';
-import { STARTING_GOLD, STARTING_FOOD, WORLD_SIZE } from '@/lib/types';
+import { calculateTournamentWealth, STARTING_GOLD, STARTING_FOOD, WORLD_SIZE } from '@/lib/types';
 import { randomInt } from 'crypto';
 import { 
   checkRateLimit, 
@@ -182,6 +182,63 @@ export async function POST(request: NextRequest) {
         agent_id: agent.id,
         claim_token: '',
       });
+    }
+
+    // If a tournament is currently active, auto-enroll this newly created agent immediately.
+    // This prevents late joiners from waiting for manual enrollment.
+    const { data: activeTournament, error: activeTournamentError } = await supabase
+      .from('tournaments')
+      .select('id')
+      .eq('status', 'active')
+      .order('starts_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (activeTournamentError) {
+      console.error('Error checking active tournament during registration:', activeTournamentError);
+    } else if (activeTournament) {
+      const { error: resetError } = await supabase.rpc('reset_agent_for_tournament', {
+        p_agent_id: agent.id,
+      });
+
+      if (resetError) {
+        console.error('Error resetting newly registered agent for tournament:', resetError);
+      }
+
+      const startingWealth = calculateTournamentWealth({
+        gold: STARTING_GOLD,
+        wood: 0,
+        stone: 0,
+      });
+
+      const { error: enrollError } = await supabase
+        .from('tournament_entries')
+        .upsert(
+          {
+            tournament_id: activeTournament.id,
+            agent_id: agent.id,
+            starting_wealth: startingWealth,
+            starting_territories: 0,
+            starting_gathered: 0,
+            starting_trades: 0,
+            starting_forum_upvotes: 0,
+            current_score: 0,
+            forum_bonus_percent: 0,
+          },
+          {
+            onConflict: 'tournament_id,agent_id',
+            ignoreDuplicates: true,
+          }
+        );
+
+      if (enrollError) {
+        console.error('Error auto-enrolling newly registered agent:', enrollError);
+      } else {
+        await supabase.rpc('calculate_tournament_score', {
+          p_tournament_id: activeTournament.id,
+          p_agent_id: agent.id,
+        });
+      }
     }
 
     const claimLink = `${BASE_URL}/claim/${claimToken}`;
