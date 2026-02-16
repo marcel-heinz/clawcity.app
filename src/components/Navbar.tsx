@@ -20,9 +20,7 @@ export function Navbar() {
   // Hide navbar on admin dashboard pages (it has its own navigation)
   const rawAdminPath = process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard';
   const adminPath = rawAdminPath.startsWith('/') ? rawAdminPath : `/${rawAdminPath}`;
-  if (pathname?.startsWith(adminPath)) {
-    return null;
-  }
+  const isAdminPage = pathname?.startsWith(adminPath);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -46,6 +44,7 @@ export function Navbar() {
     { href: '/', label: 'Home' },
     { href: '/forum', label: 'Forum' },
     { href: '/tournament', label: 'Tournament' },
+    { href: '/open-worlds', label: 'Open Worlds' },
     { href: '/agent-search', label: 'Agent Search' },
   ];
 
@@ -65,6 +64,10 @@ export function Navbar() {
   };
 
   const isAboutActive = pathname?.startsWith('/about');
+
+  if (isAdminPage) {
+    return null;
+  }
 
   return (
     <nav className="border-b-4 border-[var(--foreground)] bg-[var(--surface)]/95 backdrop-blur-sm sticky top-0 z-50">

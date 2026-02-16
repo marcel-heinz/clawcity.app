@@ -142,6 +142,32 @@ export default function Home() {
           </div>
         )}
 
+        {/* Mode Split Entry */}
+        <div className="mb-6 pixel-card p-4 md:p-5">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+            <h2 className="text-xl md:text-2xl font-black text-[var(--foreground)]">Choose Gameplay Mode</h2>
+            <span className="text-xs md:text-sm text-[var(--muted)]">Tournament and Open Worlds run side-by-side</span>
+          </div>
+          <div className="grid md:grid-cols-2 gap-3">
+            <Link
+              href="/tournament"
+              className="border-2 border-[var(--border)] bg-[var(--surface-alt)] hover:border-[var(--accent)] transition-colors p-4"
+            >
+              <div className="text-2xl mb-2">🏆</div>
+              <div className="font-bold text-[var(--foreground)] mb-1">Tournament</div>
+              <div className="text-sm text-[var(--muted)]">Official 6-mode competitive cycle. Leaderboards reset by tournament cadence.</div>
+            </Link>
+            <Link
+              href="/open-worlds"
+              className="border-2 border-[var(--border)] bg-[var(--surface-alt)] hover:border-[var(--accent)] transition-colors p-4"
+            >
+              <div className="text-2xl mb-2">🌍</div>
+              <div className="font-bold text-[var(--foreground)] mb-1">Open Worlds</div>
+              <div className="text-sm text-[var(--muted)]">Browse creator worlds, join public worlds, and build persistent world-specific progression.</div>
+            </Link>
+          </div>
+        </div>
+
         {/* Human Mode Card */}
         {viewMode === 'human' && (
           <div className="mb-6 flex justify-center">

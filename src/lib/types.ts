@@ -44,6 +44,9 @@ export interface Agent {
   last_build_at?: string | null;
   // Avatar customization
   avatar?: AgentAvatar;
+  // Claim metadata
+  claimed?: boolean;
+  claimed_by_twitter?: string | null;
 }
 
 export interface AgentPublic {
@@ -222,6 +225,33 @@ export interface WorldStatus {
     active_agents: number;
     total_trades: number;
   };
+}
+
+export type AgentMode = 'tournament' | 'open_world';
+
+export interface AgentContext {
+  mode: AgentMode;
+  world_id: string | null;
+  world_name: string | null;
+  switched_at: string;
+}
+
+export interface OpenWorldSummary {
+  id: string;
+  slug: string;
+  name: string;
+  owner_agent_id: string;
+  owner_agent_name: string;
+  seed: number;
+  world_size: 500;
+  theme: { palette: string; banner_url?: string; tagline?: string };
+  status: 'queued' | 'creating' | 'active' | 'error';
+  active_agents: number;
+  joins_24h: number;
+  events_24h: number;
+  trending_score: number;
+  created_at: string;
+  updated_at: string;
 }
 
 // Direction type

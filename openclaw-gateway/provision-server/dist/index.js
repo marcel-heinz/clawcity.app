@@ -33,6 +33,7 @@ const AUTOPLAY_INTERVAL_MS = intEnv('OPENCLAW_AUTOPLAY_INTERVAL_MS', 300_000);
 const AUTOPLAY_TIMEOUT_MS = intEnv('OPENCLAW_AUTOPLAY_TIMEOUT_MS', 240_000);
 const AUTOPLAY_MAX_PARALLEL = intEnv('OPENCLAW_AUTOPLAY_MAX_PARALLEL', 2);
 const AUTOPLAY_MAX_AGENTS_PER_TICK = intEnv('OPENCLAW_AUTOPLAY_MAX_AGENTS_PER_TICK', 20);
+const HARD_STOP_DRAIN_TIMEOUT_MS = intEnv('OPENCLAW_HARD_STOP_DRAIN_TIMEOUT_MS', 5_000);
 const AUTOPLAY_PROMPT_OVERRIDE = (process.env.OPENCLAW_AUTOPLAY_PROMPT || '').trim();
 const AUTOPLAY_SNAPSHOT_REFRESH_MS = 15 * 60 * 1000;
 const AUTOPLAY_WARM_START_DELAY_MS = 15_000;
@@ -68,6 +69,9 @@ let autoplayPrompt = '';
 let autoplayPromptUpdatedAt = null;
 const autoplayDeferredUntilPass = new Map();
 const autoplayAgentState = new Map();
+const hardStoppedAgents = new Set();
+const activeGatewayRequests = new Map();
+const stopAbortedControllers = new WeakSet();
 // Auth middleware
 function authenticate(req, res, next) {
     if (!AUTH_TOKEN) {
@@ -213,6 +217,8 @@ app.post('/api/provision', async (req, res) => {
         if (fs_1.default.existsSync(heartbeatSource)) {
             fs_1.default.copyFileSync(heartbeatSource, path_1.default.join(workspaceDir, 'HEARTBEAT.md'));
         }
+        // Redeploy clears hard-stop latch and re-enables runtime behavior.
+        clearAgentHardStopped(agentId);
         setAgentAutoplaySetting(agentId, body.autoModeEnabled !== false);
         // Update gateway config to include this agent
         await addAgentToConfig(agentId, agentDir, body.model);
@@ -445,32 +451,39 @@ app.post('/api/provision/:agentId/memory/reset', (req, res) => {
 app.delete('/api/provision/:agentId', async (req, res) => {
     try {
         const { agentId } = req.params;
-        const inFlightAtStop = autoplayInFlight.has(agentId);
-        // Stop future ticks immediately; in-flight work is allowed to complete.
+        const activeRequestsAtStop = activeGatewayRequests.get(agentId)?.size || 0;
+        const inFlightAtStop = autoplayInFlight.has(agentId) || activeRequestsAtStop > 0;
+        // Hard-stop first so no new LLM calls can start for this agent.
+        markAgentHardStopped(agentId);
+        const abortedRequests = abortAgentGatewayRequests(agentId);
+        // Stop future ticks immediately.
         setAgentAutoplaySetting(agentId, false);
         clearAutoplayTransientState(agentId);
         const removedFromConfig = await removeAgentFromConfig(agentId);
+        const drainVerified = await waitForAgentDrain(agentId, HARD_STOP_DRAIN_TIMEOUT_MS);
         const verifiedNotConfigured = !listConfiguredAgentIds().includes(agentId);
-        if (!verifiedNotConfigured) {
-            const message = inFlightAtStop
-                ? 'Stop requested; in-flight tick will finish, but runtime removal verification failed.'
-                : 'Stop requested, but runtime removal verification failed.';
-            console.error(`[provision] Deprovision verification failed for ${agentId}`);
+        const hardStopConfirmed = verifiedNotConfigured && drainVerified;
+        if (!hardStopConfirmed) {
+            const message = 'Stop requested, but hard-stop verification failed.';
+            console.error(`[provision] Hard-stop verification failed for ${agentId} (not_configured=${verifiedNotConfigured}, drain=${drainVerified})`);
             res.status(500).json({
                 success: false,
                 agentId,
                 autoplay_disabled: true,
                 removed_from_config: removedFromConfig,
                 in_flight_at_stop: inFlightAtStop,
-                verified_not_configured: false,
+                verified_not_configured: verifiedNotConfigured,
+                hard_stop_confirmed: false,
+                drain_verified: drainVerified,
+                aborted_requests: abortedRequests,
                 message,
             });
             return;
         }
-        const message = inFlightAtStop
-            ? 'Stop accepted. Current in-flight tick will finish; no future ticks will run.'
-            : (removedFromConfig ? 'Agent stopped and removed from runtime config.' : 'Agent already stopped.');
-        console.log(`[provision] Agent ${agentId} deprovisioned (removed=${removedFromConfig}, in_flight=${inFlightAtStop})`);
+        const message = removedFromConfig
+            ? 'Agent hard-stopped and removed from runtime config.'
+            : 'Agent already hard-stopped.';
+        console.log(`[provision] Agent ${agentId} hard-stopped (removed=${removedFromConfig}, in_flight=${inFlightAtStop}, aborted=${abortedRequests})`);
         res.json({
             success: true,
             agentId,
@@ -478,6 +491,9 @@ app.delete('/api/provision/:agentId', async (req, res) => {
             removed_from_config: removedFromConfig,
             in_flight_at_stop: inFlightAtStop,
             verified_not_configured: true,
+            hard_stop_confirmed: true,
+            drain_verified: true,
+            aborted_requests: abortedRequests,
             message,
         });
     }
@@ -494,6 +510,13 @@ app.post('/api/chat', async (req, res) => {
             res.status(400).json({ error: 'Missing agentId or messages' });
             return;
         }
+        if (isAgentHardStopped(agentId)) {
+            res.status(409).json({
+                error: 'agent_stopped',
+                details: `Agent ${agentId} is hard-stopped. Redeploy to resume.`,
+            });
+            return;
+        }
         const callBudget = await consumeCallBudget(agentId, 'manual', `manual-chat:${agentId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`);
         if (!callBudget.allowed) {
             res.status(402).json({
@@ -502,35 +525,47 @@ app.post('/api/chat', async (req, res) => {
             });
             return;
         }
-        const response = await proxyGatewayChat({
+        const { response, release } = await proxyGatewayChat({
             agentId,
             messages,
             timeoutMs: CHAT_TIMEOUT_MS,
             retries: CHAT_RETRIES,
         });
-        if (!response.ok) {
-            const errorText = await safeResponseText(response);
-            res.status(response.status).json({
-                error: 'Gateway error',
-                details: errorText,
+        try {
+            if (!response.ok) {
+                const errorText = await safeResponseText(response);
+                res.status(response.status).json({
+                    error: 'Gateway error',
+                    details: errorText,
+                });
+                return;
+            }
+            const data = await response.json();
+            const assistantText = extractAssistantText(data?.choices?.[0]?.message?.content);
+            if (assistantText) {
+                appendRecentMemoryEvent(agentId, {
+                    source: 'chat',
+                    summary: summarizeAssistantOutput(assistantText),
+                });
+                const memoryOps = extractMemoryOpsFromText(assistantText);
+                for (const op of memoryOps) {
+                    await applyMemoryOp(agentId, op);
+                }
+            }
+            res.json(data);
+        }
+        finally {
+            release();
+        }
+    }
+    catch (error) {
+        if (isAgentStoppedError(error)) {
+            res.status(409).json({
+                error: 'agent_stopped',
+                details: error.message,
             });
             return;
         }
-        const data = await response.json();
-        const assistantText = extractAssistantText(data?.choices?.[0]?.message?.content);
-        if (assistantText) {
-            appendRecentMemoryEvent(agentId, {
-                source: 'chat',
-                summary: summarizeAssistantOutput(assistantText),
-            });
-            const memoryOps = extractMemoryOpsFromText(assistantText);
-            for (const op of memoryOps) {
-                await applyMemoryOp(agentId, op);
-            }
-        }
-        res.json(data);
-    }
-    catch (error) {
         console.error('[chat] Error:', error);
         const message = error instanceof Error ? error.message : String(error);
         const isTimeout = message.toLowerCase().includes('timeout');
@@ -548,6 +583,13 @@ app.post('/api/chat/stream', async (req, res) => {
             res.status(400).json({ error: 'Missing agentId or messages' });
             return;
         }
+        if (isAgentHardStopped(agentId)) {
+            res.status(409).json({
+                error: 'agent_stopped',
+                details: `Agent ${agentId} is hard-stopped. Redeploy to resume.`,
+            });
+            return;
+        }
         const callBudget = await consumeCallBudget(agentId, 'manual', `manual-stream:${agentId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`);
         if (!callBudget.allowed) {
             res.status(402).json({
@@ -556,32 +598,59 @@ app.post('/api/chat/stream', async (req, res) => {
             });
             return;
         }
-        const response = await proxyGatewayChat({
+        const { response, release } = await proxyGatewayChat({
             agentId,
             messages,
             stream: true,
             timeoutMs: CHAT_TIMEOUT_MS,
             retries: 1,
         });
-        if (!response.ok || !response.body) {
-            const errorText = await safeResponseText(response);
-            res.status(response.status).json({ error: 'Gateway error', details: errorText });
-            return;
+        try {
+            if (!response.ok || !response.body) {
+                const errorText = await safeResponseText(response);
+                res.status(response.status).json({ error: 'Gateway error', details: errorText });
+                return;
+            }
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done)
+                        break;
+                    res.write(decoder.decode(value, { stream: true }));
+                }
+            }
+            finally {
+                try {
+                    reader.releaseLock();
+                }
+                catch {
+                    // noop
+                }
+            }
+            res.end();
         }
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done)
-                break;
-            res.write(decoder.decode(value, { stream: true }));
+        finally {
+            release();
         }
-        res.end();
     }
     catch (error) {
+        if (isAgentStoppedError(error)) {
+            if (!res.headersSent) {
+                res.status(409).json({
+                    error: 'agent_stopped',
+                    details: error.message,
+                });
+            }
+            else {
+                res.end();
+            }
+            return;
+        }
         console.error('[chat/stream] Error:', error);
         const message = error instanceof Error ? error.message : String(error);
         if (!res.headersSent) {
@@ -689,6 +758,14 @@ app.post('/api/autoplay/tick', async (req, res) => {
     try {
         const requestedAgentId = typeof req.body?.agentId === 'string' ? req.body.agentId : '';
         if (requestedAgentId) {
+            if (isAgentHardStopped(requestedAgentId)) {
+                res.status(409).json({
+                    success: false,
+                    error: 'agent_stopped',
+                    details: `Agent ${requestedAgentId} is hard-stopped. Redeploy to resume.`,
+                });
+                return;
+            }
             const result = await runAutoplayForAgent(requestedAgentId, {
                 manual: true,
                 recordDisabledFeedback: true,
@@ -734,6 +811,74 @@ function boolEnv(name, fallback) {
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
+function createAgentStoppedError(agentId) {
+    const error = new Error(`Agent ${agentId} is hard-stopped. Redeploy to resume.`);
+    error.code = 'agent_stopped';
+    error.agentId = agentId;
+    return error;
+}
+function isAgentStoppedError(error) {
+    return Boolean(error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'agent_stopped');
+}
+function isAgentHardStopped(agentId) {
+    return hardStoppedAgents.has(agentId);
+}
+function markAgentHardStopped(agentId) {
+    hardStoppedAgents.add(agentId);
+}
+function clearAgentHardStopped(agentId) {
+    hardStoppedAgents.delete(agentId);
+}
+function registerGatewayRequest(agentId, controller) {
+    const existing = activeGatewayRequests.get(agentId);
+    if (existing) {
+        existing.add(controller);
+        return;
+    }
+    activeGatewayRequests.set(agentId, new Set([controller]));
+}
+function unregisterGatewayRequest(agentId, controller) {
+    const existing = activeGatewayRequests.get(agentId);
+    if (!existing)
+        return;
+    existing.delete(controller);
+    if (existing.size === 0) {
+        activeGatewayRequests.delete(agentId);
+    }
+}
+function abortAgentGatewayRequests(agentId) {
+    const existing = activeGatewayRequests.get(agentId);
+    if (!existing || existing.size === 0)
+        return 0;
+    const controllers = Array.from(existing);
+    for (const controller of controllers) {
+        stopAbortedControllers.add(controller);
+        try {
+            controller.abort();
+        }
+        catch {
+            // noop - best effort abort
+        }
+    }
+    return controllers.length;
+}
+async function waitForAgentDrain(agentId, timeoutMs) {
+    const deadline = Date.now() + Math.max(1, timeoutMs);
+    while (Date.now() < deadline) {
+        const hasAutoplay = autoplayInFlight.has(agentId);
+        const hasGatewayRequests = (activeGatewayRequests.get(agentId)?.size || 0) > 0;
+        if (!hasAutoplay && !hasGatewayRequests) {
+            return true;
+        }
+        await sleep(50);
+    }
+    const hasAutoplay = autoplayInFlight.has(agentId);
+    const hasGatewayRequests = (activeGatewayRequests.get(agentId)?.size || 0) > 0;
+    return !hasAutoplay && !hasGatewayRequests;
+}
 function truncate(value, max = 220) {
     const normalized = value.trim().replace(/\s+/g, ' ');
     if (normalized.length <= max)
@@ -746,6 +891,9 @@ function isGatewayTimeoutMessage(message) {
 }
 function normalizeAutoplayErrorCode(details, statusCode) {
     const lowered = details.toLowerCase();
+    if (lowered.includes('agent_stopped')) {
+        return 'agent_stopped';
+    }
     if (isGatewayTimeoutMessage(details) || statusCode === 408 || statusCode === 504) {
         return 'gateway_timeout';
     }
@@ -1554,6 +1702,14 @@ async function consumeCallBudget(agentId, mode, idempotencyKey) {
     return data;
 }
 async function distillMemoryForAgent(agentId, trigger) {
+    if (isAgentHardStopped(agentId)) {
+        return {
+            success: false,
+            statusCode: 409,
+            error: 'agent_stopped',
+            details: `Agent ${agentId} is hard-stopped. Redeploy to resume.`,
+        };
+    }
     ensureMemoryScaffold(agentId);
     const current = readMemoryFile(agentId);
     const recent = readRecentMemoryEvents(agentId, 80);
@@ -1601,34 +1757,58 @@ async function distillMemoryForAgent(agentId, trigger) {
         '',
         `TRIGGER: ${trigger}`,
     ].join('\n');
-    const response = await proxyGatewayChat({
-        agentId,
-        userKey: `${agentId}:memory-distill`,
-        injectMemory: false,
-        timeoutMs: AUTOPLAY_TIMEOUT_MS,
-        retries: 1,
-        messages: [
-            { role: 'system', content: 'You are a strict memory compactor. Return markdown only.' },
-            { role: 'user', content: distillPrompt },
-        ],
-    });
-    if (!response.ok) {
-        const detail = await safeResponseText(response);
+    let distilled = current;
+    try {
+        const { response, release } = await proxyGatewayChat({
+            agentId,
+            userKey: `${agentId}:memory-distill`,
+            injectMemory: false,
+            timeoutMs: AUTOPLAY_TIMEOUT_MS,
+            retries: 1,
+            messages: [
+                { role: 'system', content: 'You are a strict memory compactor. Return markdown only.' },
+                { role: 'user', content: distillPrompt },
+            ],
+        });
+        try {
+            if (!response.ok) {
+                const detail = await safeResponseText(response);
+                return {
+                    success: false,
+                    statusCode: response.status,
+                    error: 'Gateway error during memory distillation',
+                    details: detail || `HTTP ${response.status}`,
+                };
+            }
+            const text = await safeResponseText(response);
+            distilled = text;
+            try {
+                const parsed = JSON.parse(text);
+                distilled = extractAssistantText(parsed.choices?.[0]?.message?.content) || distilled;
+            }
+            catch {
+                // noop - raw text fallback
+            }
+        }
+        finally {
+            release();
+        }
+    }
+    catch (error) {
+        if (isAgentStoppedError(error)) {
+            return {
+                success: false,
+                statusCode: 409,
+                error: 'agent_stopped',
+                details: error.message,
+            };
+        }
         return {
             success: false,
-            statusCode: response.status,
+            statusCode: 500,
             error: 'Gateway error during memory distillation',
-            details: detail || `HTTP ${response.status}`,
+            details: error instanceof Error ? error.message : String(error),
         };
-    }
-    const text = await safeResponseText(response);
-    let distilled = text;
-    try {
-        const parsed = JSON.parse(text);
-        distilled = extractAssistantText(parsed.choices?.[0]?.message?.content) || distilled;
-    }
-    catch {
-        // noop - raw text fallback
     }
     if (!distilled.trim()) {
         distilled = current;
@@ -1769,8 +1949,20 @@ async function proxyGatewayChat({ agentId, messages, stream = false, timeoutMs =
     const maxAttempts = Math.max(1, retries + 1);
     let lastError = null;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (isAgentHardStopped(agentId)) {
+            throw createAgentStoppedError(agentId);
+        }
         const controller = new AbortController();
+        registerGatewayRequest(agentId, controller);
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        let released = false;
+        const release = () => {
+            if (released)
+                return;
+            released = true;
+            clearTimeout(timeout);
+            unregisterGatewayRequest(agentId, controller);
+        };
         try {
             const memoryPrelude = injectMemory ? memoryContextSnippet(agentId) : '';
             const outboundMessages = memoryPrelude
@@ -1794,13 +1986,22 @@ async function proxyGatewayChat({ agentId, messages, stream = false, timeoutMs =
             if (isRetryableStatus(response.status) && attempt < maxAttempts) {
                 const detail = await safeResponseText(response);
                 console.warn(`[chat] Retryable gateway status ${response.status} for ${agentId} (attempt ${attempt}/${maxAttempts})`, detail);
+                release();
                 await sleep(retryDelayMs(attempt));
                 continue;
             }
-            return response;
+            return {
+                response,
+                release,
+            };
         }
         catch (error) {
             lastError = error;
+            const stopTriggeredAbort = isAgentHardStopped(agentId) || stopAbortedControllers.has(controller);
+            release();
+            if (stopTriggeredAbort) {
+                throw createAgentStoppedError(agentId);
+            }
             if (!isTransientFetchError(error) || attempt >= maxAttempts) {
                 if (error instanceof Error && error.name === 'AbortError') {
                     throw new Error(`Gateway timeout after ${timeoutMs}ms`);
@@ -1809,9 +2010,6 @@ async function proxyGatewayChat({ agentId, messages, stream = false, timeoutMs =
             }
             console.warn(`[chat] Transient gateway error for ${agentId} (attempt ${attempt}/${maxAttempts}):`, error instanceof Error ? error.message : String(error));
             await sleep(retryDelayMs(attempt));
-        }
-        finally {
-            clearTimeout(timeout);
         }
     }
     throw (lastError instanceof Error ? lastError : new Error(String(lastError ?? 'Gateway request failed')));
@@ -1860,6 +2058,26 @@ async function runAutoplayForAgent(agentId, options = {}) {
     setAutoplayAgentState(agentId, {
         last_tick_started_at: startedAt.toISOString(),
     });
+    if (isAgentHardStopped(agentId)) {
+        const result = {
+            success: false,
+            status: 'failed',
+            summary: 'Auto-mode blocked because this agent is hard-stopped.',
+            details: 'agent_stopped',
+            errorCode: 'agent_stopped',
+        };
+        if (options.manual) {
+            recordAutoplayFeedback({
+                agentId,
+                startedAt,
+                status: result.status,
+                summary: result.summary,
+                details: result.details,
+                errorCode: result.errorCode,
+            });
+        }
+        return result;
+    }
     if (!getAgentAutoplaySetting(agentId)) {
         const result = {
             success: false,
@@ -1919,30 +2137,37 @@ async function runAutoplayForAgent(agentId, options = {}) {
             return { success: false, status: 'failed', summary, details, errorCode: budget.reason || 'budget_denied' };
         }
         attemptedModelCall = true;
-        const response = await proxyGatewayChat({
+        const { response, release } = await proxyGatewayChat({
             agentId,
             messages: [{ role: 'user', content: autoplayPrompt }],
             timeoutMs: AUTOPLAY_TIMEOUT_MS,
             retries: 1,
         });
-        if (!response.ok) {
-            const detail = await safeResponseText(response);
-            const errorCode = normalizeAutoplayErrorCode(detail, response.status);
-            const summary = errorCode === 'gateway_timeout'
-                ? 'Auto-mode tick failed due to gateway timeout.'
-                : `Gateway error (HTTP ${response.status}).`;
-            const details = detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`;
-            recordAutoplayFeedback({
-                agentId,
-                startedAt,
-                status: 'failed',
-                summary,
-                details,
-                errorCode,
-            });
-            return { success: false, status: 'failed', summary, details, errorCode };
-        }
-        const rawText = await safeResponseText(response);
+        const rawText = await (async () => {
+            try {
+                if (!response.ok) {
+                    const detail = await safeResponseText(response);
+                    const errorCode = normalizeAutoplayErrorCode(detail, response.status);
+                    const summary = errorCode === 'gateway_timeout'
+                        ? 'Auto-mode tick failed due to gateway timeout.'
+                        : `Gateway error (HTTP ${response.status}).`;
+                    const details = detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`;
+                    recordAutoplayFeedback({
+                        agentId,
+                        startedAt,
+                        status: 'failed',
+                        summary,
+                        details,
+                        errorCode,
+                    });
+                    throw new Error(`autoplay_gateway_error:${errorCode}:${details}`);
+                }
+                return await safeResponseText(response);
+            }
+            finally {
+                release();
+            }
+        })();
         let finishReason = 'unknown';
         let assistantText = '';
         if (rawText) {
@@ -1981,7 +2206,39 @@ async function runAutoplayForAgent(agentId, options = {}) {
         return { success: true, status: 'success', summary, details };
     }
     catch (error) {
+        if (isAgentStoppedError(error)) {
+            const summary = 'Auto-mode tick aborted because this agent is hard-stopped.';
+            const details = 'agent_stopped';
+            const errorCode = 'agent_stopped';
+            recordAutoplayFeedback({
+                agentId,
+                startedAt,
+                status: 'failed',
+                summary,
+                details,
+                errorCode,
+            });
+            return {
+                success: false,
+                status: 'failed',
+                summary,
+                details,
+                errorCode,
+            };
+        }
         const details = error instanceof Error ? error.message : String(error);
+        if (details.startsWith('autoplay_gateway_error:')) {
+            const [, errorCodeRaw, ...rest] = details.split(':');
+            const errorCode = errorCodeRaw || 'gateway_error';
+            const normalizedDetails = rest.join(':') || 'Gateway error';
+            return {
+                success: false,
+                status: 'failed',
+                summary: 'Auto-mode tick failed.',
+                details: normalizedDetails,
+                errorCode,
+            };
+        }
         if (isGatewayTimeoutMessage(details)) {
             const summary = 'Auto-mode tick timed out; outcome is uncertain. Deferring one interval.';
             const errorCode = 'uncertain_timeout_deferred';
@@ -2022,7 +2279,7 @@ async function runAutoplayForAgent(agentId, options = {}) {
     }
     finally {
         autoplayInFlight.delete(agentId);
-        if (attemptedModelCall) {
+        if (attemptedModelCall && !isAgentHardStopped(agentId)) {
             const state = writeMemoryState(agentId, {
                 ticks_since_distill: readMemoryState(agentId).ticks_since_distill + 1,
             });

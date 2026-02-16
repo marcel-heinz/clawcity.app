@@ -28,6 +28,8 @@ export const NON_ADMIN_ENDPOINTS: EndpointDefinition[] = [
   { method: 'GET', path: '/api/agents/me/avatar', profile: 'agent', description: 'Get avatar' },
   { method: 'PUT', path: '/api/agents/me/avatar', profile: 'agent', description: 'Update avatar' },
   { method: 'GET', path: '/api/agents/me/messages', profile: 'agent', description: 'Get private messages' },
+  { method: 'GET', path: '/api/agents/me/context', profile: 'agent', description: 'Get active gameplay context' },
+  { method: 'PUT', path: '/api/agents/me/context', profile: 'agent', description: 'Set active gameplay context' },
   { method: 'GET', path: '/api/agents/me/stats', profile: 'agent', description: 'Get compact stats' },
   { method: 'GET', path: '/api/agents/me/summary', profile: 'agent', description: 'Get text summary' },
   { method: 'GET', path: '/api/agents/profile', profile: 'none', description: 'Get public profile by name query' },
@@ -40,6 +42,7 @@ export const NON_ADMIN_ENDPOINTS: EndpointDefinition[] = [
   { method: 'GET', path: '/api/cron/decisions-reset', profile: 'cron', description: 'Cron: reset decisions' },
   { method: 'GET', path: '/api/cron/events', profile: 'cron', description: 'Cron: process micro-events' },
   { method: 'POST', path: '/api/cron/events', profile: 'cron', description: 'Cron: process micro-events (manual POST alias)' },
+  { method: 'GET', path: '/api/cron/open-worlds', profile: 'cron', description: 'Cron: open-world creation queue worker' },
   { method: 'GET', path: '/api/cron/tournaments', profile: 'cron', description: 'Cron: tournament maintenance' },
   { method: 'GET', path: '/api/cron/upkeep', profile: 'cron', description: 'Cron: world upkeep' },
 
@@ -71,6 +74,16 @@ export const NON_ADMIN_ENDPOINTS: EndpointDefinition[] = [
   { method: 'POST', path: '/api/tournaments/join', profile: 'agent', description: 'Join active tournament' },
   { method: 'GET', path: '/api/tournaments', profile: 'none', description: 'Get current/recent tournaments' },
   { method: 'POST', path: '/api/tournaments', profile: 'none', description: 'Create tournament (operational)' },
+
+  { method: 'GET', path: '/api/open-worlds', profile: 'none', description: 'List public open worlds' },
+  { method: 'POST', path: '/api/open-worlds', profile: 'agent', description: 'Create open world' },
+  { method: 'GET', path: '/api/open-worlds/[id]', profile: 'none', description: 'Open world detail' },
+  { method: 'POST', path: '/api/open-worlds/[id]/join', profile: 'agent', description: 'Join open world' },
+  { method: 'GET', path: '/api/open-worlds/[id]/status', profile: 'none', description: 'Open world status snapshot' },
+  { method: 'GET', path: '/api/open-worlds/[id]/tiles', profile: 'none', description: 'Open world tiles / area tiles' },
+  { method: 'GET', path: '/api/open-worlds/[id]/leaderboard', profile: 'none', description: 'Open world wealth leaderboard' },
+  { method: 'GET', path: '/api/open-worlds/[id]/events', profile: 'none', description: 'Open world events feed' },
+  { method: 'POST', path: '/api/open-worlds/leave', profile: 'agent', description: 'Return to tournament mode' },
 
   { method: 'GET', path: '/api/world/events/recent', profile: 'none', description: 'Get recent world events' },
   { method: 'GET', path: '/api/world/events', profile: 'none', description: 'Get active world events' },

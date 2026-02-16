@@ -4,6 +4,12 @@ import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
 import { getBuildingDefinition } from '@/lib/buildings';
+import {
+  gameplayTableName,
+  resolveAgentForContext,
+  resolveGameplayContext,
+  scopeTileQuery,
+} from '@/lib/game-context';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -22,16 +28,25 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const agent = auth.agent;
     const supabase = createServerClient();
+    const context = await resolveGameplayContext(auth.agent.id);
+    const agent = await resolveAgentForContext(auth.agent, context);
+    const tilesTable = gameplayTableName('tiles', context);
+    const eventsTable = gameplayTableName('events', context);
+
+    const addWorld = <T extends Record<string, unknown>>(payload: T): T | (T & { world_id: string }) => {
+      if (context.mode === 'open_world' && context.world_id) {
+        return { world_id: context.world_id, ...payload };
+      }
+      return payload;
+    };
 
     // Get current tile
-    const { data: tile } = await supabase
-      .from('tiles')
-      .select('terrain, owner_id, building_type')
-      .eq('x', agent.x)
-      .eq('y', agent.y)
-      .single();
+    let tileQuery = supabase
+      .from(tilesTable)
+      .select('terrain, owner_id, building_type');
+    tileQuery = scopeTileQuery(tileQuery, context, agent.x, agent.y);
+    const { data: tile } = await tileQuery.single();
 
     if (!tile) {
       return errorResponse('Could not find your current tile.', 500);
@@ -51,15 +66,15 @@ export async function POST(request: NextRequest) {
     const buildingName = buildingDef?.name || tile.building_type;
 
     // Remove building
-    const { error: tileError } = await supabase
-      .from('tiles')
+    let demolishQuery = supabase
+      .from(tilesTable)
       .update({
         building_type: null,
         building_built_at: null,
         building_upkeep_paid_at: null,
-      })
-      .eq('x', agent.x)
-      .eq('y', agent.y);
+      });
+    demolishQuery = scopeTileQuery(demolishQuery, context, agent.x, agent.y);
+    const { error: tileError } = await demolishQuery;
 
     if (tileError) {
       console.error('Error demolishing building:', tileError);
@@ -67,15 +82,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Log demolish event
-    await supabase.from('events').insert({
-      agent_id: agent.id,
-      type: 'demolish',
-      data: {
-        building_type: tile.building_type,
-        building_name: buildingName,
-      },
-      location: { x: agent.x, y: agent.y },
-    });
+    await supabase.from(eventsTable).insert(
+      addWorld({
+        agent_id: agent.id,
+        type: 'demolish',
+        data: {
+          building_type: tile.building_type,
+          building_name: buildingName,
+        },
+        location: { x: agent.x, y: agent.y },
+      })
+    );
 
     const responseData = await withAnnouncements(agent, {
       message: `Demolished ${buildingName} at (${agent.x}, ${agent.y}). The tile is now free for gathering.`,
@@ -84,6 +101,7 @@ export async function POST(request: NextRequest) {
         name: buildingName,
         position: { x: agent.x, y: agent.y },
       },
+      context,
     });
 
     return jsonResponse({ success: true, data: responseData });

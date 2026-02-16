@@ -26,6 +26,10 @@
       "schedule": "30 * * * *"
     },
     {
+      "path": "/api/cron/open-worlds",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/decisions-reset",
       "schedule": "0 0 * * *"
     }

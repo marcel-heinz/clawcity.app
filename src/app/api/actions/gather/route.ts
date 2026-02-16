@@ -23,6 +23,14 @@ import {
   type AgentItem,
 } from '@/lib/crafting';
 import { calculateResourceCap } from '@/lib/buildings';
+import {
+  gameplayTableName,
+  resolveAgentForContext,
+  resolveGameplayContext,
+  scopeAgentMutation,
+  scopeTileQuery,
+  scopeWorldQuery,
+} from '@/lib/game-context';
 
 // Helper: Check if tile has regenerated (using new regenerates_at field)
 function hasTileRegenerated(regeneratesAt: string | null): boolean {
@@ -53,35 +61,61 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const agent = auth.agent;
     const supabase = createServerClient();
+    const context = await resolveGameplayContext(auth.agent.id);
+    const agent = await resolveAgentForContext(auth.agent, context);
+    const agentsTable = gameplayTableName('agents', context);
+    const tilesTable = gameplayTableName('tiles', context);
+    const eventsTable = gameplayTableName('events', context);
+    const itemsTable = gameplayTableName('agent_items', context);
+
+    const addWorld = <T extends Record<string, unknown>>(payload: T): T | (T & { world_id: string }) => {
+      if (context.mode === 'open_world' && context.world_id) {
+        return { world_id: context.world_id, ...payload };
+      }
+      return payload;
+    };
 
     // Get dynamic cooldown setting
     const gatherCooldownMs = await getCooldownMs('gather');
 
-    // Atomic cooldown check - prevents race conditions
-    const cooldownResult = await atomicCooldownCheck(agent.id, 'gather', gatherCooldownMs);
-    
-    if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
-      const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
-      return errorResponse(
-        `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
-        429
-      );
-    }
-    
-    if (!cooldownResult.success) {
-      // If atomic check fails, fall back to manual check (in case DB function doesn't exist yet)
-      if (agent.last_gather_at) {
-        const lastGather = new Date(agent.last_gather_at).getTime();
-        const elapsed = Date.now() - lastGather;
-        if (elapsed < gatherCooldownMs) {
-          const waitSeconds = Math.ceil((gatherCooldownMs - elapsed) / 1000);
-          return errorResponse(
-            `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
-            429
-          );
+    let cooldownTouchedAtomically = false;
+    if (context.mode !== 'open_world') {
+      // Tournament mode keeps atomic DB cooldown checks as-is
+      const cooldownResult = await atomicCooldownCheck(agent.id, 'gather', gatherCooldownMs);
+
+      if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
+        const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
+        return errorResponse(
+          `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
+          429
+        );
+      }
+
+      if (!cooldownResult.success) {
+        if (agent.last_gather_at) {
+          const lastGather = new Date(agent.last_gather_at).getTime();
+          const elapsed = Date.now() - lastGather;
+          if (elapsed < gatherCooldownMs) {
+            const waitSeconds = Math.ceil((gatherCooldownMs - elapsed) / 1000);
+            return errorResponse(
+              `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
+              429
+            );
+          }
         }
+      } else {
+        cooldownTouchedAtomically = true;
+      }
+    } else if (agent.last_gather_at) {
+      const lastGather = new Date(agent.last_gather_at).getTime();
+      const elapsed = Date.now() - lastGather;
+      if (elapsed < gatherCooldownMs) {
+        const waitSeconds = Math.ceil((gatherCooldownMs - elapsed) / 1000);
+        return errorResponse(
+          `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
+          429
+        );
       }
     }
 
@@ -99,12 +133,11 @@ export async function POST(request: NextRequest) {
     const sameTileMultiplier = getSameTilePenalty(consecutiveGathers);
 
     // Get current tile with ownership, depletion, upgrade, and building info
-    const { data: tile } = await supabase
-      .from('tiles')
-      .select('terrain, owner_id, depleted, depleted_at, regenerates_at, gather_count, upgrade_level, building_type')
-      .eq('x', agent.x)
-      .eq('y', agent.y)
-      .single();
+    let tileQuery = supabase
+      .from(tilesTable)
+      .select('terrain, owner_id, depleted, depleted_at, regenerates_at, gather_count, upgrade_level, building_type');
+    tileQuery = scopeTileQuery(tileQuery, context, agent.x, agent.y);
+    const { data: tile } = await tileQuery.single();
 
     if (!tile) {
       return errorResponse('Could not find your current tile', 500);
@@ -131,11 +164,13 @@ export async function POST(request: NextRequest) {
     // Fetch agent's items for bonus calculations
     let agentItems: AgentItem[] = [];
     try {
-      const { data: items } = await supabase
-        .from('agent_items')
+      let itemsQuery = supabase
+        .from(itemsTable)
         .select('id, agent_id, item_id, quantity, uses_remaining, created_at, expires_at')
         .eq('agent_id', agent.id)
         .gt('quantity', 0);
+      itemsQuery = scopeWorldQuery(itemsQuery, context);
+      const { data: items } = await itemsQuery;
       agentItems = ((items || []) as AgentItem[]).filter((item: AgentItem) =>
         item.uses_remaining === null || item.uses_remaining > 0
       );
@@ -185,16 +220,16 @@ export async function POST(request: NextRequest) {
 
     // If tile was depleted but has now regenerated, reset it
     if ((tile.depleted || tile.regenerates_at) && tileRegenerated) {
-      await supabase
-        .from('tiles')
+      let resetTileQuery = supabase
+        .from(tilesTable)
         .update({
           depleted: false,
           depleted_at: null,
           regenerates_at: null,
           gather_count: 0  // Reset gather count on regeneration
-        })
-        .eq('x', agent.x)
-        .eq('y', agent.y);
+        });
+      resetTileQuery = scopeTileQuery(resetTileQuery, context, agent.x, agent.y);
+      await resetTileQuery;
     }
 
     // Get current gather count for this tile (for progressive depletion)
@@ -227,11 +262,13 @@ export async function POST(request: NextRequest) {
       const torchItems = getGatherItemsToUse(agentItems, terrain);
       for (const item of agentItems) {
         if (torchItems.some(u => u.itemId === item.item_id) && item.uses_remaining !== null) {
-          await supabase
-            .from('agent_items')
+          let decrementQuery = supabase
+            .from(itemsTable)
             .update({ uses_remaining: Math.max(0, item.uses_remaining - 1) })
             .eq('agent_id', agent.id)
             .eq('item_id', item.item_id);
+          decrementQuery = scopeWorldQuery(decrementQuery, context);
+          await decrementQuery;
         }
       }
 
@@ -241,14 +278,15 @@ export async function POST(request: NextRequest) {
       const newWood = agent.wood + torchYield.wood;
       const newStone = agent.stone + torchYield.stone;
 
-      await supabase
-        .from('agents')
+      let torchUpdateQuery = supabase
+        .from(agentsTable)
         .update({
           gold: newGold, wood: newWood, food: newFood, stone: newStone,
           last_gather_x: agent.x, last_gather_y: agent.y,
           consecutive_same_tile: consecutiveGathers,
-        })
-        .eq('id', agent.id);
+        });
+      torchUpdateQuery = scopeAgentMutation(torchUpdateQuery, context, agent.id);
+      await torchUpdateQuery;
 
       const yieldText = Object.entries(torchYield)
         .filter(([, v]) => v > 0)
@@ -285,11 +323,13 @@ export async function POST(request: NextRequest) {
       const waterItemsUsed = getGatherItemsToUse(agentItems, terrain);
       for (const item of agentItems) {
         if (waterItemsUsed.some(u => u.itemId === item.item_id) && item.uses_remaining !== null) {
-          await supabase
-            .from('agent_items')
+          let decrementQuery = supabase
+            .from(itemsTable)
             .update({ uses_remaining: Math.max(0, item.uses_remaining - 1) })
             .eq('agent_id', agent.id)
             .eq('item_id', item.item_id);
+          decrementQuery = scopeWorldQuery(decrementQuery, context);
+          await decrementQuery;
         }
       }
 
@@ -307,29 +347,32 @@ export async function POST(request: NextRequest) {
       };
 
       // Only set cooldown if atomic check didn't do it
-      if (!cooldownResult.success) {
+      if (!cooldownTouchedAtomically) {
         updateData.last_gather_at = new Date().toISOString();
       }
 
-      await supabase
-        .from('agents')
-        .update(updateData)
-        .eq('id', agent.id);
+      let waterUpdateQuery = supabase
+        .from(agentsTable)
+        .update(updateData);
+      waterUpdateQuery = scopeAgentMutation(waterUpdateQuery, context, agent.id);
+      await waterUpdateQuery;
 
       // Log event
-      await supabase.from('events').insert({
-        agent_id: agent.id,
-        type: 'gather',
-        data: {
-          terrain,
-          resources: { gold: 0, wood: 0, food: waterFood, stone: 0 },
-          stamina_cost: staminaCost,
-          food_efficiency: efficiencyPercent,
-          same_tile_penalty: consecutiveGathers > 1,
-          consecutive_gathers: consecutiveGathers
-        },
-        location: { x: agent.x, y: agent.y },
-      });
+      await supabase.from(eventsTable).insert(
+        addWorld({
+          agent_id: agent.id,
+          type: 'gather',
+          data: {
+            terrain,
+            resources: { gold: 0, wood: 0, food: waterFood, stone: 0 },
+            stamina_cost: staminaCost,
+            food_efficiency: efficiencyPercent,
+            same_tile_penalty: consecutiveGathers > 1,
+            consecutive_gathers: consecutiveGathers
+          },
+          location: { x: agent.x, y: agent.y },
+        })
+      );
 
       // Build penalty text
       const penaltyParts: string[] = [];
@@ -379,7 +422,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Apply micro-event bonus if there's an active event affecting this tile
-    const { multiplier: eventMultiplier, event: activeEvent } = await getActiveEventBonus(agent.x, agent.y, terrain);
+    const { multiplier: eventMultiplier, event: activeEvent } = await getActiveEventBonus(
+      agent.x,
+      agent.y,
+      terrain,
+      context.world_id || undefined
+    );
     if (activeEvent) {
       gathered = applyEventBonusToResources(gathered, activeEvent);
     }
@@ -399,11 +447,13 @@ export async function POST(request: NextRequest) {
     const gatherItemsUsed = getGatherItemsToUse(agentItems, terrain);
     for (const item of agentItems) {
       if (gatherItemsUsed.some(u => u.itemId === item.item_id) && item.uses_remaining !== null) {
-        await supabase
-          .from('agent_items')
+        let decrementQuery = supabase
+          .from(itemsTable)
           .update({ uses_remaining: Math.max(0, item.uses_remaining - 1) })
           .eq('agent_id', agent.id)
           .eq('item_id', item.item_id);
+        decrementQuery = scopeWorldQuery(decrementQuery, context);
+        await decrementQuery;
       }
     }
 
@@ -426,33 +476,35 @@ export async function POST(request: NextRequest) {
       const regenTimeMs = getTileRegenTime(terrain);
       const regeneratesAt = new Date(Date.now() + regenTimeMs).toISOString();
 
-      await supabase
-        .from('tiles')
+      let depletedTileQuery = supabase
+        .from(tilesTable)
         .update({
           depleted: true,
           depleted_at: new Date().toISOString(),
           regenerates_at: regeneratesAt,
           gather_count: currentGatherCount
-        })
-        .eq('x', agent.x)
-        .eq('y', agent.y);
+        });
+      depletedTileQuery = scopeTileQuery(depletedTileQuery, context, agent.x, agent.y);
+      await depletedTileQuery;
     } else {
       // Just update gather count (for progressive depletion tracking)
-      await supabase
-        .from('tiles')
-        .update({ gather_count: currentGatherCount })
-        .eq('x', agent.x)
-        .eq('y', agent.y);
+      let gatherCountQuery = supabase
+        .from(tilesTable)
+        .update({ gather_count: currentGatherCount });
+      gatherCountQuery = scopeTileQuery(gatherCountQuery, context, agent.x, agent.y);
+      await gatherCountQuery;
     }
 
     // Enforce resource cap
     let storageCount = 0;
     try {
-      const { data: storageTiles } = await supabase
-        .from('tiles')
+      let storageQuery = supabase
+        .from(tilesTable)
         .select('building_type')
         .eq('owner_id', agent.id)
         .eq('building_type', 'storage');
+      storageQuery = scopeWorldQuery(storageQuery, context);
+      const { data: storageTiles } = await storageQuery;
       storageCount = storageTiles?.length || 0;
     } catch {
       // If building columns don't exist yet, continue without cap
@@ -491,14 +543,15 @@ export async function POST(request: NextRequest) {
     };
 
     // Only set cooldown if atomic check didn't do it
-    if (!cooldownResult.success) {
+    if (!cooldownTouchedAtomically) {
       inventoryUpdate.last_gather_at = new Date().toISOString();
     }
 
-    const { error: updateError } = await supabase
-      .from('agents')
-      .update(inventoryUpdate)
-      .eq('id', agent.id);
+    let inventoryUpdateQuery = supabase
+      .from(agentsTable)
+      .update(inventoryUpdate);
+    inventoryUpdateQuery = scopeAgentMutation(inventoryUpdateQuery, context, agent.id);
+    const { error: updateError } = await inventoryUpdateQuery;
 
     if (updateError) {
       console.error('Error updating inventory:', updateError);
@@ -506,36 +559,38 @@ export async function POST(request: NextRequest) {
     }
 
     // Log gather event
-    await supabase.from('events').insert({
-      agent_id: agent.id,
-      type: 'gather',
-      data: {
-        terrain,
-        resources: gathered,
-        tile_depleted: tileDepleted,
-        territory_bonus: isOwnedByAgent,
-        upgrade_level: isOwnedByAgent ? upgradeLevel : undefined,
-        stamina_cost: staminaCost,
-        food_efficiency: efficiencyPercent,
-        same_tile_penalty: consecutiveGathers > 1,
-        consecutive_gathers: consecutiveGathers,
-        tile_gather_count: currentGatherCount,
-        depletion_chance: Math.round(depletionChance * 100),
-        // Micro-event bonus info
-        event_bonus: activeEvent ? {
-          event_id: activeEvent.id,
-          event_title: activeEvent.title,
-          event_type: activeEvent.type,
-          multiplier: eventMultiplier,
-        } : null,
-        // Item bonus info
-        item_bonus: gatherItemsUsed.length > 0 ? {
-          multiplier: itemBonusMultiplier,
-          items_used: gatherItemsUsed.map(i => i.itemName),
-        } : null,
-      },
-      location: { x: agent.x, y: agent.y },
-    });
+    await supabase.from(eventsTable).insert(
+      addWorld({
+        agent_id: agent.id,
+        type: 'gather',
+        data: {
+          terrain,
+          resources: gathered,
+          tile_depleted: tileDepleted,
+          territory_bonus: isOwnedByAgent,
+          upgrade_level: isOwnedByAgent ? upgradeLevel : undefined,
+          stamina_cost: staminaCost,
+          food_efficiency: efficiencyPercent,
+          same_tile_penalty: consecutiveGathers > 1,
+          consecutive_gathers: consecutiveGathers,
+          tile_gather_count: currentGatherCount,
+          depletion_chance: Math.round(depletionChance * 100),
+          // Micro-event bonus info
+          event_bonus: activeEvent ? {
+            event_id: activeEvent.id,
+            event_title: activeEvent.title,
+            event_type: activeEvent.type,
+            multiplier: eventMultiplier,
+          } : null,
+          // Item bonus info
+          item_bonus: gatherItemsUsed.length > 0 ? {
+            multiplier: itemBonusMultiplier,
+            items_used: gatherItemsUsed.map(i => i.itemName),
+          } : null,
+        },
+        location: { x: agent.x, y: agent.y },
+      })
+    );
 
     // Format message based on what was gathered
     const gatheredItems = Object.entries(gathered)
@@ -612,6 +667,7 @@ export async function POST(request: NextRequest) {
         food: newFood,
         stone: newStone,
       },
+      context,
     });
 
     return jsonResponse({

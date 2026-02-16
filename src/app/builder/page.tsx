@@ -604,14 +604,18 @@ export default function BuilderPage() {
         body: JSON.stringify({ config_id: config.id }),
       });
       const data = await res.json();
-      const stopped = Boolean(data?.success && data?.stopped && data?.verified_not_configured);
+      const stopped = Boolean(
+        data?.success &&
+        data?.stopped &&
+        data?.verified_not_configured &&
+        data?.hard_stop_confirmed &&
+        data?.drain_verified
+      );
       if (stopped) {
         setConfig((prev) => ({ ...prev, is_active: false }));
         setMessage({
           type: 'success',
-          text: data?.in_flight_at_stop
-            ? 'Stop accepted. Current tick may finish, then the agent remains stopped.'
-            : 'Agent stopped.',
+          text: 'Agent stopped. Hard-stop confirmed.',
         });
         if (fromChat) {
           setActiveTab('config');

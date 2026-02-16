@@ -5,6 +5,13 @@ import { getItemDefinition, getDetectionRange, type AgentItem } from '@/lib/craf
 import { calculateResourceCap, getBuildingDefinition } from '@/lib/buildings';
 import { calculateWealthBreakdown } from '@/lib/types';
 import { resolveAvatar } from '@/lib/avatar';
+import {
+  gameplayTableName,
+  resolveAgentForContext,
+  resolveGameplayContext,
+  scopeTileQuery,
+  scopeWorldQuery,
+} from '@/lib/game-context';
 
 // Admin account name for announcements
 const ADMIN_ACCOUNT_NAME = 'ClawCity_Admin';
@@ -30,37 +37,43 @@ export async function GET(request: NextRequest) {
     return errorResponse(auth.error || 'Unauthorized', 401);
   }
 
-  const agent = auth.agent;
   const supabase = createServerClient();
+  const context = await resolveGameplayContext(auth.agent.id);
+  const agent = await resolveAgentForContext(auth.agent, context);
+
+  const tilesTable = gameplayTableName('tiles', context);
+  const itemsTable = gameplayTableName('agent_items', context);
+  const tradesTable = gameplayTableName('trades', context);
+  const agentsTable = gameplayTableName('agents', context);
 
   // Parse ?fields= parameter for selective response
   const fieldsParam = request.nextUrl.searchParams.get('fields');
-  const requestedFields = fieldsParam ? new Set(fieldsParam.split(',').map(f => f.trim())) : null;
+  const requestedFields = fieldsParam ? new Set(fieldsParam.split(',').map((f) => f.trim())) : null;
   const includeField = (field: string) => !requestedFields || requestedFields.has(field);
 
   // Get current tile info
-  const { data: tile } = await supabase
-    .from('tiles')
-    .select('terrain')
-    .eq('x', agent.x)
-    .eq('y', agent.y)
-    .single();
+  let tileQuery = supabase.from(tilesTable).select('terrain');
+  tileQuery = scopeTileQuery(tileQuery, context, agent.x, agent.y);
+  const { data: tile } = await tileQuery.single();
 
   // Fetch agent's items (skip if not requested via ?fields=)
   let agentItems: AgentItem[] = [];
   let itemsForResponse: { id: string; name: string; category: string; quantity: number; uses_remaining: number | null }[] = [];
   if (includeField('items') || includeField('nearby')) {
     try {
-      const { data: items } = await supabase
-        .from('agent_items')
+      let itemQuery = supabase
+        .from(itemsTable)
         .select('id, agent_id, item_id, quantity, uses_remaining, created_at, expires_at')
         .eq('agent_id', agent.id)
         .gt('quantity', 0);
+      itemQuery = scopeWorldQuery(itemQuery, context);
+
+      const { data: items } = await itemQuery;
       agentItems = ((items || []) as AgentItem[]).filter((item: AgentItem) =>
         item.uses_remaining === null || item.uses_remaining > 0
       );
       if (includeField('items')) {
-        itemsForResponse = agentItems.map(item => {
+        itemsForResponse = agentItems.map((item) => {
           const def = getItemDefinition(item.item_id);
           return {
             id: item.item_id,
@@ -72,7 +85,7 @@ export async function GET(request: NextRequest) {
         });
       }
     } catch {
-      // agent_items table may not exist yet
+      // item table may not exist yet
     }
   }
 
@@ -80,13 +93,16 @@ export async function GET(request: NextRequest) {
   let agentBuildings: { x: number; y: number; building_type: string; building_built_at: string }[] = [];
   let storageCount = 0;
   try {
-    const { data: buildings } = await supabase
-      .from('tiles')
+    let buildingQuery = supabase
+      .from(tilesTable)
       .select('x, y, building_type, building_built_at')
       .eq('owner_id', agent.id)
       .not('building_type', 'is', null);
+    buildingQuery = scopeWorldQuery(buildingQuery, context);
+
+    const { data: buildings } = await buildingQuery;
     agentBuildings = (buildings || []) as typeof agentBuildings;
-    storageCount = agentBuildings.filter(b => b.building_type === 'storage').length;
+    storageCount = agentBuildings.filter((b) => b.building_type === 'storage').length;
   } catch {
     // building columns may not exist yet
   }
@@ -94,16 +110,19 @@ export async function GET(request: NextRequest) {
   const resourceCap = calculateResourceCap(storageCount);
 
   // Calculate wealth breakdown (Net Worth)
-  const workshopCount = agentBuildings.filter(b => b.building_type === 'workshop').length;
-  const fortificationCount = agentBuildings.filter(b => b.building_type === 'fortification').length;
+  const workshopCount = agentBuildings.filter((b) => b.building_type === 'workshop').length;
+  const fortificationCount = agentBuildings.filter((b) => b.building_type === 'fortification').length;
 
   // Count total owned territories (including tiles without buildings)
   let territoryCount = 0;
   try {
-    const { count } = await supabase
-      .from('tiles')
+    let territoryQuery = supabase
+      .from(tilesTable)
       .select('*', { count: 'exact', head: true })
       .eq('owner_id', agent.id);
+    territoryQuery = scopeWorldQuery(territoryQuery, context);
+
+    const { count } = await territoryQuery;
     territoryCount = count || 0;
   } catch {
     // tiles table may not have owner_id yet
@@ -124,29 +143,58 @@ export async function GET(request: NextRequest) {
   // Get nearby agents (skip if not requested via ?fields=)
   let nearbyAgents: { id: string; name: string; x: number; y: number; reputation: number }[] | null = null;
   if (includeField('nearby')) {
-    const { data } = await supabase
-      .from('agents')
-      .select('id, name, x, y, reputation')
-      .neq('id', agent.id)
-      .gte('x', agent.x - detectionRange)
-      .lte('x', agent.x + detectionRange)
-      .gte('y', agent.y - detectionRange)
-      .lte('y', agent.y + detectionRange);
-    nearbyAgents = data;
+    if (context.mode === 'open_world' && context.world_id) {
+      const { data: stateRows } = await supabase
+        .from('open_world_agent_state')
+        .select('agent_id, x, y, reputation')
+        .eq('world_id', context.world_id)
+        .neq('agent_id', agent.id)
+        .gte('x', agent.x - detectionRange)
+        .lte('x', agent.x + detectionRange)
+        .gte('y', agent.y - detectionRange)
+        .lte('y', agent.y + detectionRange);
+
+      const ids = (stateRows || []).map((a) => a.agent_id);
+      const { data: names } = ids.length
+        ? await supabase.from('agents').select('id, name').in('id', ids)
+        : { data: [] as { id: string; name: string }[] };
+
+      const nameMap = new Map((names || []).map((n) => [n.id, n.name]));
+      nearbyAgents = (stateRows || []).map((row) => ({
+        id: row.agent_id,
+        name: nameMap.get(row.agent_id) || 'Unknown',
+        x: row.x,
+        y: row.y,
+        reputation: row.reputation,
+      }));
+    } else {
+      const { data } = await supabase
+        .from('agents')
+        .select('id, name, x, y, reputation')
+        .neq('id', agent.id)
+        .gte('x', agent.x - detectionRange)
+        .lte('x', agent.x + detectionRange)
+        .gte('y', agent.y - detectionRange)
+        .lte('y', agent.y + detectionRange);
+      nearbyAgents = data;
+    }
   }
 
   // Get pending trades (skip if not requested via ?fields=)
   let pendingTrades: Record<string, unknown>[] | null = null;
   if (includeField('trades')) {
-    const { data } = await supabase
-      .from('trades')
+    let tradeQuery = supabase
+      .from(tradesTable)
       .select('*')
       .eq('to_agent_id', agent.id)
       .eq('status', 'pending');
+    tradeQuery = scopeWorldQuery(tradeQuery, context);
+
+    const { data } = await tradeQuery;
     pendingTrades = data;
   }
 
-  // Get announcements (skip if not requested via ?fields=)
+  // Get announcements (global forum) (skip if not requested via ?fields=)
   let announcements: AdminAnnouncement[] = [];
   if (includeField('announcements')) {
     const lastSeen = agent.last_announcement_seen_at || '1970-01-01T00:00:00Z';
@@ -182,10 +230,18 @@ export async function GET(request: NextRequest) {
 
     if (announcements.length > 0) {
       const latestTimestamp = announcements[0].created_at;
-      await supabase
-        .from('agents')
-        .update({ last_announcement_seen_at: latestTimestamp })
-        .eq('id', agent.id);
+      if (context.mode === 'open_world' && context.world_id) {
+        await supabase
+          .from(agentsTable)
+          .update({ last_announcement_seen_at: latestTimestamp })
+          .eq('world_id', context.world_id)
+          .eq('agent_id', agent.id);
+      } else {
+        await supabase
+          .from('agents')
+          .update({ last_announcement_seen_at: latestTimestamp })
+          .eq('id', agent.id);
+      }
     }
   }
 
@@ -193,6 +249,7 @@ export async function GET(request: NextRequest) {
   const data: Record<string, unknown> = {
     id: agent.id,
     name: agent.name,
+    context,
   };
 
   if (includeField('position')) {
@@ -221,7 +278,7 @@ export async function GET(request: NextRequest) {
   }
   data.resource_cap = resourceCap;
   if (includeField('buildings')) {
-    data.buildings = agentBuildings.map(b => ({
+    data.buildings = agentBuildings.map((b) => ({
       type: b.building_type,
       name: getBuildingDefinition(b.building_type)?.name || b.building_type,
       position: { x: b.x, y: b.y },

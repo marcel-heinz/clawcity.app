@@ -92,6 +92,15 @@ export async function POST(request: NextRequest) {
 
       agentId = agent.id;
 
+      await supabase
+        .from('agent_context')
+        .upsert({
+          agent_id: agentId,
+          mode: 'tournament',
+          world_id: null,
+          switched_at: new Date().toISOString(),
+        });
+
       // Encrypt the API key for OpenClaw provisioning
       const encryptionKey = process.env.AGENT_KEY_ENCRYPTION_SECRET;
       if (!encryptionKey) {
@@ -181,6 +190,8 @@ export async function POST(request: NextRequest) {
       customInstructions: config.custom_instructions || '',
       soulMd,
       autoModeEnabled: config.auto_mode_enabled !== false,
+      preferredMode: config.preferred_mode === 'open_world' ? 'open_world' : 'tournament',
+      preferredWorldId: config.preferred_world_id || null,
     });
 
     if (!openclawResult.success) {
@@ -242,6 +253,9 @@ export async function DELETE(request: NextRequest) {
             success: false,
             stopped: false,
             verified_not_configured: false,
+            hard_stop_confirmed: false,
+            drain_verified: false,
+            aborted_requests: 0,
             error: 'OpenClaw gateway not configured for runtime stop verification',
             details: 'runtime_unavailable',
           },
@@ -252,24 +266,35 @@ export async function DELETE(request: NextRequest) {
         success: true,
         stopped: true,
         verified_not_configured: true,
+        hard_stop_confirmed: true,
+        drain_verified: true,
+        aborted_requests: 0,
         details: null,
       });
     }
 
     const stopResult = await deprovisionAgent(config_id);
     const verifiedNotConfigured = stopResult.verified_not_configured === true;
-    if (!stopResult.success || !verifiedNotConfigured) {
+    const hardStopConfirmed = stopResult.hard_stop_confirmed === true;
+    const drainVerified = stopResult.drain_verified === true;
+    if (!stopResult.success || !verifiedNotConfigured || !hardStopConfirmed || !drainVerified) {
       console.error('OpenClaw deprovision failed:', stopResult.error, stopResult.details, {
         verified_not_configured: stopResult.verified_not_configured,
+        hard_stop_confirmed: stopResult.hard_stop_confirmed,
+        drain_verified: stopResult.drain_verified,
+        aborted_requests: stopResult.aborted_requests,
       });
       return NextResponse.json(
         {
           success: false,
           stopped: false,
-          verified_not_configured: false,
+          verified_not_configured: verifiedNotConfigured,
+          hard_stop_confirmed: hardStopConfirmed,
+          drain_verified: drainVerified,
           error: stopResult.error || 'Failed to verify runtime stop',
           details: stopResult.details || stopResult.message || null,
           in_flight_at_stop: stopResult.in_flight_at_stop ?? null,
+          aborted_requests: stopResult.aborted_requests ?? null,
         },
         { status: 502 }
       );
@@ -287,6 +312,9 @@ export async function DELETE(request: NextRequest) {
           success: false,
           stopped: false,
           verified_not_configured: true,
+          hard_stop_confirmed: true,
+          drain_verified: true,
+          aborted_requests: stopResult.aborted_requests ?? null,
           error: 'Runtime stopped but failed to persist agent inactive state',
           details: deactivateError.message,
         },
@@ -298,8 +326,11 @@ export async function DELETE(request: NextRequest) {
       success: true,
       stopped: true,
       verified_not_configured: true,
+      hard_stop_confirmed: true,
+      drain_verified: true,
       details: stopResult.message || null,
       in_flight_at_stop: stopResult.in_flight_at_stop ?? false,
+      aborted_requests: stopResult.aborted_requests ?? 0,
     });
   } catch (error) {
     console.error('Stop error:', error);
@@ -345,6 +376,8 @@ export async function PUT(request: NextRequest) {
         customInstructions: body.custom_instructions,
         soulMd,
         autoModeEnabled: body.auto_mode_enabled !== false,
+        preferredMode: body.preferred_mode === 'open_world' ? 'open_world' : 'tournament',
+        preferredWorldId: typeof body.preferred_world_id === 'string' ? body.preferred_world_id : null,
       });
     }
 

@@ -159,6 +159,16 @@ export async function POST(request: NextRequest) {
       location: { x: agent.x, y: agent.y },
     });
 
+    // Default gameplay context for dual-mode rollout: tournament realm
+    await supabase
+      .from('agent_context')
+      .upsert({
+        agent_id: agent.id,
+        mode: 'tournament',
+        world_id: null,
+        switched_at: new Date().toISOString(),
+      });
+
     // Create claim record with hashed token (with fallback for pre-migration databases)
     const claimInsertResult = await supabase.from('agent_claims').insert({
       agent_id: agent.id,

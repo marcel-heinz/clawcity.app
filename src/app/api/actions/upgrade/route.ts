@@ -9,6 +9,13 @@ import {
 } from '@/lib/types';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
+import {
+  gameplayTableName,
+  resolveAgentForContext,
+  resolveGameplayContext,
+  scopeAgentMutation,
+  scopeTileQuery,
+} from '@/lib/game-context';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -32,16 +39,26 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const agent = auth.agent;
     const supabase = createServerClient();
+    const context = await resolveGameplayContext(auth.agent.id);
+    const agent = await resolveAgentForContext(auth.agent, context);
+    const agentsTable = gameplayTableName('agents', context);
+    const tilesTable = gameplayTableName('tiles', context);
+    const eventsTable = gameplayTableName('events', context);
+
+    const addWorld = <T extends Record<string, unknown>>(payload: T): T | (T & { world_id: string }) => {
+      if (context.mode === 'open_world' && context.world_id) {
+        return { world_id: context.world_id, ...payload };
+      }
+      return payload;
+    };
 
     // Get current tile with ownership and upgrade info
-    const { data: tile, error: tileError } = await supabase
-      .from('tiles')
-      .select('terrain, owner_id, upgrade_level')
-      .eq('x', agent.x)
-      .eq('y', agent.y)
-      .single();
+    let tileQuery = supabase
+      .from(tilesTable)
+      .select('terrain, owner_id, upgrade_level');
+    tileQuery = scopeTileQuery(tileQuery, context, agent.x, agent.y);
+    const { data: tile, error: tileError } = await tileQuery.single();
 
     if (tileError || !tile) {
       return errorResponse('Could not find your current tile', 500);
@@ -97,13 +114,14 @@ export async function POST(request: NextRequest) {
     const newWood = agent.wood - upgradeCost.wood;
     const newStone = agent.stone - upgradeCost.stone;
 
-    const { error: resourceError } = await supabase
-      .from('agents')
-      .update({ 
+    let resourceUpdateQuery = supabase
+      .from(agentsTable)
+      .update({
         wood: newWood,
         stone: newStone
-      })
-      .eq('id', agent.id);
+      });
+    resourceUpdateQuery = scopeAgentMutation(resourceUpdateQuery, context, agent.id);
+    const { error: resourceError } = await resourceUpdateQuery;
 
     if (resourceError) {
       console.error('Error deducting resources:', resourceError);
@@ -111,38 +129,41 @@ export async function POST(request: NextRequest) {
     }
 
     // Upgrade the tile
-    const { error: upgradeError } = await supabase
-      .from('tiles')
-      .update({ upgrade_level: nextLevel })
-      .eq('x', agent.x)
-      .eq('y', agent.y);
+    let upgradeTileQuery = supabase
+      .from(tilesTable)
+      .update({ upgrade_level: nextLevel });
+    upgradeTileQuery = scopeTileQuery(upgradeTileQuery, context, agent.x, agent.y);
+    const { error: upgradeError } = await upgradeTileQuery;
 
     if (upgradeError) {
       console.error('Error upgrading tile:', upgradeError);
       // Refund resources if upgrade failed
-      await supabase
-        .from('agents')
-        .update({ 
+      let refundQuery = supabase
+        .from(agentsTable)
+        .update({
           wood: agent.wood,
           stone: agent.stone
-        })
-        .eq('id', agent.id);
+        });
+      refundQuery = scopeAgentMutation(refundQuery, context, agent.id);
+      await refundQuery;
       return errorResponse('Failed to upgrade tile', 500);
     }
 
     // Log upgrade event
-    await supabase.from('events').insert({
-      agent_id: agent.id,
-      type: 'upgrade',
-      data: { 
-        terrain,
-        from_level: currentLevel,
-        to_level: nextLevel,
-        cost: upgradeCost,
-        new_bonus_percent: Math.round((UPGRADE_BONUSES[nextLevel] - 1) * 100)
-      },
-      location: { x: agent.x, y: agent.y },
-    });
+    await supabase.from(eventsTable).insert(
+      addWorld({
+        agent_id: agent.id,
+        type: 'upgrade',
+        data: {
+          terrain,
+          from_level: currentLevel,
+          to_level: nextLevel,
+          cost: upgradeCost,
+          new_bonus_percent: Math.round((UPGRADE_BONUSES[nextLevel] - 1) * 100)
+        },
+        location: { x: agent.x, y: agent.y },
+      })
+    );
 
     const oldBonus = Math.round((UPGRADE_BONUSES[currentLevel] - 1) * 100);
     const newBonus = Math.round((UPGRADE_BONUSES[nextLevel] - 1) * 100);
@@ -174,7 +195,8 @@ export async function POST(request: NextRequest) {
         level: nextLevel + 1,
         cost: UPGRADE_COSTS[nextLevel + 1],
         bonus_percent: Math.round((UPGRADE_BONUSES[nextLevel + 1] - 1) * 100)
-      } : null
+      } : null,
+      context,
     });
 
     return jsonResponse({

@@ -9,11 +9,19 @@ import {
   STAMINA_COST_CLAIM,
   MAX_TERRITORIES_PER_AGENT,
   TerrainType,
-  TERRITORY_UPKEEP_FOOD
+  TERRITORY_UPKEEP_FOOD,
 } from '@/lib/types';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
 import { getItemDefinition } from '@/lib/crafting';
+import {
+  gameplayTableName,
+  resolveAgentForContext,
+  resolveGameplayContext,
+  scopeAgentMutation,
+  scopeTileQuery,
+  scopeWorldQuery,
+} from '@/lib/game-context';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -24,33 +32,45 @@ export async function POST(request: NextRequest) {
   const rateLimit = await checkRateLimit(request, GAME_ACTION_RATE_LIMIT);
   if (!rateLimit.success) {
     const retryAfter = Math.ceil((rateLimit.retryAfterMs || 1000) / 1000);
-    return errorResponse(
-      `Rate limit exceeded. Try again in ${retryAfter}s.`,
-      429
-    );
+    return errorResponse(`Rate limit exceeded. Try again in ${retryAfter}s.`, 429);
   }
 
   const auth = await authenticateAgent(request);
-  
+
   if (!auth.success || !auth.agent) {
     return errorResponse(auth.error || 'Unauthorized', 401);
   }
 
   try {
-    const agent = auth.agent;
     const supabase = createServerClient();
+    const context = await resolveGameplayContext(auth.agent.id);
+    const agent = await resolveAgentForContext(auth.agent, context);
+
+    const agentsTable = gameplayTableName('agents', context);
+    const tilesTable = gameplayTableName('tiles', context);
+    const eventsTable = gameplayTableName('events', context);
+    const itemsTable = gameplayTableName('agent_items', context);
+
+    const addWorld = <T extends Record<string, unknown>>(payload: T): T | (T & { world_id: string }) => {
+      if (context.mode === 'open_world' && context.world_id) {
+        return { world_id: context.world_id, ...payload };
+      }
+      return payload;
+    };
 
     // Check for Territory Deed (claim_discount effect)
     let hasTerrityDeed = false;
     let deedDiscountPercent = 0;
     let deedItemRow: { id: string; uses_remaining: number | null } | null = null;
 
-    const { data: deedItem } = await supabase
-      .from('agent_items')
+    let deedQuery = supabase
+      .from(itemsTable)
       .select('id, uses_remaining')
       .eq('agent_id', agent.id)
-      .eq('item_id', 'territory_deed')
-      .single();
+      .eq('item_id', 'territory_deed');
+    deedQuery = scopeWorldQuery(deedQuery, context);
+
+    const { data: deedItem } = await deedQuery.maybeSingle();
 
     if (deedItem && (deedItem.uses_remaining === null || deedItem.uses_remaining > 0)) {
       const deedDef = getItemDefinition('territory_deed');
@@ -95,18 +115,16 @@ export async function POST(request: NextRequest) {
       const deedNote = hasTerrityDeed ? ' (with Territory Deed -50% discount)' : '';
       return errorResponse(
         `Not enough resources to claim territory. Missing: ${missingResources.join(', ')}. ` +
-        `Full cost: ${effectiveGoldCost} gold, ${effectiveWoodCost} wood, ${effectiveStoneCost} stone, ${totalFoodCost} food${deedNote}.`,
+          `Full cost: ${effectiveGoldCost} gold, ${effectiveWoodCost} wood, ${effectiveStoneCost} stone, ${totalFoodCost} food${deedNote}.`,
         400
       );
     }
 
     // Get current tile
-    const { data: tile, error: tileError } = await supabase
-      .from('tiles')
-      .select('terrain, owner_id')
-      .eq('x', agent.x)
-      .eq('y', agent.y)
-      .single();
+    let tileQuery = supabase.from(tilesTable).select('terrain, owner_id');
+    tileQuery = scopeTileQuery(tileQuery, context, agent.x, agent.y);
+
+    const { data: tile, error: tileError } = await tileQuery.single();
 
     if (tileError || !tile) {
       return errorResponse('Could not find your current tile', 500);
@@ -128,14 +146,10 @@ export async function POST(request: NextRequest) {
       if (tile.owner_id === agent.id) {
         return errorResponse('You already own this tile!', 400);
       }
-      
+
       // Get owner name for better error message
-      const { data: owner } = await supabase
-        .from('agents')
-        .select('name')
-        .eq('id', tile.owner_id)
-        .single();
-      
+      const { data: owner } = await supabase.from('agents').select('name').eq('id', tile.owner_id).single();
+
       return errorResponse(
         `This tile is already claimed by ${owner?.name || 'another agent'}. Trade with them to acquire it.`,
         400
@@ -143,10 +157,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Count agent's current territories
-    const { count: territoryCount } = await supabase
-      .from('tiles')
+    let territoryCountQuery = supabase
+      .from(tilesTable)
       .select('*', { count: 'exact', head: true })
       .eq('owner_id', agent.id);
+    territoryCountQuery = scopeWorldQuery(territoryCountQuery, context);
+    const { count: territoryCount } = await territoryCountQuery;
 
     if ((territoryCount || 0) >= MAX_TERRITORIES_PER_AGENT) {
       return errorResponse(
@@ -162,15 +178,15 @@ export async function POST(request: NextRequest) {
     const newFood = agent.food - totalFoodCost;
 
     // Deduct all resources from agent atomically
-    const { error: resourceError } = await supabase
-      .from('agents')
-      .update({
-        gold: newGold,
-        wood: newWood,
-        stone: newStone,
-        food: newFood
-      })
-      .eq('id', agent.id);
+    let resourceUpdateQuery = supabase.from(agentsTable).update({
+      gold: newGold,
+      wood: newWood,
+      stone: newStone,
+      food: newFood,
+    });
+    resourceUpdateQuery = scopeAgentMutation(resourceUpdateQuery, context, agent.id);
+
+    const { error: resourceError } = await resourceUpdateQuery;
 
     if (resourceError) {
       console.error('Error deducting resources:', resourceError);
@@ -179,63 +195,68 @@ export async function POST(request: NextRequest) {
 
     // Claim the tile
     const claimTimestamp = new Date().toISOString();
-    const { error: claimError } = await supabase
-      .from('tiles')
-      .update({ 
+    let claimTileQuery = supabase
+      .from(tilesTable)
+      .update({
         owner_id: agent.id,
-        claimed_at: claimTimestamp
-      })
-      .eq('x', agent.x)
-      .eq('y', agent.y);
+        claimed_at: claimTimestamp,
+      });
+    claimTileQuery = scopeTileQuery(claimTileQuery, context, agent.x, agent.y);
+
+    const { error: claimError } = await claimTileQuery;
 
     if (claimError) {
       console.error('Error claiming tile:', claimError);
       // Refund all resources if claim failed
-      await supabase
-        .from('agents')
-        .update({ 
-          gold: agent.gold,
-          wood: agent.wood,
-          stone: agent.stone,
-          food: agent.food
-        })
-        .eq('id', agent.id);
+      let refundQuery = supabase.from(agentsTable).update({
+        gold: agent.gold,
+        wood: agent.wood,
+        stone: agent.stone,
+        food: agent.food,
+      });
+      refundQuery = scopeAgentMutation(refundQuery, context, agent.id);
+      await refundQuery;
       return errorResponse('Failed to claim tile', 500);
     }
 
     // Consume Territory Deed if used
     if (hasTerrityDeed && deedItemRow) {
-      await supabase
-        .from('agent_items')
+      let consumeQuery = supabase
+        .from(itemsTable)
         .update({ uses_remaining: 0, quantity: 0 })
         .eq('id', deedItemRow.id);
+      consumeQuery = scopeWorldQuery(consumeQuery, context);
+      await consumeQuery;
     }
 
     // Log claim event
-    await supabase.from('events').insert({
-      agent_id: agent.id,
-      type: 'claim',
-      data: {
-        terrain,
-        cost: {
-          gold: effectiveGoldCost,
-          wood: effectiveWoodCost,
-          stone: effectiveStoneCost,
-          food: totalFoodCost
+    await supabase.from(eventsTable).insert(
+      addWorld({
+        agent_id: agent.id,
+        type: 'claim',
+        data: {
+          terrain,
+          cost: {
+            gold: effectiveGoldCost,
+            wood: effectiveWoodCost,
+            stone: effectiveStoneCost,
+            food: totalFoodCost,
+          },
+          territory_deed_used: hasTerrityDeed,
+          territory_count: (territoryCount || 0) + 1,
+          upkeep_cost_per_hour: TERRITORY_UPKEEP_FOOD,
         },
-        territory_deed_used: hasTerrityDeed,
-        territory_count: (territoryCount || 0) + 1,
-        upkeep_cost_per_hour: TERRITORY_UPKEEP_FOOD,
-      },
-      location: { x: agent.x, y: agent.y },
-    });
+        location: { x: agent.x, y: agent.y },
+      })
+    );
 
     const newTerritoryCount = (territoryCount || 0) + 1;
     const deedMessage = hasTerrityDeed ? ' (Territory Deed applied: -50% cost!)' : '';
 
     // Include any new announcements in the response
     const responseData = await withAnnouncements(agent, {
-      message: `You have claimed this ${terrain} tile!${deedMessage} ` +
+      message:
+        `You have claimed this ${terrain} tile!${deedMessage} ` +
         `Cost: ${effectiveGoldCost} gold, ${effectiveWoodCost} wood, ${effectiveStoneCost} stone, ${totalFoodCost} food. ` +
         `You now receive +25% resources when gathering here (upgradeable to +75%). ` +
         `IMPORTANT: Territory upkeep is ${TERRITORY_UPKEEP_FOOD} food/territory/hour (${newTerritoryCount * TERRITORY_UPKEEP_FOOD} food/hour total for your ${newTerritoryCount} territories).`,
@@ -249,21 +270,22 @@ export async function POST(request: NextRequest) {
         territory_deed_used: hasTerrityDeed,
         food_breakdown: {
           claim_cost: effectiveFoodClaimCost,
-          stamina_cost: STAMINA_COST_CLAIM
-        }
+          stamina_cost: STAMINA_COST_CLAIM,
+        },
       },
       upkeep: {
         food_per_territory_per_hour: TERRITORY_UPKEEP_FOOD,
-        total_food_per_hour: newTerritoryCount * TERRITORY_UPKEEP_FOOD
+        total_food_per_hour: newTerritoryCount * TERRITORY_UPKEEP_FOOD,
       },
       inventory: {
         gold: newGold,
         wood: newWood,
         stone: newStone,
-        food: newFood
+        food: newFood,
       },
       territory_count: newTerritoryCount,
       max_territories: MAX_TERRITORIES_PER_AGENT,
+      context,
     });
 
     return jsonResponse({

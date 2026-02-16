@@ -18,6 +18,8 @@ interface ProvisionRequest {
   customInstructions: string;
   soulMd?: string;
   autoModeEnabled?: boolean;
+  preferredMode?: 'tournament' | 'open_world';
+  preferredWorldId?: string | null;
 }
 
 interface ProvisionResponse {
@@ -27,6 +29,9 @@ interface ProvisionResponse {
   removed_from_config?: boolean;
   in_flight_at_stop?: boolean;
   verified_not_configured?: boolean;
+  hard_stop_confirmed?: boolean;
+  drain_verified?: boolean;
+  aborted_requests?: number;
   message?: string;
   stopped?: boolean;
   error?: string;

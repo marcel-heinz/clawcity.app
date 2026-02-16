@@ -27,18 +27,24 @@ import {
 export async function getActiveEventBonus(
   x: number,
   y: number,
-  terrain: TerrainType
+  terrain: TerrainType,
+  worldId?: string
 ): Promise<{ multiplier: number; event: MicroEvent | null }> {
   const supabase = createServerClient();
   const now = new Date().toISOString();
+  const eventsTable = worldId ? 'open_world_micro_events' : 'micro_events';
 
   // Query active gather events
-  const { data: events, error } = await supabase
-    .from('micro_events')
+  let eventsQuery = supabase
+    .from(eventsTable)
     .select('*')
     .eq('active', true)
     .eq('bonus_type', 'gather')
     .gt('expires_at', now);
+  if (worldId) {
+    eventsQuery = eventsQuery.eq('world_id', worldId);
+  }
+  const { data: events, error } = await eventsQuery;
 
   if (error || !events || events.length === 0) {
     return { multiplier: 1.0, event: null };

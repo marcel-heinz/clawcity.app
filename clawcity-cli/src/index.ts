@@ -18,6 +18,8 @@ import { registerAvatarCommands } from './commands/avatar.js';
 import { registerApiCommands } from './commands/api.js';
 import { registerProfileCommands } from './commands/profile.js';
 import { registerFeedbackCommands } from './commands/feedback.js';
+import { registerModeCommands } from './commands/mode.js';
+import { registerWorldsCommands } from './commands/worlds.js';
 
 const program = new Command();
 
@@ -49,6 +51,8 @@ registerGuideCommands(program);
 registerAvatarCommands(program);
 registerProfileCommands(program);
 registerFeedbackCommands(program);
+registerModeCommands(program);
+registerWorldsCommands(program);
 registerApiCommands(program);
 
 program.parse();

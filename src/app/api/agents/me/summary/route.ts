@@ -3,15 +3,18 @@ import { authenticateAgent, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { calculateResourceCap } from '@/lib/buildings';
 import { calculateWealthBreakdown } from '@/lib/types';
+import {
+  gameplayTableName,
+  resolveAgentForContext,
+  resolveGameplayContext,
+  scopeTileQuery,
+  scopeWorldQuery,
+} from '@/lib/game-context';
 
 /**
  * GET /api/agents/me/summary
  *
  * Returns a pre-formatted one-line text summary of agent stats.
- * Designed for minimal token usage — the LLM can return this directly
- * without any JSON parsing or formatting.
- *
- * Response: ~100 chars plain text vs ~2000+ chars JSON from /api/agents/me
  */
 export async function GET(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -23,27 +26,31 @@ export async function GET(request: NextRequest) {
     return errorResponse(auth.error || 'Unauthorized', 401);
   }
 
-  const agent = auth.agent;
+  const context = await resolveGameplayContext(auth.agent.id);
+  const agent = await resolveAgentForContext(auth.agent, context);
   const supabase = createServerClient();
 
+  const tilesTable = gameplayTableName('tiles', context);
+  const tradesTable = gameplayTableName('trades', context);
+
   // Get current tile terrain
-  const { data: tile } = await supabase
-    .from('tiles')
-    .select('terrain')
-    .eq('x', agent.x)
-    .eq('y', agent.y)
-    .single();
+  let tileQuery = supabase.from(tilesTable).select('terrain');
+  tileQuery = scopeTileQuery(tileQuery, context, agent.x, agent.y);
+  const { data: tile } = await tileQuery.single();
 
   // Count buildings and storage
   let storageCount = 0;
   let workshopCount = 0;
   let fortificationCount = 0;
   try {
-    const { data: buildings } = await supabase
-      .from('tiles')
+    let buildingQuery = supabase
+      .from(tilesTable)
       .select('building_type')
       .eq('owner_id', agent.id)
       .not('building_type', 'is', null);
+    buildingQuery = scopeWorldQuery(buildingQuery, context);
+
+    const { data: buildings } = await buildingQuery;
     const buildingList = buildings || [];
     storageCount = buildingList.filter((b: { building_type: string }) => b.building_type === 'storage').length;
     workshopCount = buildingList.filter((b: { building_type: string }) => b.building_type === 'workshop').length;
@@ -55,10 +62,13 @@ export async function GET(request: NextRequest) {
   // Count territories
   let territoryCount = 0;
   try {
-    const { count } = await supabase
-      .from('tiles')
+    let territoryQuery = supabase
+      .from(tilesTable)
       .select('*', { count: 'exact', head: true })
       .eq('owner_id', agent.id);
+    territoryQuery = scopeWorldQuery(territoryQuery, context);
+
+    const { count } = await territoryQuery;
     territoryCount = count || 0;
   } catch {
     // tiles table may not have owner_id yet
@@ -67,11 +77,14 @@ export async function GET(request: NextRequest) {
   // Count pending trades
   let pendingTradeCount = 0;
   try {
-    const { count } = await supabase
-      .from('trades')
+    let tradeQuery = supabase
+      .from(tradesTable)
       .select('*', { count: 'exact', head: true })
       .eq('to_agent_id', agent.id)
       .eq('status', 'pending');
+    tradeQuery = scopeWorldQuery(tradeQuery, context);
+
+    const { count } = await tradeQuery;
     pendingTradeCount = count || 0;
   } catch {
     // trades table may not exist
@@ -94,8 +107,13 @@ export async function GET(request: NextRequest) {
   if (agent.wood >= resourceCap * 0.9) warnings.push('wood near cap');
   if (agent.stone >= resourceCap * 0.9) warnings.push('stone near cap');
 
+  const modeText = context.mode === 'open_world'
+    ? `open_world:${context.world_name || context.world_id || 'unknown'}`
+    : 'tournament';
+
   const summary = [
     `${agent.name}`,
+    `[${modeText}]`,
     `(${agent.x},${agent.y}) ${terrain}`,
     `G:${agent.gold} W:${agent.wood} F:${agent.food} S:${agent.stone}`,
     `Wealth:${wealthBreakdown.total}`,

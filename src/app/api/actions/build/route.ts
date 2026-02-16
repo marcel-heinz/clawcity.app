@@ -11,6 +11,13 @@ import {
   formatBuildingCost,
   type BuildingType,
 } from '@/lib/buildings';
+import {
+  gameplayTableName,
+  resolveAgentForContext,
+  resolveGameplayContext,
+  scopeAgentMutation,
+  scopeTileQuery,
+} from '@/lib/game-context';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -29,10 +36,21 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const agent = auth.agent;
     const supabase = createServerClient();
     const body = await request.json();
     const buildingType = body.building_type as string;
+    const context = await resolveGameplayContext(auth.agent.id);
+    const agent = await resolveAgentForContext(auth.agent, context);
+    const agentsTable = gameplayTableName('agents', context);
+    const tilesTable = gameplayTableName('tiles', context);
+    const eventsTable = gameplayTableName('events', context);
+
+    const addWorld = <T extends Record<string, unknown>>(payload: T): T | (T & { world_id: string }) => {
+      if (context.mode === 'open_world' && context.world_id) {
+        return { world_id: context.world_id, ...payload };
+      }
+      return payload;
+    };
 
     // Validate building type
     if (!buildingType || !ALL_BUILDING_TYPES.includes(buildingType as BuildingType)) {
@@ -58,12 +76,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Get current tile
-    const { data: tile } = await supabase
-      .from('tiles')
-      .select('terrain, owner_id, building_type')
-      .eq('x', agent.x)
-      .eq('y', agent.y)
-      .single();
+    let tileQuery = supabase
+      .from(tilesTable)
+      .select('terrain, owner_id, building_type');
+    tileQuery = scopeTileQuery(tileQuery, context, agent.x, agent.y);
+    const { data: tile } = await tileQuery.single();
 
     if (!tile) {
       return errorResponse('Could not find your current tile.', 500);
@@ -101,16 +118,17 @@ export async function POST(request: NextRequest) {
     const newFood = agent.food - (buildingDef.build_cost.food || 0);
     const newStone = agent.stone - (buildingDef.build_cost.stone || 0);
 
-    const { error: resourceError } = await supabase
-      .from('agents')
+    let resourceUpdateQuery = supabase
+      .from(agentsTable)
       .update({
         gold: newGold,
         wood: newWood,
         food: newFood,
         stone: newStone,
         last_build_at: new Date().toISOString(),
-      })
-      .eq('id', agent.id);
+      });
+    resourceUpdateQuery = scopeAgentMutation(resourceUpdateQuery, context, agent.id);
+    const { error: resourceError } = await resourceUpdateQuery;
 
     if (resourceError) {
       console.error('Error deducting resources for build:', resourceError);
@@ -119,37 +137,41 @@ export async function POST(request: NextRequest) {
 
     // Place building on tile
     const now = new Date().toISOString();
-    const { error: tileError } = await supabase
-      .from('tiles')
+    let placeBuildingQuery = supabase
+      .from(tilesTable)
       .update({
         building_type: buildingType,
         building_built_at: now,
         building_upkeep_paid_at: now,
-      })
-      .eq('x', agent.x)
-      .eq('y', agent.y);
+      });
+    placeBuildingQuery = scopeTileQuery(placeBuildingQuery, context, agent.x, agent.y);
+    const { error: tileError } = await placeBuildingQuery;
 
     if (tileError) {
       // Refund resources
-      await supabase.from('agents').update({
+      let refundQuery = supabase.from(agentsTable).update({
         gold: agent.gold, wood: agent.wood, food: agent.food, stone: agent.stone,
-      }).eq('id', agent.id);
+      });
+      refundQuery = scopeAgentMutation(refundQuery, context, agent.id);
+      await refundQuery;
       console.error('Error placing building:', tileError);
       return errorResponse('Failed to place building.', 500);
     }
 
     // Log build event
-    await supabase.from('events').insert({
-      agent_id: agent.id,
-      type: 'build',
-      data: {
-        building_type: buildingType,
-        building_name: buildingDef.name,
-        cost: buildingDef.build_cost,
-        effect: buildingDef.effect_description,
-      },
-      location: { x: agent.x, y: agent.y },
-    });
+    await supabase.from(eventsTable).insert(
+      addWorld({
+        agent_id: agent.id,
+        type: 'build',
+        data: {
+          building_type: buildingType,
+          building_name: buildingDef.name,
+          cost: buildingDef.build_cost,
+          effect: buildingDef.effect_description,
+        },
+        location: { x: agent.x, y: agent.y },
+      })
+    );
 
     const responseData = await withAnnouncements(agent, {
       message: `Built ${buildingDef.name} at (${agent.x}, ${agent.y})! Cost: ${formatBuildingCost(buildingDef.build_cost)}. Effect: ${buildingDef.effect_description}. Hourly upkeep: ${formatBuildingCost(buildingDef.hourly_upkeep)}.`,
@@ -166,6 +188,7 @@ export async function POST(request: NextRequest) {
         food: newFood,
         stone: newStone,
       },
+      context,
     });
 
     return jsonResponse({ success: true, data: responseData });

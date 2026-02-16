@@ -105,6 +105,8 @@ export async function POST(request: NextRequest) {
         custom_instructions: body.custom_instructions || '',
         soul_md: soulMd,
         auto_mode_enabled: body.auto_mode_enabled !== false,
+        preferred_mode: body.preferred_mode === 'open_world' ? 'open_world' : 'tournament',
+        preferred_world_id: typeof body.preferred_world_id === 'string' ? body.preferred_world_id : null,
         builder_version: 2,
       })
       .select()
@@ -152,6 +154,8 @@ export async function PUT(request: NextRequest) {
         custom_instructions: body.custom_instructions || '',
         soul_md: soulMd,
         auto_mode_enabled: body.auto_mode_enabled !== false,
+        preferred_mode: body.preferred_mode === 'open_world' ? 'open_world' : 'tournament',
+        preferred_world_id: typeof body.preferred_world_id === 'string' ? body.preferred_world_id : null,
         builder_version: 2,
       })
       .eq('user_id', user.id)
