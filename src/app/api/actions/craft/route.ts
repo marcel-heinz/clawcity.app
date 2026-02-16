@@ -13,13 +13,6 @@ import {
   type ValidItemId,
 } from '@/lib/crafting';
 import { agentHasWorkshop, calculateResourceCap } from '@/lib/buildings';
-import {
-  gameplayTableName,
-  resolveAgentForContext,
-  resolveGameplayContext,
-  scopeAgentMutation,
-  scopeWorldQuery,
-} from '@/lib/game-context';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -39,33 +32,19 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const agent = auth.agent;
     const supabase = createServerClient();
     const body = await request.json();
     const itemId = body.item_id as string;
-    const context = await resolveGameplayContext(auth.agent.id);
-    const agent = await resolveAgentForContext(auth.agent, context);
-    const agentsTable = gameplayTableName('agents', context);
-    const tilesTable = gameplayTableName('tiles', context);
-    const itemsTable = gameplayTableName('agent_items', context);
-    const eventsTable = gameplayTableName('events', context);
-
-    const addWorld = <T extends Record<string, unknown>>(payload: T): T | (T & { world_id: string }) => {
-      if (context.mode === 'open_world' && context.world_id) {
-        return { world_id: context.world_id, ...payload };
-      }
-      return payload;
-    };
 
     const getResourceCap = async (): Promise<number> => {
       let storageCount = 0;
       try {
-        let storageQuery = supabase
-          .from(tilesTable)
+        const { data: storageRows } = await supabase
+          .from('tiles')
           .select('building_type')
           .eq('owner_id', agent.id)
           .eq('building_type', 'storage');
-        storageQuery = scopeWorldQuery(storageQuery, context);
-        const { data: storageRows } = await storageQuery;
         storageCount = storageRows?.length || 0;
       } catch {
         // building columns may not exist yet
@@ -105,13 +84,11 @@ export async function POST(request: NextRequest) {
     if (itemDef.requires_workshop) {
       let hasWorkshop = false;
       try {
-        let buildingsQuery = supabase
-          .from(tilesTable)
+        const { data: buildings } = await supabase
+          .from('tiles')
           .select('building_type')
           .eq('owner_id', agent.id)
           .not('building_type', 'is', null);
-        buildingsQuery = scopeWorldQuery(buildingsQuery, context);
-        const { data: buildings } = await buildingsQuery;
         hasWorkshop = agentHasWorkshop((buildings || []) as { building_type: string }[]);
       } catch {
         // building columns may not exist yet
@@ -135,13 +112,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if agent already has max quantity of this item
-    let existingItemQuery = supabase
-      .from(itemsTable)
+    const { data: existingItem } = await supabase
+      .from('agent_items')
       .select('id, quantity, uses_remaining')
       .eq('agent_id', agent.id)
-      .eq('item_id', itemId);
-    existingItemQuery = scopeWorldQuery(existingItemQuery, context);
-    const { data: existingItem } = await existingItemQuery.single();
+      .eq('item_id', itemId)
+      .single();
 
     if (existingItem) {
       // For tools with uses, check if the existing one is consumed
@@ -156,12 +132,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check total item count
-    let allItemsQuery = supabase
-      .from(itemsTable)
+    const { data: allItems } = await supabase
+      .from('agent_items')
       .select('quantity, uses_remaining, item_id')
       .eq('agent_id', agent.id);
-    allItemsQuery = scopeWorldQuery(allItemsQuery, context);
-    const { data: allItems } = await allItemsQuery;
 
     const totalItems = (allItems || []).reduce((sum: number, item: { quantity: number; uses_remaining: number | null; item_id: string }) => {
       // Don't count consumed items
@@ -183,17 +157,16 @@ export async function POST(request: NextRequest) {
     const newFood = agent.food - (itemDef.recipe.food || 0);
     const newStone = agent.stone - (itemDef.recipe.stone || 0);
 
-    let resourceUpdateQuery = supabase
-      .from(agentsTable)
+    const { error: resourceError } = await supabase
+      .from('agents')
       .update({
         gold: newGold,
         wood: newWood,
         food: newFood,
         stone: newStone,
         last_craft_at: new Date().toISOString(),
-      });
-    resourceUpdateQuery = scopeAgentMutation(resourceUpdateQuery, context, agent.id);
-    const { error: resourceError } = await resourceUpdateQuery;
+      })
+      .eq('id', agent.id);
 
     if (resourceError) {
       console.error('Error deducting resources for craft:', resourceError);
@@ -205,7 +178,7 @@ export async function POST(request: NextRequest) {
       if (itemDef.max_uses !== null && existingItem.uses_remaining !== null && existingItem.uses_remaining <= 0) {
         // Replace consumed item
         const { error: updateError } = await supabase
-          .from(itemsTable)
+          .from('agent_items')
           .update({
             uses_remaining: itemDef.max_uses,
             quantity: 1,
@@ -215,52 +188,42 @@ export async function POST(request: NextRequest) {
 
         if (updateError) {
           // Refund resources
-          let refundQuery = supabase.from(agentsTable).update({
+          await supabase.from('agents').update({
             gold: agent.gold, wood: agent.wood, food: agent.food, stone: agent.stone,
-          });
-          refundQuery = scopeAgentMutation(refundQuery, context, agent.id);
-          await refundQuery;
+          }).eq('id', agent.id);
           console.error('Error updating item:', updateError);
           return errorResponse('Failed to craft item', 500);
         }
       } else {
         // Increment quantity (for consumables)
         const { error: updateError } = await supabase
-          .from(itemsTable)
+          .from('agent_items')
           .update({ quantity: existingItem.quantity + 1 })
           .eq('id', existingItem.id);
 
         if (updateError) {
-          let refundQuery = supabase.from(agentsTable).update({
+          await supabase.from('agents').update({
             gold: agent.gold, wood: agent.wood, food: agent.food, stone: agent.stone,
-          });
-          refundQuery = scopeAgentMutation(refundQuery, context, agent.id);
-          await refundQuery;
+          }).eq('id', agent.id);
           console.error('Error updating item:', updateError);
           return errorResponse('Failed to craft item', 500);
         }
       }
     } else {
       // Insert new item
-      const insertPayload: Record<string, unknown> = {
-        agent_id: agent.id,
-        item_id: itemId,
-        quantity: 1,
-        uses_remaining: itemDef.max_uses,
-      };
-      if (context.mode === 'open_world' && context.world_id) {
-        insertPayload.world_id = context.world_id;
-      }
       const { error: insertError } = await supabase
-        .from(itemsTable)
-        .insert(insertPayload);
+        .from('agent_items')
+        .insert({
+          agent_id: agent.id,
+          item_id: itemId,
+          quantity: 1,
+          uses_remaining: itemDef.max_uses,
+        });
 
       if (insertError) {
-        let refundQuery = supabase.from(agentsTable).update({
+        await supabase.from('agents').update({
           gold: agent.gold, wood: agent.wood, food: agent.food, stone: agent.stone,
-        });
-        refundQuery = scopeAgentMutation(refundQuery, context, agent.id);
-        await refundQuery;
+        }).eq('id', agent.id);
         console.error('Error inserting item:', insertError);
         return errorResponse('Failed to craft item', 500);
       }
@@ -282,33 +245,28 @@ export async function POST(request: NextRequest) {
           const appliedFoodGain = Math.max(0, updatedFood - finalFood);
           finalFood = updatedFood;
 
-          let foodUpdateQuery = supabase
-            .from(agentsTable)
-            .update({ food: updatedFood });
-          foodUpdateQuery = scopeAgentMutation(foodUpdateQuery, context, agent.id);
-          await foodUpdateQuery;
+          await supabase
+            .from('agents')
+            .update({ food: updatedFood })
+            .eq('id', agent.id);
 
           // Consume the item
           if (existingItem) {
             const newQty = existingItem.quantity; // didn't increment for instant use
-            let consumeQuery = supabase
-              .from(itemsTable)
+            await supabase
+              .from('agent_items')
               .update({
                 quantity: Math.max(0, newQty),
                 uses_remaining: 0,
               })
               .eq('agent_id', agent.id)
               .eq('item_id', itemId);
-            consumeQuery = scopeWorldQuery(consumeQuery, context);
-            await consumeQuery;
           } else {
-            let consumeQuery = supabase
-              .from(itemsTable)
+            await supabase
+              .from('agent_items')
               .update({ uses_remaining: 0, quantity: 0 })
               .eq('agent_id', agent.id)
               .eq('item_id', itemId);
-            consumeQuery = scopeWorldQuery(consumeQuery, context);
-            await consumeQuery;
           }
 
           instantMessage = appliedFoodGain > 0
@@ -319,19 +277,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Log craft event
-    await supabase.from(eventsTable).insert(
-      addWorld({
-        agent_id: agent.id,
-        type: 'craft',
-        data: {
-          item_id: itemId,
-          item_name: itemDef.name,
-          category: itemDef.category,
-          recipe: itemDef.recipe,
-        },
-        location: { x: agent.x, y: agent.y },
-      })
-    );
+    await supabase.from('events').insert({
+      agent_id: agent.id,
+      type: 'craft',
+      data: {
+        item_id: itemId,
+        item_name: itemDef.name,
+        category: itemDef.category,
+        recipe: itemDef.recipe,
+      },
+      location: { x: agent.x, y: agent.y },
+    });
 
     // Build response
     const effectDescriptions = itemDef.effects.map(e => {
@@ -369,7 +325,6 @@ export async function POST(request: NextRequest) {
         food: finalFood,
         stone: newStone,
       },
-      context,
     });
 
     return jsonResponse({ success: true, data: responseData });
