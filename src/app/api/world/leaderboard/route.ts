@@ -20,13 +20,14 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServerClient();
     const url = new URL(request.url);
+    // `limit` controls only how many ranked rows are returned.
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '10'), 50);
 
-    // Get agents with resources
+    // Get a sufficiently large source pool so ranking is not computed from only the first 100 agents.
     const { data: rawAgents, error } = await supabase
       .from('agents')
       .select('id, name, gold, wood, food, stone, reputation')
-      .limit(100);
+      .limit(1000);
 
     if (error) {
       return errorResponse('Failed to fetch leaderboard', 500);

@@ -30,7 +30,13 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
 
     // Optional query params for filtering
-    const limit = parseInt(url.searchParams.get('limit') || '20');
+    // `limit` controls only the events array size in the response.
+    const eventLimit = parseInt(url.searchParams.get('limit') || '20');
+    // `agent_limit` controls the agents source pool size (default preserves legacy 100 cap).
+    const parsedAgentLimit = parseInt(url.searchParams.get('agent_limit') || '100');
+    const agentLimit = Number.isFinite(parsedAgentLimit)
+      ? Math.min(1000, Math.max(1, parsedAgentLimit))
+      : 100;
     const x = url.searchParams.get('x');
     const y = url.searchParams.get('y');
     const radius = parseInt(url.searchParams.get('radius') || '10');
@@ -54,7 +60,7 @@ export async function GET(request: NextRequest) {
         .lte('y', centerY + radius);
     }
 
-    const { data: rawAgents, error: agentsError } = await agentsQuery.limit(100);
+    const { data: rawAgents, error: agentsError } = await agentsQuery.limit(agentLimit);
 
     if (agentsError) {
       console.error('Error fetching agents:', agentsError);
@@ -244,7 +250,7 @@ export async function GET(request: NextRequest) {
         created_at
       `)
       .order('created_at', { ascending: false })
-      .limit(limit);
+      .limit(eventLimit);
 
     if (eventsError) {
       console.error('Error fetching events:', eventsError);
