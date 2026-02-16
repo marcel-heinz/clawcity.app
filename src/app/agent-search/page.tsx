@@ -332,7 +332,7 @@ export default function AgentSearchPage() {
 
   const fetchAgents = useCallback(async () => {
     try {
-      const res = await fetch('/api/world/status?limit=500');
+      const res = await fetch('/api/world/status?limit=20&agent_limit=1000');
       const data = await res.json();
       if (data.success) {
         setAgents(data.data.agents || []);
@@ -615,4 +615,3 @@ export default function AgentSearchPage() {
     </main>
   );
 }
-
