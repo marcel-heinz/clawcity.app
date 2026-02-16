@@ -34,6 +34,8 @@ export async function POST(request: NextRequest) {
   try {
     const agent = auth.agent;
     const supabase = createServerClient();
+    const toNumber = (value: unknown, fallback: number): number =>
+      typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 
     // Get current tile with ownership and upgrade info
     const { data: tile, error: tileError } = await supabase
@@ -47,19 +49,14 @@ export async function POST(request: NextRequest) {
       return errorResponse('Could not find your current tile', 500);
     }
 
-    const terrain = tile.terrain as TerrainType;
-    const currentLevel = tile.upgrade_level || 1;
+    const currentLevel = toNumber(tile.upgrade_level, 1);
+    const nextLevel = currentLevel + 1;
+    const upgradeCost = UPGRADE_COSTS[nextLevel];
+    const expectedNewBonus = UPGRADE_BONUSES[nextLevel]
+      ? Math.round((UPGRADE_BONUSES[nextLevel] - 1) * 100)
+      : 0;
 
-    // Check if agent owns this tile
-    if (tile.owner_id !== agent.id) {
-      return errorResponse(
-        'You can only upgrade territories you own. Claim this tile first.',
-        400
-      );
-    }
-
-    // Check if already at max level
-    if (currentLevel >= MAX_UPGRADE_LEVEL) {
+    if (!upgradeCost) {
       return errorResponse(
         `This territory is already at maximum upgrade level (${MAX_UPGRADE_LEVEL}). ` +
         `Current bonus: +${Math.round((UPGRADE_BONUSES[MAX_UPGRADE_LEVEL] - 1) * 100)}%`,
@@ -67,101 +64,86 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get cost for next upgrade level
-    const nextLevel = currentLevel + 1;
-    const upgradeCost = UPGRADE_COSTS[nextLevel];
-
-    if (!upgradeCost) {
-      return errorResponse('Invalid upgrade level', 500);
-    }
-
-    // Check if agent has enough resources
-    const missingResources: string[] = [];
-    
-    if (agent.wood < upgradeCost.wood) {
-      missingResources.push(`wood (need ${upgradeCost.wood}, have ${agent.wood})`);
-    }
-    if (agent.stone < upgradeCost.stone) {
-      missingResources.push(`stone (need ${upgradeCost.stone}, have ${agent.stone})`);
-    }
-
-    if (missingResources.length > 0) {
-      return errorResponse(
-        `Not enough resources to upgrade. Missing: ${missingResources.join(', ')}. ` +
-        `Level ${nextLevel} upgrade costs: ${upgradeCost.wood} wood, ${upgradeCost.stone} stone.`,
-        400
-      );
-    }
-
-    // Deduct resources from agent
-    const newWood = agent.wood - upgradeCost.wood;
-    const newStone = agent.stone - upgradeCost.stone;
-
-    const { error: resourceError } = await supabase
-      .from('agents')
-      .update({ 
-        wood: newWood,
-        stone: newStone
-      })
-      .eq('id', agent.id);
-
-    if (resourceError) {
-      console.error('Error deducting resources:', resourceError);
-      return errorResponse('Failed to process upgrade payment', 500);
-    }
-
-    // Upgrade the tile
-    const { error: upgradeError } = await supabase
-      .from('tiles')
-      .update({ upgrade_level: nextLevel })
-      .eq('x', agent.x)
-      .eq('y', agent.y);
+    const { data: rawResult, error: upgradeError } = await supabase.rpc('upgrade_tile_atomic', {
+      p_agent_id: agent.id,
+      p_x: agent.x,
+      p_y: agent.y,
+      p_expected_level: currentLevel,
+      p_wood_cost: upgradeCost.wood,
+      p_stone_cost: upgradeCost.stone,
+      p_max_upgrade_level: MAX_UPGRADE_LEVEL,
+      p_new_bonus_percent: expectedNewBonus,
+    });
 
     if (upgradeError) {
-      console.error('Error upgrading tile:', upgradeError);
-      // Refund resources if upgrade failed
-      await supabase
-        .from('agents')
-        .update({ 
-          wood: agent.wood,
-          stone: agent.stone
-        })
-        .eq('id', agent.id);
+      console.error('Atomic upgrade RPC error:', upgradeError);
       return errorResponse('Failed to upgrade tile', 500);
     }
 
-    // Log upgrade event
-    await supabase.from('events').insert({
-      agent_id: agent.id,
-      type: 'upgrade',
-      data: { 
-        terrain,
-        from_level: currentLevel,
-        to_level: nextLevel,
-        cost: upgradeCost,
-        new_bonus_percent: Math.round((UPGRADE_BONUSES[nextLevel] - 1) * 100)
-      },
-      location: { x: agent.x, y: agent.y },
-    });
+    const result = (rawResult || {}) as Record<string, unknown>;
+    const code = typeof result.code === 'string' ? result.code : 'unknown';
+    if (result.ok !== true) {
+      if (code === 'not_owned') {
+        return errorResponse(
+          'You can only upgrade territories you own. Claim this tile first.',
+          400
+        );
+      }
+      if (code === 'max_level') {
+        return errorResponse(
+          `This territory is already at maximum upgrade level (${MAX_UPGRADE_LEVEL}). ` +
+          `Current bonus: +${Math.round((UPGRADE_BONUSES[MAX_UPGRADE_LEVEL] - 1) * 100)}%`,
+          400
+        );
+      }
+      if (code === 'insufficient_resources') {
+        const missingResources = Array.isArray(result.missing_resources)
+          ? result.missing_resources.filter((v): v is string => typeof v === 'string')
+          : [];
+        return errorResponse(
+          `Not enough resources to upgrade. Missing: ${missingResources.join(', ')}. ` +
+          `Level ${nextLevel} upgrade costs: ${upgradeCost.wood} wood, ${upgradeCost.stone} stone.`,
+          400
+        );
+      }
+      if (code === 'stale_level') {
+        return errorResponse('Tile state changed during upgrade. Refresh and try again.', 409);
+      }
+      if (code === 'tile_not_found') {
+        return errorResponse('Could not find your current tile', 500);
+      }
+      return errorResponse('Failed to upgrade tile', 500);
+    }
 
-    const oldBonus = Math.round((UPGRADE_BONUSES[currentLevel] - 1) * 100);
-    const newBonus = Math.round((UPGRADE_BONUSES[nextLevel] - 1) * 100);
+    const terrain = typeof result.terrain === 'string'
+      ? result.terrain as TerrainType
+      : (tile.terrain as TerrainType);
+    const fromLevel = toNumber(result.from_level, currentLevel);
+    const toLevel = toNumber(result.to_level, nextLevel);
+    const inventory = (result.inventory && typeof result.inventory === 'object')
+      ? result.inventory as Record<string, unknown>
+      : {};
+
+    const newWood = toNumber(inventory.wood, agent.wood - upgradeCost.wood);
+    const newStone = toNumber(inventory.stone, agent.stone - upgradeCost.stone);
+    const oldBonus = Math.round((UPGRADE_BONUSES[fromLevel] - 1) * 100);
+    const newBonus = Math.round((UPGRADE_BONUSES[toLevel] - 1) * 100);
 
     // Include any new announcements in the response
     const responseData = await withAnnouncements(agent, {
-      message: `Territory upgraded from level ${currentLevel} to level ${nextLevel}! ` +
+      message: `Territory upgraded from level ${fromLevel} to level ${toLevel}! ` +
         `Gathering bonus increased from +${oldBonus}% to +${newBonus}%. ` +
         `Cost: ${upgradeCost.wood} wood, ${upgradeCost.stone} stone.`,
       position: { x: agent.x, y: agent.y },
       terrain,
       upgrade: {
-        from_level: currentLevel,
-        to_level: nextLevel,
+        from_level: fromLevel,
+        to_level: toLevel,
         cost: upgradeCost,
         bonus: {
           old_percent: oldBonus,
           new_percent: newBonus,
-          multiplier: UPGRADE_BONUSES[nextLevel]
+          multiplier: UPGRADE_BONUSES[toLevel]
         }
       },
       inventory: {
@@ -170,10 +152,10 @@ export async function POST(request: NextRequest) {
         food: agent.food,
         stone: newStone
       },
-      next_upgrade: nextLevel < MAX_UPGRADE_LEVEL ? {
-        level: nextLevel + 1,
-        cost: UPGRADE_COSTS[nextLevel + 1],
-        bonus_percent: Math.round((UPGRADE_BONUSES[nextLevel + 1] - 1) * 100)
+      next_upgrade: toLevel < MAX_UPGRADE_LEVEL ? {
+        level: toLevel + 1,
+        cost: UPGRADE_COSTS[toLevel + 1],
+        bonus_percent: Math.round((UPGRADE_BONUSES[toLevel + 1] - 1) * 100)
       } : null
     });
 

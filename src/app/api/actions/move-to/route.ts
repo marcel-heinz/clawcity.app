@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { TerrainType, WORLD_SIZE } from '@/lib/types';
-import { getCooldownMs } from '@/lib/game-settings';
+import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
 import { getTerrainAt } from '@/lib/game-logic';
@@ -189,6 +189,28 @@ export async function POST(request: NextRequest) {
     const maxSteps = Math.min(max_steps ?? DEFAULT_MAX_STEPS, MAX_STEPS_LIMIT);
     const agent = auth.agent;
     const supabase = createServerClient();
+    const moveCooldownMs = await getCooldownMs('move');
+
+    // Enforce move cooldown parity with /api/actions/move
+    const cooldownResult = await atomicCooldownCheck(agent.id, 'move', moveCooldownMs);
+    if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
+      const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
+      return errorResponse(
+        `Move cooldown active. Wait ${waitSeconds}s before moving again.`,
+        429
+      );
+    }
+    if (!cooldownResult.success && agent.last_move_at) {
+      const lastMove = new Date(agent.last_move_at).getTime();
+      const elapsed = Date.now() - lastMove;
+      if (elapsed < moveCooldownMs) {
+        const waitSeconds = Math.ceil((moveCooldownMs - elapsed) / 1000);
+        return errorResponse(
+          `Move cooldown active. Wait ${waitSeconds}s before moving again.`,
+          429
+        );
+      }
+    }
 
     // Already at target?
     if (hasCoords && agent.x === targetX && agent.y === targetY) {
@@ -256,9 +278,6 @@ export async function POST(request: NextRequest) {
 
     const { path, deepWaterCount } = result;
     const totalDeepWaterCost = deepWaterCount * DEEP_WATER_STAMINA_COST;
-
-    // Get move cooldown for inter-step delays
-    const moveCooldownMs = await getCooldownMs('move');
 
     // Execute each step with DB writes for realtime animation
     let currentFood = agent.food;
