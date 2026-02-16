@@ -31,6 +31,60 @@ export async function GET(request: NextRequest) {
     const results: string[] = [];
 
     const nowIso = new Date().toISOString();
+    const runActivationFlow = async (
+      tournament: { id: string; name: string },
+      options?: { alreadyActive?: boolean; source?: 'scheduled' | 'created_now' }
+    ) => {
+      const alreadyActive = options?.alreadyActive === true;
+      const source = options?.source || 'scheduled';
+
+      // IMPORTANT: Reset all agents BEFORE activation (or re-baseline if already active on creation)
+      const { data: resetCount, error: resetError } = await supabase.rpc('reset_all_agents_for_tournament', {
+        p_tournament_id: tournament.id,
+      });
+
+      if (resetError) {
+        console.error(`Failed to reset agents for ${tournament.name} (${tournament.id}):`, resetError);
+        results.push(
+          `WARN: Reset failed for ${tournament.name} (${tournament.id}) [source=${source}]; continuing without clean reset`
+        );
+      } else {
+        results.push(
+          `Reset ${resetCount ?? 0} agents for ${tournament.name} (${tournament.id}) [source=${source}]`
+        );
+      }
+
+      if (!alreadyActive) {
+        const { error: activateError } = await supabase
+          .from('tournaments')
+          .update({ status: 'active' })
+          .eq('id', tournament.id);
+
+        if (activateError) {
+          console.error(`Failed to activate ${tournament.name} (${tournament.id}):`, activateError);
+          results.push(`ERROR: Failed to activate ${tournament.name} (${tournament.id})`);
+          return;
+        }
+
+        results.push(`Activated: ${tournament.name} (${tournament.id})`);
+      } else {
+        results.push(`Activation not needed: ${tournament.name} (${tournament.id}) already active [source=${source}]`);
+      }
+
+      // Auto-enroll all agents into the active tournament with fresh baselines
+      const { data: enrolledCount, error: enrollError } = await supabase.rpc('auto_enroll_all_agents', {
+        p_tournament_id: tournament.id,
+      });
+
+      if (enrollError) {
+        console.error(`Failed to auto-enroll agents for ${tournament.name} (${tournament.id}):`, enrollError);
+        results.push(`ERROR: Failed to auto-enroll agents for ${tournament.name} (${tournament.id})`);
+      } else {
+        results.push(
+          `Auto-enrolled ${enrolledCount ?? 0} agents into ${tournament.name} (${tournament.id}) [source=${source}]`
+        );
+      }
+    };
 
     // 1. Finalize any active tournaments that have ended
     const { data: endedTournaments } = await supabase
@@ -60,42 +114,7 @@ export async function GET(request: NextRequest) {
       .lte('starts_at', nowIso);
 
     for (const tournament of toActivate || []) {
-      // IMPORTANT: Reset all agents BEFORE activating the tournament
-      // This ensures everyone starts on equal footing
-      const { data: resetCount, error: resetError } = await supabase.rpc('reset_all_agents_for_tournament');
-      
-      if (resetError) {
-        console.error(`Failed to reset agents for ${tournament.name}:`, resetError);
-        results.push(`ERROR: Failed to reset agents for ${tournament.name}`);
-        // Continue anyway - tournament can still run
-      } else {
-        results.push(`Reset ${resetCount} agents to starting conditions`);
-      }
-
-      // Now activate the tournament
-      const { error } = await supabase
-        .from('tournaments')
-        .update({ status: 'active' })
-        .eq('id', tournament.id);
-      
-      if (error) {
-        console.error(`Failed to activate ${tournament.name}:`, error);
-        results.push(`ERROR: Failed to activate ${tournament.name}`);
-      } else {
-        results.push(`Activated: ${tournament.name}`);
-
-        // Auto-enroll all agents into the newly activated tournament
-        const { data: enrolledCount, error: enrollError } = await supabase.rpc('auto_enroll_all_agents', {
-          p_tournament_id: tournament.id,
-        });
-
-        if (enrollError) {
-          console.error(`Failed to auto-enroll agents for ${tournament.name}:`, enrollError);
-          results.push(`ERROR: Failed to auto-enroll agents for ${tournament.name}`);
-        } else {
-          results.push(`Auto-enrolled ${enrolledCount} agents into ${tournament.name}`);
-        }
-      }
+      await runActivationFlow(tournament, { source: 'scheduled' });
     }
 
     // 3. Refresh active tournament scores for near-live leaderboard updates
@@ -132,14 +151,24 @@ export async function GET(request: NextRequest) {
         console.error('Failed to create next tournament:', error);
         results.push('ERROR: Failed to create next tournament');
       } else {
-        // Get the created tournament name
+        // Get the created tournament name/status so we can immediately process if it is already active.
         const { data: newTournament } = await supabase
           .from('tournaments')
-          .select('name')
+          .select('id, name, status')
           .eq('id', newId)
           .single();
         
         results.push(`Created: ${newTournament?.name || newId}`);
+
+        if (newTournament?.status === 'active') {
+          await runActivationFlow(
+            {
+              id: newTournament.id,
+              name: newTournament.name,
+            },
+            { alreadyActive: true, source: 'created_now' }
+          );
+        }
       }
     }
 
