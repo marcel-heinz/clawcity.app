@@ -195,7 +195,7 @@ function AgentDetailPanel({ profile, loading }: { profile?: AgentProfile; loadin
           </h4>
           {items.length === 0 ? (
             <div className="text-xs text-[var(--muted)] py-3 px-2 bg-[var(--surface)] border border-[var(--border)] text-center">
-              No items crafted
+              No items in inventory
             </div>
           ) : (
             <div className="space-y-1">
