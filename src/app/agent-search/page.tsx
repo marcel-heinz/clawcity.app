@@ -51,6 +51,14 @@ interface AgentProfile {
   territory_count: number;
 }
 
+type ZoomableAsset = {
+  src: string;
+  alt: string;
+  fallback: string;
+  title: string;
+  subtitle: string;
+};
+
 // --- Constants ---
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -153,6 +161,35 @@ function AssetIcon({
   );
 }
 
+function AssetZoomPreview({
+  src,
+  alt,
+  fallback,
+}: {
+  src: string;
+  alt: string;
+  fallback: string;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <div className="mx-auto w-64 h-64 bg-[var(--surface)] border border-[var(--border)] rounded-sm flex items-center justify-center overflow-hidden">
+      {failed ? (
+        <span className="text-6xl" aria-hidden>{fallback}</span>
+      ) : (
+        <Image
+          src={src}
+          alt={alt}
+          width={256}
+          height={256}
+          className="w-full h-full object-contain p-2"
+          onError={() => setFailed(true)}
+        />
+      )}
+    </div>
+  );
+}
+
 function AgentDetailPanel({
   profile,
   loading,
@@ -165,6 +202,7 @@ function AgentDetailPanel({
   avatar?: AgentAvatar;
 }) {
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const [selectedAsset, setSelectedAsset] = useState<ZoomableAsset | null>(null);
 
   if (loading) {
     return (
@@ -228,6 +266,39 @@ function AgentDetailPanel({
                 className="w-64 h-64"
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {selectedAsset && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => setSelectedAsset(null)}
+        >
+          <div
+            className="w-full max-w-md bg-[var(--surface)] border-2 border-[var(--border)] p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h4 className="text-base font-semibold text-[var(--foreground)]">{selectedAsset.title}</h4>
+                <p className="text-xs text-[var(--muted)]">{selectedAsset.subtitle}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedAsset(null)}
+                className="w-8 h-8 flex items-center justify-center border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                aria-label="Close item preview"
+              >
+                ✕
+              </button>
+            </div>
+            <AssetZoomPreview
+              key={selectedAsset.src}
+              src={selectedAsset.src}
+              alt={selectedAsset.alt}
+              fallback={selectedAsset.fallback}
+            />
           </div>
         </div>
       )}
@@ -312,7 +383,19 @@ function AgentDetailPanel({
                     key={item.item_id}
                     className="flex items-center justify-between py-1.5 px-2 bg-[var(--surface)] border border-[var(--border)] text-xs"
                   >
-                    <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAsset({
+                        src: itemImageSrc,
+                        alt: def.name,
+                        fallback: icon,
+                        title: def.name,
+                        subtitle: 'Inventory item',
+                      })}
+                      className="flex items-center gap-1.5 text-left hover:text-[var(--accent)] transition-colors"
+                      title={`Open ${def.name} preview`}
+                      aria-label={`Open ${def.name} preview`}
+                    >
                       <AssetIcon
                         src={itemImageSrc}
                         alt={def.name}
@@ -322,7 +405,7 @@ function AgentDetailPanel({
                       {item.quantity > 1 && (
                         <span className="text-[var(--muted)]">x{item.quantity}</span>
                       )}
-                    </div>
+                    </button>
                     {item.uses_remaining !== null && def.max_uses && (
                       <span className="text-[var(--muted)] font-mono">
                         {item.uses_remaining}/{def.max_uses}
@@ -357,14 +440,26 @@ function AgentDetailPanel({
                     key={i}
                     className="flex items-center justify-between py-1.5 px-2 bg-[var(--surface)] border border-[var(--border)] text-xs"
                   >
-                    <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAsset({
+                        src: buildingImageSrc,
+                        alt: bDef?.name || b.building_type,
+                        fallback: icon,
+                        title: bDef?.name || b.building_type,
+                        subtitle: 'Infrastructure building',
+                      })}
+                      className="flex items-center gap-1.5 text-left hover:text-[var(--accent)] transition-colors"
+                      title={`Open ${bDef?.name || b.building_type} preview`}
+                      aria-label={`Open ${bDef?.name || b.building_type} preview`}
+                    >
                       <AssetIcon
                         src={buildingImageSrc}
                         alt={bDef?.name || b.building_type}
                         fallback={icon}
                       />
                       <span className="font-medium">{bDef?.name || b.building_type}</span>
-                    </div>
+                    </button>
                     <span className="text-[var(--muted)] font-mono">({b.x}, {b.y})</span>
                   </div>
                 );
