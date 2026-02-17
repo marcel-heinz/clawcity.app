@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { AgentPublic, AgentAvatar, Tile, TerrainType, WORLD_SIZE } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
 import { resolveAvatar, hexToThreeColor } from '@/lib/avatar';
+import { createCrabMesh as createSharedCrabMesh } from '@/lib/crab-mesh';
 
 // ─── Color palette ───────────────────────────────────────────────────────────
 const COLORS = {
@@ -207,60 +208,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   // ─── Mesh Creators ───────────────────────────────────────────────────────────
 
   const createCrabMesh = useCallback((colors: { body: number; claw: number; eye: number }) => {
-    const group = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ color: colors.body, roughness: 0.6, metalness: 0.1 });
-    const clawMat = new THREE.MeshStandardMaterial({ color: colors.claw, roughness: 0.6, metalness: 0.1 });
-
-    // Body
-    const bodyGeo = new THREE.BoxGeometry(0.5, 0.25, 0.4);
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 0.2;
-    body.castShadow = true;
-    group.add(body);
-
-    // Eyes
-    const eyeGeo = new THREE.BoxGeometry(0.08, 0.1, 0.08);
-    const eyeMat = new THREE.MeshStandardMaterial({ color: colors.eye, roughness: 0.3 });
-    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-    leftEye.position.set(-0.12, 0.38, 0.15);
-    const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-    rightEye.position.set(0.12, 0.38, 0.15);
-    group.add(leftEye, rightEye);
-
-    // Eye whites (small sphere)
-    const whiteGeo = new THREE.SphereGeometry(0.03, 6, 6);
-    const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
-    const lw = new THREE.Mesh(whiteGeo, whiteMat);
-    lw.position.set(-0.12, 0.42, 0.19);
-    const rw = new THREE.Mesh(whiteGeo, whiteMat);
-    rw.position.set(0.12, 0.42, 0.19);
-    group.add(lw, rw);
-
-    // Claws
-    const clawGeo = new THREE.BoxGeometry(0.2, 0.15, 0.18);
-    const leftClaw = new THREE.Mesh(clawGeo, clawMat);
-    leftClaw.position.set(-0.42, 0.18, 0.12);
-    leftClaw.castShadow = true;
-    const rightClaw = new THREE.Mesh(clawGeo, clawMat);
-    rightClaw.position.set(0.42, 0.18, 0.12);
-    rightClaw.castShadow = true;
-    group.add(leftClaw, rightClaw);
-
-    // Legs (small cylinders)
-    const legGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.15, 4);
-    const legMat = new THREE.MeshStandardMaterial({ color: colors.body, roughness: 0.7 });
-    for (let i = 0; i < 3; i++) {
-      const ll = new THREE.Mesh(legGeo, legMat);
-      ll.position.set(-0.2, 0.08, -0.1 + i * 0.15);
-      ll.rotation.z = 0.4;
-      group.add(ll);
-      const rl = new THREE.Mesh(legGeo, legMat);
-      rl.position.set(0.2, 0.08, -0.1 + i * 0.15);
-      rl.rotation.z = -0.4;
-      group.add(rl);
-    }
-
-    return group;
+    return createSharedCrabMesh(colors);
   }, []);
 
   const createMountain = useCallback((seed: number) => {

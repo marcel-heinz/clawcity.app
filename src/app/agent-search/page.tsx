@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback, Fragment } from 'react';
-import { AgentLeaderboard } from '@/lib/types';
+import { AgentLeaderboard, AgentAvatar } from '@/lib/types';
 import { ITEM_DEFINITIONS } from '@/lib/crafting';
 import { BUILDING_DEFINITIONS, BuildingType } from '@/lib/buildings';
+import { AgentAvatar3DPreview } from '@/components/AgentAvatar3DPreview';
 
 // --- Types ---
 
@@ -27,6 +28,7 @@ interface AgentProfile {
     total_gathered_stone: number;
     claimed?: boolean;
     claimed_by_twitter?: string | null;
+    avatar?: AgentAvatar;
   };
   items: Array<{
     item_id: string;
@@ -121,11 +123,24 @@ function ResourceBar({ value, cap, colorClass }: { value: number; cap: number; c
   );
 }
 
-function AgentDetailPanel({ profile, loading }: { profile?: AgentProfile; loading: boolean }) {
+function AgentDetailPanel({
+  profile,
+  loading,
+  agentName,
+  avatar,
+}: {
+  profile?: AgentProfile;
+  loading: boolean;
+  agentName: string;
+  avatar?: AgentAvatar;
+}) {
   if (loading) {
     return (
       <div className="px-4 py-6 bg-[var(--surface-alt)] border-t-2 border-[var(--border)]">
-        <div className="text-center text-[var(--muted)] text-sm">Loading agent details...</div>
+        <div className="flex items-center gap-4">
+          <AgentAvatar3DPreview name={agentName} avatar={avatar} />
+          <div className="text-[var(--muted)] text-sm">Loading agent details...</div>
+        </div>
       </div>
     );
   }
@@ -133,7 +148,10 @@ function AgentDetailPanel({ profile, loading }: { profile?: AgentProfile; loadin
   if (!profile) {
     return (
       <div className="px-4 py-6 bg-[var(--surface-alt)] border-t-2 border-[var(--border)]">
-        <div className="text-center text-[var(--muted)] text-sm">Failed to load agent details</div>
+        <div className="flex items-center gap-4">
+          <AgentAvatar3DPreview name={agentName} avatar={avatar} />
+          <div className="text-[var(--muted)] text-sm">Failed to load agent details</div>
+        </div>
       </div>
     );
   }
@@ -149,6 +167,16 @@ function AgentDetailPanel({ profile, loading }: { profile?: AgentProfile; loadin
 
   return (
     <div className="px-4 py-4 bg-[var(--surface-alt)] border-t-2 border-[var(--border)]">
+      <div className="flex items-center gap-4 mb-4 pb-4 border-b border-[var(--border)]">
+        <AgentAvatar3DPreview name={agent.name} avatar={agent.avatar || avatar} />
+        <div>
+          <div className="text-sm font-semibold text-[var(--foreground)]">Avatar Preview</div>
+          <div className="text-xs text-[var(--muted)]">
+            Same 3D crab model as gameplay, rendered as a rotating profile avatar
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
         {/* Resources Section */}
         <div>
@@ -590,6 +618,8 @@ export default function AgentSearchPage() {
                                 <AgentDetailPanel
                                   profile={profileCache[agent.name]}
                                   loading={loadingProfile === agent.name}
+                                  agentName={agent.name}
+                                  avatar={agent.avatar}
                                 />
                               </td>
                             </tr>
