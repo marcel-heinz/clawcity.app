@@ -134,6 +134,8 @@ function AgentDetailPanel({
   agentName: string;
   avatar?: AgentAvatar;
 }) {
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+
   if (loading) {
     return (
       <div className="px-4 py-6 bg-[var(--surface-alt)] border-t-2 border-[var(--border)]">
@@ -167,12 +169,55 @@ function AgentDetailPanel({
 
   return (
     <div className="px-4 py-4 bg-[var(--surface-alt)] border-t-2 border-[var(--border)]">
+      {isAvatarModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => setIsAvatarModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md bg-[var(--surface)] border-2 border-[var(--border)] p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-base font-semibold text-[var(--foreground)]">
+                {agent.name} Avatar
+              </h4>
+              <button
+                type="button"
+                onClick={() => setIsAvatarModalOpen(false)}
+                className="w-8 h-8 flex items-center justify-center border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                aria-label="Close avatar popup"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex justify-center">
+              <AgentAvatar3DPreview
+                name={agent.name}
+                avatar={agent.avatar || avatar}
+                className="w-64 h-64"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-4 mb-4 pb-4 border-b border-[var(--border)]">
-        <AgentAvatar3DPreview name={agent.name} avatar={agent.avatar || avatar} />
+        <button
+          type="button"
+          onClick={() => setIsAvatarModalOpen(true)}
+          className="relative group"
+          title="Open larger avatar preview"
+          aria-label={`Open ${agent.name} avatar popup`}
+        >
+          <AgentAvatar3DPreview name={agent.name} avatar={agent.avatar || avatar} />
+          <span className="absolute right-1 bottom-1 w-5 h-5 text-xs rounded-full bg-black/70 text-white flex items-center justify-center border border-white/50 group-hover:bg-[var(--accent)] transition-colors">
+            🔍
+          </span>
+        </button>
         <div>
-          <div className="text-sm font-semibold text-[var(--foreground)]">Avatar Preview</div>
-          <div className="text-xs text-[var(--muted)]">
-            Same 3D crab model as gameplay, rendered as a rotating profile avatar
+          <div className="text-sm font-semibold text-[var(--foreground)]">
+            {agent.name} Avatar
           </div>
         </div>
       </div>
