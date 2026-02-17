@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, Fragment } from 'react';
+import Image from 'next/image';
 import { AgentLeaderboard, AgentAvatar } from '@/lib/types';
 import { ITEM_DEFINITIONS } from '@/lib/crafting';
 import { BUILDING_DEFINITIONS, BuildingType } from '@/lib/buildings';
@@ -119,6 +120,35 @@ function ResourceBar({ value, cap, colorClass }: { value: number; cap: number; c
         className={`h-1.5 ${colorClass} transition-all`}
         style={{ width: `${pct}%` }}
       />
+    </div>
+  );
+}
+
+function AssetIcon({
+  src,
+  alt,
+  fallback,
+}: {
+  src: string;
+  alt: string;
+  fallback: string;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <div className="w-8 h-8 shrink-0 flex items-center justify-center bg-[var(--surface)] border border-[var(--border)] rounded-sm overflow-hidden">
+      {failed ? (
+        <span aria-hidden>{fallback}</span>
+      ) : (
+        <Image
+          src={src}
+          alt={alt}
+          width={32}
+          height={32}
+          className="w-full h-full object-contain p-0.5"
+          onError={() => setFailed(true)}
+        />
+      )}
     </div>
   );
 }
@@ -276,13 +306,18 @@ function AgentDetailPanel({
                 const def = ITEM_DEFINITIONS[item.item_id as keyof typeof ITEM_DEFINITIONS];
                 if (!def) return null;
                 const icon = CATEGORY_ICONS[def.category] || '📦';
+                const itemImageSrc = `/items/item_${item.item_id}.png`;
                 return (
                   <div
                     key={item.item_id}
                     className="flex items-center justify-between py-1.5 px-2 bg-[var(--surface)] border border-[var(--border)] text-xs"
                   >
                     <div className="flex items-center gap-1.5">
-                      <span>{icon}</span>
+                      <AssetIcon
+                        src={itemImageSrc}
+                        alt={def.name}
+                        fallback={icon}
+                      />
                       <span className="font-medium">{def.name}</span>
                       {item.quantity > 1 && (
                         <span className="text-[var(--muted)]">x{item.quantity}</span>
@@ -316,13 +351,18 @@ function AgentDetailPanel({
               {buildings.map((b, i) => {
                 const bDef = BUILDING_DEFINITIONS[b.building_type as BuildingType];
                 const icon = BUILDING_ICONS[b.building_type] || '🏗️';
+                const buildingImageSrc = `/items/building_${b.building_type}.png`;
                 return (
                   <div
                     key={i}
                     className="flex items-center justify-between py-1.5 px-2 bg-[var(--surface)] border border-[var(--border)] text-xs"
                   >
                     <div className="flex items-center gap-1.5">
-                      <span>{icon}</span>
+                      <AssetIcon
+                        src={buildingImageSrc}
+                        alt={bDef?.name || b.building_type}
+                        fallback={icon}
+                      />
                       <span className="font-medium">{bDef?.name || b.building_type}</span>
                     </div>
                     <span className="text-[var(--muted)] font-mono">({b.x}, {b.y})</span>
