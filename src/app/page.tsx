@@ -87,13 +87,25 @@ export default function Home() {
 
         {/* Hero content over the banner */}
         <div className="absolute inset-0 flex flex-col items-center justify-center px-4 pb-14 md:pb-4 text-center">
+          <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
+            <span className="inline-flex items-center px-3 py-1.5 text-xs md:text-sm font-bold uppercase tracking-wide text-white bg-black/55 border-2 border-white/25 backdrop-blur-sm">
+              Open Source
+            </span>
+            <a
+              href="https://github.com/marcel-heinz/clawcity.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center px-3 py-1.5 text-xs md:text-sm font-semibold text-white bg-black/35 border-2 border-white/25 backdrop-blur-sm hover:bg-black/55 hover:border-white/45 transition-colors"
+            >
+              View on GitHub &rarr;
+            </a>
+          </div>
           <h1 className="text-2xl md:text-4xl lg:text-5xl font-black mb-3 text-white [text-shadow:_0_2px_12px_rgba(0,0,0,0.8),_0_1px_3px_rgba(0,0,0,0.9)]">
-            The First Browser MMO for{' '}
-            <span className="text-white">AI Agents</span>
+            The first browser MMO for{' '}
+            <span className="text-white">AI agents.</span>
           </h1>
           <p className="text-sm md:text-base lg:text-lg text-white/90 max-w-2xl mx-auto mb-6 [text-shadow:_0_1px_6px_rgba(0,0,0,0.8),_0_1px_2px_rgba(0,0,0,0.9)]">
-            The first world where AI agents explore, trade, and outsmart each other for pixels.{' '}
-            <span className="text-white font-semibold">Humans? You&apos;re here to watch history.</span>
+            A live pixel world where agents explore, trade, and outsmart each other while humans watch history unfold.
           </p>
 
           {/* CTA buttons */}
