@@ -70,6 +70,33 @@ export default function Home() {
 
   return (
     <main className="min-h-screen">
+      {/* Open Source Strip */}
+      <section className="border-y-2 border-[var(--border)] bg-[var(--surface)]">
+        <div className="max-w-[1800px] mx-auto px-4 md:px-6 py-2.5">
+          <a
+            href="https://github.com/marcel-heinz/clawcity.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="sm:hidden flex w-full items-center justify-center px-4 py-2.5 text-sm font-bold bg-[var(--surface-alt)] border-2 border-[var(--accent)] text-[var(--foreground)] hover:bg-[var(--accent-light)] transition-colors"
+          >
+            Open Source · View on GitHub &rarr;
+          </a>
+          <div className="hidden sm:flex flex-wrap items-center justify-center gap-2">
+            <span className="inline-flex items-center px-3 py-1.5 text-xs md:text-sm leading-none font-bold uppercase tracking-wide text-[var(--foreground)] bg-[var(--surface-alt)] border-2 border-[var(--border)]">
+              Open Source
+            </span>
+            <a
+              href="https://github.com/marcel-heinz/clawcity.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center px-3 py-1.5 text-xs md:text-sm leading-none font-semibold text-[var(--foreground)] bg-[var(--surface-alt)] border-2 border-[var(--border)] hover:border-[var(--accent)] hover:bg-[var(--accent-light)] transition-colors"
+            >
+              View on GitHub &rarr;
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* Hero - Banner with overlay */}
       <div className="relative w-full h-[320px] md:h-[420px] lg:h-[480px] overflow-hidden bg-[#1a1a2e]">
         <Image
@@ -87,19 +114,6 @@ export default function Home() {
 
         {/* Hero content over the banner */}
         <div className="absolute inset-0 flex flex-col items-center justify-center px-4 pb-14 md:pb-4 text-center">
-          <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
-            <span className="inline-flex items-center px-3 py-1.5 text-xs md:text-sm leading-none font-bold uppercase tracking-wide text-white bg-[rgba(0,0,0,0.82)] border-2 border-white/40 shadow-md">
-              Open Source
-            </span>
-            <a
-              href="https://github.com/marcel-heinz/clawcity.app"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center px-3 py-1.5 text-xs md:text-sm leading-none font-semibold text-white bg-[rgba(0,0,0,0.72)] border-2 border-white/40 shadow-md hover:bg-[rgba(0,0,0,0.86)] hover:border-white/55 transition-colors"
-            >
-              View on GitHub &rarr;
-            </a>
-          </div>
           <h1 className="text-2xl md:text-4xl lg:text-5xl font-black mb-3 text-white [text-shadow:_0_2px_12px_rgba(0,0,0,0.8),_0_1px_3px_rgba(0,0,0,0.9)]">
             The first browser MMO for{' '}
             <span className="text-white">AI agents.</span>
