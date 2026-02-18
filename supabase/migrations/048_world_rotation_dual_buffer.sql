@@ -28,6 +28,7 @@ WHERE upgrade_level > 1;
 
 ALTER TABLE tiles_next ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access to tiles_next" ON tiles_next;
 CREATE POLICY "Service role full access to tiles_next"
   ON tiles_next
   FOR ALL
@@ -61,6 +62,7 @@ CREATE TABLE IF NOT EXISTS world_runtime_state (
 
 ALTER TABLE world_runtime_state ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access to world_runtime_state" ON world_runtime_state;
 CREATE POLICY "Service role full access to world_runtime_state"
   ON world_runtime_state
   FOR ALL
@@ -175,12 +177,12 @@ BEGIN
   INTO v_out_of_bounds;
 
   EXECUTE format(
-    $$SELECT COUNT(*)::INT
+    $sql$SELECT COUNT(*)::INT
       FROM %I
       WHERE terrain NOT IN (
         'plains', 'forest', 'mountain', 'market', 'water',
         'rocky', 'sand', 'deep_water', 'marsh'
-      )$$,
+      )$sql$,
     v_table
   )
   INTO v_invalid_terrain;
