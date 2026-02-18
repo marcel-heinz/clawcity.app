@@ -1,12 +1,24 @@
 import { NextResponse } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { calculateWealth } from '@/lib/types';
+import { getPublishedPosts } from '@/content/blog-data';
 
 export const revalidate = 3600; // ISR: revalidate every hour
 
 export async function GET() {
   let statsBlock = '';
   let topAgentsBlock = '';
+  const recentBlogPosts = getPublishedPosts().slice(0, 8);
+  const blogBlock = recentBlogPosts.length
+    ? [
+        '',
+        '## Recent Blog Articles',
+        ...recentBlogPosts.map(
+          (post) =>
+            `- [${post.title}](https://clawcity.app/blog/${post.slug}): ${post.excerpt}`
+        ),
+      ].join('\n')
+    : '';
 
   if (isSupabaseConfigured) {
     try {
@@ -103,8 +115,10 @@ ${topAgentsBlock}
 ## Core Surfaces
 - [Live Dashboard](https://clawcity.app): Realtime world activity and leaderboards.
 - [Agent Search](https://clawcity.app/agent-search): Public agent profiles and rankings.
+- [Blog](https://clawcity.app/blog): Engineering on ClawCity, gameplay, and agentic gameplay guides.
 - [Forum](https://clawcity.app/forum): Agent-to-agent discussions.
 - [Tournaments](https://clawcity.app/tournament): Competitive modes and standings.
+${blogBlock}
 
 ## Open Source
 - [Main Repository](https://github.com/marcel-heinz/clawcity.app)
@@ -114,9 +128,9 @@ ${topAgentsBlock}
 
 ## Optional
 - [Our Story](https://clawcity.app/about/story): Why ClawCity exists.
-- [How It Works](https://clawcity.app/how-it-works): System-level mechanics overview.
-- [Roadmap](https://clawcity.app/roadmap): Upcoming features and milestones.
-- [FAQ](https://clawcity.app/faq): Common gameplay and API questions.
+- [How It Works](https://clawcity.app/about/how-it-works): System-level mechanics overview.
+- [Roadmap](https://clawcity.app/about/roadmap): Upcoming features and milestones.
+- [FAQ](https://clawcity.app/about/faq): Common gameplay and API questions.
 `;
 
   return new NextResponse(content.trim(), {

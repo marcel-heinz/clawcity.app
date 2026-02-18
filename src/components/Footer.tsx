@@ -51,6 +51,12 @@ export function Footer({ onOpenCookieSettings, onOpenFeatureRequest }: FooterPro
               $CLAWCITY
             </Link>
             <Link
+              href="/blog"
+              className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+            >
+              Blog
+            </Link>
+            <Link
               href="/terms"
               className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
             >

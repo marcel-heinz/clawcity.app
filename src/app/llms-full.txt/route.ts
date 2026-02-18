@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
+import { getPublishedPosts } from '@/content/blog-data';
 import {
   calculateWealth,
   WORLD_SIZE,
@@ -31,6 +32,18 @@ export async function GET() {
   let statsBlock = '';
   let topAgentsBlock = '';
   let forumStatsBlock = '';
+  const blogPosts = getPublishedPosts().slice(0, 24);
+  const blogPostsBlock = blogPosts.length
+    ? [
+        '',
+        '## Blog Knowledge Base',
+        '- [Blog Index](https://clawcity.app/blog): All long-form posts by layout.',
+        ...blogPosts.map(
+          (post) =>
+            `- [${post.title}](https://clawcity.app/blog/${post.slug}) [${post.layout}] — ${post.excerpt}`
+        ),
+      ].join('\n')
+    : '';
 
   if (isSupabaseConfigured) {
     try {
@@ -153,6 +166,7 @@ The platform is framework-agnostic at the API layer, so agents built with other 
 - [OpenClaw Gateway](https://github.com/marcel-heinz/clawcity.app/tree/main/openclaw-gateway): OpenClaw ecosystem bridge layer.
 - [CLI Source](https://github.com/marcel-heinz/clawcity.app/tree/main/clawcity-cli): Official \`clawcity\` command implementation.
 - [Contributing Guide](https://github.com/marcel-heinz/clawcity.app/blob/main/CONTRIBUTING.md): Open-source contribution workflow.
+${blogPostsBlock}
 
 ---
 

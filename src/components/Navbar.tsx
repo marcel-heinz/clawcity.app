@@ -11,7 +11,7 @@ export function Navbar() {
   const [isAboutDropdownOpen, setIsAboutDropdownOpen] = useState(false);
   const [isMobileAboutOpen, setIsMobileAboutOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
@@ -20,9 +20,6 @@ export function Navbar() {
   // Hide navbar on admin dashboard pages (it has its own navigation)
   const rawAdminPath = process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard';
   const adminPath = rawAdminPath.startsWith('/') ? rawAdminPath : `/${rawAdminPath}`;
-  if (pathname?.startsWith(adminPath)) {
-    return null;
-  }
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -38,15 +35,10 @@ export function Navbar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    setAvatarLoadFailed(false);
-  }, [user?.user_metadata?.avatar_url]);
-
   const navLinks = [
-    { href: '/', label: 'Home' },
-    { href: '/forum', label: 'Forum' },
     { href: '/tournament', label: 'Tournament' },
     { href: '/agent-search', label: 'Agent Search' },
+    { href: '/blog', label: 'Blog' },
   ];
 
   const aboutSubPages = [
@@ -65,6 +57,12 @@ export function Navbar() {
   };
 
   const isAboutActive = pathname?.startsWith('/about');
+  const avatarUrl = typeof user?.user_metadata?.avatar_url === 'string' ? user.user_metadata.avatar_url : null;
+  const canShowAvatar = Boolean(avatarUrl && failedAvatarUrl !== avatarUrl);
+
+  if (pathname?.startsWith(adminPath)) {
+    return null;
+  }
 
   return (
     <nav className="border-b-4 border-[var(--foreground)] bg-[var(--surface)]/95 backdrop-blur-sm sticky top-0 z-50">
@@ -89,7 +87,7 @@ export function Navbar() {
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-1">
-            {navLinks.slice(0, 1).map((link) => (
+            {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -146,20 +144,6 @@ export function Navbar() {
               )}
             </div>
 
-            {navLinks.slice(1).map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`px-4 py-2 text-sm font-medium transition-colors border-2 ${
-                  isActive(link.href)
-                    ? 'bg-[var(--accent)] text-white border-[var(--foreground)]'
-                    : 'bg-transparent text-[var(--foreground)] border-transparent hover:bg-[var(--surface-alt)] hover:border-[var(--border)]'
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
-
             {/* Auth: Sign In or User Menu */}
             {!loading && (
               user ? (
@@ -168,14 +152,14 @@ export function Navbar() {
                     onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                     className="flex items-center gap-2 px-3 py-1.5 border-2 border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-alt)] transition-colors"
                   >
-                    {user.user_metadata?.avatar_url && !avatarLoadFailed ? (
+                    {canShowAvatar ? (
                       <Image
-                        src={user.user_metadata.avatar_url}
+                        src={avatarUrl!}
                         alt=""
                         width={24}
                         height={24}
                         className="rounded-full"
-                        onError={() => setAvatarLoadFailed(true)}
+                        onError={() => setFailedAvatarUrl(avatarUrl)}
                       />
                     ) : (
                       <div className="w-6 h-6 rounded-full bg-[var(--accent)] flex items-center justify-center text-white text-xs font-bold">
@@ -263,17 +247,20 @@ export function Navbar() {
         {isMenuOpen && (
           <div className="md:hidden py-3 border-t-2 border-[var(--border)]">
             <div className="flex flex-col gap-1">
-              <Link
-                href="/"
-                onClick={() => setIsMenuOpen(false)}
-                className={`px-4 py-3 text-sm font-medium transition-colors border-2 ${
-                  isActive('/')
-                    ? 'bg-[var(--accent)] text-white border-[var(--foreground)]'
-                    : 'bg-transparent text-[var(--foreground)] border-transparent hover:bg-[var(--surface-alt)] hover:border-[var(--border)]'
-                }`}
-              >
-                Home
-              </Link>
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setIsMenuOpen(false)}
+                  className={`px-4 py-3 text-sm font-medium transition-colors border-2 ${
+                    isActive(link.href)
+                      ? 'bg-[var(--accent)] text-white border-[var(--foreground)]'
+                      : 'bg-transparent text-[var(--foreground)] border-transparent hover:bg-[var(--surface-alt)] hover:border-[var(--border)]'
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
 
               {/* Mobile About Section - Collapsible */}
               <div className="border-2 border-transparent">
@@ -318,21 +305,6 @@ export function Navbar() {
                   </div>
                 )}
               </div>
-
-              {navLinks.slice(1).map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setIsMenuOpen(false)}
-                  className={`px-4 py-3 text-sm font-medium transition-colors border-2 ${
-                    isActive(link.href)
-                      ? 'bg-[var(--accent)] text-white border-[var(--foreground)]'
-                      : 'bg-transparent text-[var(--foreground)] border-transparent hover:bg-[var(--surface-alt)] hover:border-[var(--border)]'
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              ))}
 
               {/* Mobile Auth */}
               <div className="mt-2 pt-2 border-t-2 border-[var(--border)]">
