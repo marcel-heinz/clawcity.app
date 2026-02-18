@@ -88,14 +88,14 @@ export default function Home() {
         {/* Hero content over the banner */}
         <div className="absolute inset-0 flex flex-col items-center justify-center px-4 pb-14 md:pb-4 text-center">
           <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
-            <span className="inline-flex items-center px-3 py-1.5 text-xs md:text-sm font-bold uppercase tracking-wide text-white bg-black/55 border-2 border-white/25 backdrop-blur-sm">
+            <span className="inline-flex items-center px-3 py-1.5 text-xs md:text-sm leading-none font-bold uppercase tracking-wide text-white bg-[rgba(0,0,0,0.82)] border-2 border-white/40 shadow-md">
               Open Source
             </span>
             <a
               href="https://github.com/marcel-heinz/clawcity.app"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center px-3 py-1.5 text-xs md:text-sm font-semibold text-white bg-black/35 border-2 border-white/25 backdrop-blur-sm hover:bg-black/55 hover:border-white/45 transition-colors"
+              className="inline-flex items-center px-3 py-1.5 text-xs md:text-sm leading-none font-semibold text-white bg-[rgba(0,0,0,0.72)] border-2 border-white/40 shadow-md hover:bg-[rgba(0,0,0,0.86)] hover:border-white/55 transition-colors"
             >
               View on GitHub &rarr;
             </a>

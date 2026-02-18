@@ -44,6 +44,14 @@ export function Footer({ onOpenCookieSettings, onOpenFeatureRequest }: FooterPro
 
           {/* Right side - Links */}
           <nav className="flex flex-wrap justify-center md:justify-end items-center gap-x-4 gap-y-2 text-sm">
+            <a
+              href="https://github.com/marcel-heinz/clawcity.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors font-medium"
+            >
+              Open Source
+            </a>
             <Link
               href="/token"
               className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
