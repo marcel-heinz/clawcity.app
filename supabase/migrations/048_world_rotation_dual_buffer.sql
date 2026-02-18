@@ -14,6 +14,20 @@ CREATE TABLE IF NOT EXISTS tiles_next (
   LIKE tiles INCLUDING DEFAULTS INCLUDING CONSTRAINTS INCLUDING IDENTITY INCLUDING GENERATED
 );
 
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'tiles_next'::regclass
+      AND contype = 'p'
+  ) THEN
+    ALTER TABLE tiles_next
+      ADD CONSTRAINT tiles_next_pkey PRIMARY KEY (x, y);
+  END IF;
+END;
+$$;
+
 CREATE INDEX IF NOT EXISTS idx_tiles_next_terrain ON tiles_next(terrain);
 CREATE INDEX IF NOT EXISTS idx_tiles_next_owner ON tiles_next(owner_id);
 CREATE INDEX IF NOT EXISTS idx_tiles_next_depleted ON tiles_next(depleted, depleted_at);
