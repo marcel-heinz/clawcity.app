@@ -2,7 +2,7 @@
 
 This document describes the reusable blog system pattern used for ClawCity and packaged in:
 
-- `.claude/skills/blog-system-setup/SKILL.md`
+- `.agents/skills/blog-system-setup/SKILL.md`
 
 Use it when adding a blog to another project with SEO + LLM discoverability in mind.
 

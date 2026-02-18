@@ -40,6 +40,13 @@ cp env.example .env.local
 npm run dev
 ```
 
+## Agent Files and Skills
+
+- Canonical agent instructions live in `AGENTS.md`
+- Canonical skills live in `.agents/skills/`
+- `CLAUDE.md` is a compatibility bridge for Claude tooling and should stay minimal
+- Do not add tracked legacy skill directories (`.claude/skills`, `.clod/skills`, `.codex/skills`)
+
 ## Pull Request Guidelines
 
 1. **Branch from `main`** — create a descriptive branch name (e.g., `fix/gather-cooldown`, `feat/new-terrain`)

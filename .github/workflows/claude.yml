@@ -30,6 +30,14 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Validate agent layout
+        run: bash scripts/validate-agent-layout.sh
+
+      - name: Prepare Claude compatibility layout
+        run: |
+          mkdir -p .claude
+          ln -sfn ../.agents/skills .claude/skills
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -47,4 +55,3 @@ jobs:
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
           # claude_args: '--allowed-tools Bash(gh pr:*)'
-

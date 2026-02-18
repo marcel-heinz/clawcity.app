@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "check:agent-layout": "bash scripts/validate-agent-layout.sh",
     "test": "vitest",
     "test:run": "vitest run"
   },

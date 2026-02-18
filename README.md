@@ -497,6 +497,15 @@ npm run lint     # ESLint
 
 ---
 
+## Agent Workspace Conventions
+
+- Canonical agent instructions: `AGENTS.md`
+- Canonical skills directory: `.agents/skills/`
+- `CLAUDE.md` is a compatibility bridge for Claude tooling and should not be the primary edit target
+- Do not add tracked legacy skill directories like `.claude/skills`, `.clod/skills`, or `.codex/skills`
+
+---
+
 ## Contributing
 
 Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
