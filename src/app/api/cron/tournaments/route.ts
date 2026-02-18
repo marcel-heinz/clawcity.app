@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { jsonResponse, errorResponse } from '@/lib/auth';
+import { progressNextWorldGeneration } from '@/lib/world-generation-worker';
 
 /**
  * GET /api/cron/tournaments
@@ -38,19 +39,47 @@ export async function GET(request: NextRequest) {
       const alreadyActive = options?.alreadyActive === true;
       const source = options?.source || 'scheduled';
 
-      // IMPORTANT: Reset all agents BEFORE activation (or re-baseline if already active on creation)
-      const { data: resetCount, error: resetError } = await supabase.rpc('reset_all_agents_for_tournament', {
+      // Prepare tournament start atomically: reset + optional world swap at 2-tournament boundary.
+      const { data: prepData, error: prepError } = await supabase.rpc('prepare_world_for_tournament_start', {
         p_tournament_id: tournament.id,
       });
 
-      if (resetError) {
-        console.error(`Failed to reset agents for ${tournament.name} (${tournament.id}):`, resetError);
+      if (prepError) {
+        console.error(`Failed to prepare world start for ${tournament.name} (${tournament.id}):`, prepError);
         results.push(
-          `WARN: Reset failed for ${tournament.name} (${tournament.id}) [source=${source}]; continuing without clean reset`
+          `WARN: World prepare failed for ${tournament.name} (${tournament.id}) [source=${source}]; falling back to reset-only`
         );
+
+        // Fallback path if world-prepare RPC is unavailable or errored.
+        const { data: resetCount, error: resetError } = await supabase.rpc('reset_all_agents_for_tournament', {
+          p_tournament_id: tournament.id,
+        });
+
+        if (resetError) {
+          console.error(`Fallback reset failed for ${tournament.name} (${tournament.id}):`, resetError);
+          results.push(
+            `WARN: Reset fallback also failed for ${tournament.name} (${tournament.id}) [source=${source}]`
+          );
+        } else {
+          results.push(
+            `Reset ${resetCount ?? 0} agents for ${tournament.name} (${tournament.id}) [source=${source}]`
+          );
+        }
+      } else if (prepData && typeof prepData === 'object') {
+        const prep = prepData as Record<string, unknown>;
+        const prepStatus = typeof prep.status === 'string' ? prep.status : 'unknown';
+        const resetCount = typeof prep.reset_agent_count === 'number' ? prep.reset_agent_count : 0;
+        const prepMessage = typeof prep.message === 'string' ? prep.message : 'Prepared tournament start.';
+        const targetDesign = prep.target_design_no;
+        const activeDesign = prep.active_design_no;
+
+        results.push(
+          `Prepared ${tournament.name} (${tournament.id}) [source=${source}] status=${prepStatus} reset=${resetCount} design_target=${targetDesign} design_active=${activeDesign}`
+        );
+        results.push(`Prepare note: ${prepMessage}`);
       } else {
         results.push(
-          `Reset ${resetCount ?? 0} agents for ${tournament.name} (${tournament.id}) [source=${source}]`
+          `Prepared ${tournament.name} (${tournament.id}) [source=${source}] with unknown response format`
         );
       }
 
@@ -182,6 +211,10 @@ export async function GET(request: NextRequest) {
         }
       }
     }
+
+    // 5. Incremental generation of the next world design in the staging buffer.
+    const worldGeneration = await progressNextWorldGeneration({ supabase });
+    results.push(`World generation: ${worldGeneration.message}`);
 
     return jsonResponse({
       success: true,

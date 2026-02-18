@@ -1,8 +1,9 @@
 import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { jsonResponse, errorResponse } from '@/lib/auth';
-import { generateWorldTiles } from '@/lib/game-logic';
+import { generateWorldTiles, generateWorldTilesWithConfig } from '@/lib/game-logic';
 import { WORLD_SIZE } from '@/lib/types';
+import { getActiveWorldConfig } from '@/lib/world-runtime';
 
 /**
  * Generate an array of sampled coordinates within a range
@@ -253,9 +254,10 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createServerClient();
+    const activeWorldConfig = await getActiveWorldConfig(supabase);
 
     // Generate tiles
-    const tiles = generateWorldTiles();
+    const tiles = generateWorldTilesWithConfig(activeWorldConfig);
 
     // Clear existing tiles
     await supabase.from('tiles').delete().neq('x', -999);

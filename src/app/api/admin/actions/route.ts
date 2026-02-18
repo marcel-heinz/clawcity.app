@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminSession, isAdminConfigured } from '@/lib/admin-auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { generateWorldTiles } from '@/lib/game-logic';
+import { generateWorldTilesWithConfig } from '@/lib/game-logic';
 import { getClientIdentifier } from '@/lib/rate-limit';
 import { updateCooldownSetting, CooldownType, DEFAULT_COOLDOWNS } from '@/lib/game-settings';
+import { getActiveWorldConfig } from '@/lib/world-runtime';
+import { progressNextWorldGeneration } from '@/lib/world-generation-worker';
 
-type AdminAction = 'offboard_all' | 'reset_world' | 'clear_events' | 'clear_trades' | 'update_agent_limit' | 'update_cooldowns' | 'reset_tournament';
+type AdminAction =
+  | 'offboard_all'
+  | 'reset_world'
+  | 'clear_events'
+  | 'clear_trades'
+  | 'update_agent_limit'
+  | 'update_cooldowns'
+  | 'reset_tournament'
+  | 'world_status'
+  | 'world_generate_next_start'
+  | 'world_generate_next_step';
 
 /**
  * Log admin action to audit log
@@ -59,6 +71,7 @@ export async function POST(request: NextRequest) {
       action: AdminAction; 
       value?: number;
       cooldowns?: Record<string, number>;
+      force?: boolean;
     };
 
     if (!action) {
@@ -139,8 +152,10 @@ export async function POST(request: NextRequest) {
       }
 
       case 'reset_world': {
+        const activeWorldConfig = await getActiveWorldConfig(supabase);
+
         // Generate new tiles
-        const tiles = generateWorldTiles();
+        const tiles = generateWorldTilesWithConfig(activeWorldConfig);
 
         // Clear existing tiles
         const { error: deleteError } = await supabase
@@ -384,6 +399,72 @@ export async function POST(request: NextRequest) {
         };
 
         await logAdminAction(action, request, true, result.details);
+        break;
+      }
+
+      case 'world_status': {
+        const [runtimeStateResult, activeValidationResult, nextValidationResult] = await Promise.all([
+          supabase
+            .from('world_runtime_state')
+            .select('*')
+            .eq('singleton', true)
+            .single(),
+          supabase.rpc('validate_world_table', { p_table_name: 'tiles', p_expect_clean: false }),
+          supabase.rpc('validate_world_table', { p_table_name: 'tiles_next', p_expect_clean: false }),
+        ]);
+
+        result = {
+          message: 'Fetched world rotation status',
+          details: {
+            runtime_state: runtimeStateResult.data,
+            active_world_validation: activeValidationResult.data,
+            next_world_validation: nextValidationResult.data,
+          },
+        };
+
+        await logAdminAction(action, request, true, result.details);
+        break;
+      }
+
+      case 'world_generate_next_start': {
+        const force = Boolean((body as { force?: boolean }).force);
+        const { data, error } = await supabase.rpc('world_prepare_next_generation', {
+          p_force: force,
+        });
+
+        if (error) {
+          console.error('Error preparing next world generation:', error);
+          await logAdminAction(action, request, false, { error: error.message, force });
+          return NextResponse.json(
+            { success: false, error: 'Failed to initialize next world generation' },
+            { status: 500 }
+          );
+        }
+
+        result = {
+          message: force
+            ? 'Force-reinitialized next world generation'
+            : 'Prepared/resumed next world generation',
+          details: data as Record<string, unknown>,
+        };
+
+        await logAdminAction(action, request, true, { ...(result.details || {}), force });
+        break;
+      }
+
+      case 'world_generate_next_step': {
+        const forceRestart = Boolean((body as { force?: boolean }).force);
+        const generation = await progressNextWorldGeneration({ supabase, forceRestart });
+
+        result = {
+          message: generation.message,
+          details: generation.detail || { status: generation.status },
+        };
+
+        await logAdminAction(action, request, generation.status !== 'failed', {
+          status: generation.status,
+          ...(result.details || {}),
+        });
         break;
       }
 

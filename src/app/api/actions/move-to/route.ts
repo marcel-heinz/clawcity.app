@@ -5,7 +5,8 @@ import { TerrainType, WORLD_SIZE } from '@/lib/types';
 import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
-import { getTerrainAt } from '@/lib/game-logic';
+import { createTerrainResolver } from '@/lib/game-logic';
+import { getActiveWorldConfig } from '@/lib/world-runtime';
 
 /**
  * move-to: Server-side multi-tile pathfinding + stepped movement.
@@ -53,7 +54,12 @@ function sleep(ms: number): Promise<void> {
  * to the nearest tile of the given terrain type.
  * Returns null if nothing found within MAX_STEPS_LIMIT.
  */
-function spiralScanDistance(cx: number, cy: number, target: TerrainType): number | null {
+function spiralScanDistance(
+  cx: number,
+  cy: number,
+  target: TerrainType,
+  terrainAt: (x: number, y: number) => TerrainType
+): number | null {
   for (let dist = 1; dist <= MAX_STEPS_LIMIT; dist++) {
     for (let dx = -dist; dx <= dist; dx++) {
       const dyAbs = dist - Math.abs(dx);
@@ -61,7 +67,7 @@ function spiralScanDistance(cx: number, cy: number, target: TerrainType): number
         const x = cx + dx;
         const y = cy + dy;
         if (x < 0 || x >= WORLD_SIZE || y < 0 || y >= WORLD_SIZE) continue;
-        if (getTerrainAt(x, y) === target) return dist;
+        if (terrainAt(x, y) === target) return dist;
       }
     }
   }
@@ -79,6 +85,7 @@ function findPath(
   isGoal: (x: number, y: number, terrain: TerrainType) => boolean,
   maxSteps: number,
   agentFood: number,
+  terrainAt: (x: number, y: number) => TerrainType,
 ): { path: Array<{ x: number; y: number }>; deepWaterCount: number } | null {
   const visited = new Set<string>();
   const queue: PathNode[] = [{ x: startX, y: startY, parent: null }];
@@ -104,7 +111,7 @@ function findPath(
       if (visited.has(key)) continue;
       visited.add(key);
 
-      const terrain = getTerrainAt(nx, ny);
+      const terrain = terrainAt(nx, ny);
       const node: PathNode = { x: nx, y: ny, parent: current };
 
       // Reconstruct path to check length and deep_water cost
@@ -113,7 +120,7 @@ function findPath(
       let n: PathNode | null = node;
       while (n && n.parent) {
         path.unshift({ x: n.x, y: n.y });
-        if (getTerrainAt(n.x, n.y) === 'deep_water') deepWaterCount++;
+        if (terrainAt(n.x, n.y) === 'deep_water') deepWaterCount++;
         n = n.parent;
       }
 
@@ -189,6 +196,8 @@ export async function POST(request: NextRequest) {
     const maxSteps = Math.min(max_steps ?? DEFAULT_MAX_STEPS, MAX_STEPS_LIMIT);
     const agent = auth.agent;
     const supabase = createServerClient();
+    const activeWorldConfig = await getActiveWorldConfig(supabase);
+    const terrainAt = createTerrainResolver(activeWorldConfig);
     const moveCooldownMs = await getCooldownMs('move');
 
     // Enforce move cooldown parity with /api/actions/move
@@ -240,7 +249,7 @@ export async function POST(request: NextRequest) {
 
     // Check if already on target terrain
     if (hasTerrain) {
-      const currentTerrain = getTerrainAt(agent.x, agent.y);
+      const currentTerrain = terrainAt(agent.x, agent.y);
       if (currentTerrain === targetTerrain) {
         return jsonResponse({
           success: true,
@@ -255,15 +264,15 @@ export async function POST(request: NextRequest) {
       }
 
       // Spiral scan to find nearest matching terrain and auto-expand max_steps
-      const nearestDist = spiralScanDistance(agent.x, agent.y, targetTerrain as TerrainType);
+      const nearestDist = spiralScanDistance(agent.x, agent.y, targetTerrain as TerrainType, terrainAt);
       if (nearestDist !== null) {
         effectiveMaxSteps = Math.max(effectiveMaxSteps, nearestDist + 10);
         effectiveMaxSteps = Math.min(effectiveMaxSteps, MAX_STEPS_LIMIT);
       }
     }
 
-    // Find path via BFS (uses deterministic noise — no DB dependency)
-    const result = findPath(agent.x, agent.y, isGoal, effectiveMaxSteps, agent.food);
+    // Find path via deterministic world config resolver.
+    const result = findPath(agent.x, agent.y, isGoal, effectiveMaxSteps, agent.food, terrainAt);
 
     if (!result) {
       return jsonResponse({
@@ -287,7 +296,7 @@ export async function POST(request: NextRequest) {
 
     for (let i = 0; i < path.length; i++) {
       const step = path[i];
-      const stepTerrain = getTerrainAt(step.x, step.y);
+      const stepTerrain = terrainAt(step.x, step.y);
 
       // Deep water stamina cost
       let foodDeduction = 0;
@@ -319,7 +328,7 @@ export async function POST(request: NextRequest) {
           data: {
             message: `Moved ${pathTaken.length} of ${path.length} steps before error.`,
             position: { x: currentX, y: currentY },
-            terrain: getTerrainAt(currentX, currentY),
+            terrain: terrainAt(currentX, currentY),
             steps: pathTaken.length,
             path: pathTaken,
             error_at_step: i,
@@ -358,7 +367,7 @@ export async function POST(request: NextRequest) {
       .update({ last_active: new Date().toISOString() })
       .eq('id', agent.id);
 
-    const finalTerrain = getTerrainAt(currentX, currentY);
+    const finalTerrain = terrainAt(currentX, currentY);
 
     // Build terrain summary instead of full path array to save tokens
     const terrainCounts: Record<string, number> = {};
