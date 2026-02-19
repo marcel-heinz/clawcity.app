@@ -129,7 +129,7 @@ export default function AdminDashboard() {
   // Check authentication status on mount
   useEffect(() => {
     checkAuth();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const checkAuth = async () => {
     try {
@@ -469,6 +469,12 @@ export default function AdminDashboard() {
               className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors flex items-center gap-1"
             >
               🚂 Railway
+            </Link>
+            <Link
+              href={`${adminPath}/render-lab`}
+              className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors flex items-center gap-1"
+            >
+              🧪 Render Lab
             </Link>
             <button
               onClick={fetchData}

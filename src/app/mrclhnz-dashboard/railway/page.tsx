@@ -243,6 +243,12 @@ export default function RailwaySettingsPage() {
             >
               📊 Analytics
             </Link>
+            <Link
+              href={`${adminPath}/render-lab`}
+              className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors"
+            >
+              🧪 Render Lab
+            </Link>
             <button
               onClick={fetchSettings}
               disabled={isLoading}
