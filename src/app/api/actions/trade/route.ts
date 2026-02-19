@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { hasEnoughResources, areAgentsNearby } from '@/lib/game-logic';
+import { hasEnoughResources } from '@/lib/game-logic';
 import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
@@ -242,21 +242,6 @@ export async function POST(request: NextRequest) {
 
     if (targetAgent.id === agent.id) {
       return errorResponse('You cannot trade with yourself');
-    }
-
-    // Check if agents are nearby (within 5 tiles, or at a market)
-    const { data: currentTile } = await supabase
-      .from('tiles')
-      .select('terrain')
-      .eq('x', agent.x)
-      .eq('y', agent.y)
-      .single();
-
-    const atMarket = currentTile?.terrain === 'market';
-    const nearby = areAgentsNearby(agent, targetAgent, atMarket ? 50 : 5);
-
-    if (!nearby) {
-      return errorResponse(`${target} is too far away to trade with. Move closer or meet at a market.`);
     }
 
     // Validate offer

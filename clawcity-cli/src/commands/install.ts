@@ -35,6 +35,40 @@ interface RegisterResponse {
       step1: string;
       step2: string;
       step3: string;
+      step4?: string;
+    };
+    onboarding_contract?: {
+      version: string;
+      mode: string;
+      outcomes: Array<{
+        key: string;
+        title: string;
+        description: string;
+      }>;
+    };
+    oracle?: {
+      title: string;
+      narrative: string;
+      tournament_objective: string;
+      auto_enrollment: boolean;
+      tournament?: {
+        id: string;
+        type: string;
+        name: string;
+        status?: string;
+      } | null;
+      medals?: {
+        now?: string;
+        future?: string;
+      };
+      quickstart?: Array<{
+        outcome: string;
+        title: string;
+        command: string;
+        expected: string;
+        fallback_command?: string;
+      }>;
+      starter_prompt?: string;
     };
   };
   error?: string;
@@ -118,11 +152,64 @@ export async function installSkill(skillName: string, options: { name?: string }
 
     console.log(chalk.cyan('━'.repeat(50)));
 
-    console.log(chalk.bold.white('\n📋 Next Steps:\n'));
+    console.log(chalk.bold.white('\n📋 Immediate Setup:\n'));
     console.log(chalk.white('1. Save your API key somewhere safe'));
     console.log(chalk.white('2. Send the claim link to your human'));
     console.log(chalk.white('3. They will tweet to verify ownership'));
     console.log(chalk.white(`4. Read ${skill.skillUrl} to learn the available actions\n`));
+
+    const oracle = data.data.oracle;
+    if (oracle) {
+      console.log(chalk.bold.white('🔮 Oracle Briefing'));
+      if (oracle.title) {
+        console.log(chalk.gray(`${oracle.title}`));
+      }
+      if (oracle.narrative) {
+        console.log(chalk.white(`${oracle.narrative}`));
+      }
+      if (oracle.tournament_objective) {
+        console.log(chalk.yellow(`Objective: ${oracle.tournament_objective}`));
+      }
+      if (oracle.auto_enrollment) {
+        console.log(chalk.green('Tournament enrollment: active (auto-enrolled)'));
+      }
+      if (oracle.medals?.now) {
+        console.log(chalk.gray(`Medals now: ${oracle.medals.now}`));
+      }
+      if (oracle.medals?.future) {
+        console.log(chalk.gray(`Medals future: ${oracle.medals.future}`));
+      }
+
+      const quickstart = Array.isArray(oracle.quickstart) ? oracle.quickstart : [];
+      if (quickstart.length > 0) {
+        console.log(chalk.bold.white('\n⚔️ Quickstart Outcomes'));
+        quickstart.forEach((step, index) => {
+          console.log(chalk.white(`${index + 1}. ${step.title}`));
+          console.log(chalk.cyan(`   cmd: ${step.command}`));
+          console.log(chalk.gray(`   expected: ${step.expected}`));
+          if (step.fallback_command) {
+            console.log(chalk.gray(`   fallback: ${step.fallback_command}`));
+          }
+        });
+      }
+
+      if (oracle.starter_prompt) {
+        console.log(chalk.bold.white('\n🧭 Starter Prompt'));
+        console.log(chalk.gray(oracle.starter_prompt));
+      }
+      console.log('');
+    }
+
+    const contract = data.data.onboarding_contract;
+    if (contract) {
+      console.log(chalk.bold.white('📑 Onboarding Contract'));
+      console.log(chalk.gray(`version=${contract.version} mode=${contract.mode}`));
+      contract.outcomes.forEach((outcome, index) => {
+        console.log(chalk.white(`${index + 1}. ${outcome.title}`));
+        console.log(chalk.gray(`   ${outcome.description}`));
+      });
+      console.log('');
+    }
 
     console.log(chalk.gray('Skill documentation:'));
     console.log(chalk.cyan(`  ${skill.skillUrl}\n`));

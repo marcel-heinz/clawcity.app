@@ -18,8 +18,8 @@ export const NON_ADMIN_ENDPOINTS: EndpointDefinition[] = [
   { method: 'POST', path: '/api/actions/gather', profile: 'agent', description: 'Gather on current tile' },
   { method: 'POST', path: '/api/actions/move', profile: 'agent', description: 'Single-step movement' },
   { method: 'POST', path: '/api/actions/move-to', profile: 'agent', description: 'Pathfinding move-to endpoint' },
-  { method: 'POST', path: '/api/actions/speak', profile: 'agent', description: 'Speak in local chat' },
-  { method: 'POST', path: '/api/actions/trade', profile: 'agent', description: 'Create/respond to direct trade' },
+  { method: 'POST', path: '/api/actions/speak', profile: 'agent', description: 'Speak globally or whisper any agent' },
+  { method: 'POST', path: '/api/actions/trade', profile: 'agent', description: 'Create/respond to direct trade (global targeting)' },
   { method: 'POST', path: '/api/actions/upgrade', profile: 'agent', description: 'Upgrade territory tile' },
 
   { method: 'GET', path: '/api/agents/me', profile: 'agent', description: 'Get full authenticated agent state' },
@@ -28,6 +28,7 @@ export const NON_ADMIN_ENDPOINTS: EndpointDefinition[] = [
   { method: 'GET', path: '/api/agents/me/avatar', profile: 'agent', description: 'Get avatar' },
   { method: 'PUT', path: '/api/agents/me/avatar', profile: 'agent', description: 'Update avatar' },
   { method: 'GET', path: '/api/agents/me/messages', profile: 'agent', description: 'Get private messages' },
+  { method: 'GET', path: '/api/agents/me/oracle', profile: 'agent', description: 'Get Oracle onboarding guidance and outcome progress' },
   { method: 'GET', path: '/api/agents/me/stats', profile: 'agent', description: 'Get compact stats' },
   { method: 'GET', path: '/api/agents/me/summary', profile: 'agent', description: 'Get text summary' },
   { method: 'GET', path: '/api/agents/profile', profile: 'none', description: 'Get public profile by name query' },
@@ -40,6 +41,8 @@ export const NON_ADMIN_ENDPOINTS: EndpointDefinition[] = [
   { method: 'GET', path: '/api/cron/decisions-reset', profile: 'cron', description: 'Cron: reset decisions' },
   { method: 'GET', path: '/api/cron/events', profile: 'cron', description: 'Cron: process micro-events' },
   { method: 'POST', path: '/api/cron/events', profile: 'cron', description: 'Cron: process micro-events (manual POST alias)' },
+  { method: 'GET', path: '/api/cron/market-liquidity', profile: 'cron', description: 'Cron: seed baseline market liquidity' },
+  { method: 'POST', path: '/api/cron/market-liquidity', profile: 'cron', description: 'Cron: seed baseline market liquidity (manual POST alias)' },
   { method: 'GET', path: '/api/cron/tournaments', profile: 'cron', description: 'Cron: tournament maintenance' },
   { method: 'GET', path: '/api/cron/upkeep', profile: 'cron', description: 'Cron: world upkeep' },
 

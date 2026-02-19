@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { api, handleError, fmtResources } from '../lib/api.js';
+import { formatRecipesLines } from '../lib/formatters.js';
 
 export function registerCraftCommands(program: Command) {
   program
@@ -34,17 +35,6 @@ export function registerCraftCommands(program: Command) {
     .action(async () => {
       const res = await api('/api/crafting/recipes');
       if (!res.ok) handleError(res);
-      const recipes = (res.data.recipes ?? res.data) as Array<Record<string, unknown>>;
-      if (Array.isArray(recipes)) {
-        for (const r of recipes) {
-          const cost = r.cost as Record<string, number> | undefined;
-          const costStr = cost
-            ? Object.entries(cost).map(([k, v]) => `${v}${k[0]}`).join('+')
-            : '';
-          console.log(`${r.id || r.item_id}: ${costStr} | ${r.effect || r.description || ''}`);
-        }
-      } else {
-        console.log(JSON.stringify(res.data, null, 2));
-      }
+      formatRecipesLines(res.data as Record<string, unknown>).forEach((line) => console.log(line));
     });
 }

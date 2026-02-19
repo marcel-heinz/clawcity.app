@@ -1,53 +1,64 @@
 import { Command } from 'commander';
 import { api, handleError } from '../lib/api.js';
+import {
+  formatRecentWorldEventsLines,
+  formatTournamentDetailLines,
+  formatTournamentJoinLine,
+  formatTournamentOverviewLines,
+  formatWorldEventsLines,
+  formatWorldLeaderboardLines,
+  formatWorldStatusLines,
+} from '../lib/formatters.js';
 
 export function registerWorldCommands(program: Command) {
   program
     .command('events')
     .description('Active world events (resource boosts, danger zones, etc.)')
-    .action(async () => {
+    .option('--json', 'Print raw JSON response')
+    .action(async (opts: { json?: boolean }) => {
       const res = await api('/api/world/events', { profile: 'none' });
       if (!res.ok) handleError(res);
-      const events = (res.data.events ?? res.data) as Array<Record<string, unknown>>;
-      if (Array.isArray(events)) {
-        if (events.length === 0) {
-          console.log('No active events');
-          return;
-        }
-        for (const e of events) {
-          const loc = e.location as Record<string, unknown> | undefined;
-          const locStr = loc ? ` at (${loc.x},${loc.y}) r=${loc.radius}` : '';
-          console.log(`${e.type}: ${e.bonus || e.description}${locStr} | ${e.time_remaining || e.ends_at || ''}`);
-        }
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
         return;
       }
-      console.log(JSON.stringify(res.data, null, 2));
+      formatWorldEventsLines(res.data as Record<string, unknown>).forEach((line) => console.log(line));
     });
 
   const world = program
     .command('world')
     .description('World status and map helpers')
     .option('-c, --compact', 'Compact output')
+    .option('--json', 'Print raw JSON response')
     .option('-l, --limit <n>', 'Limit results', '50')
-    .action(async (opts: { compact?: boolean; limit: string }) => {
+    .action(async (opts: { compact?: boolean; json?: boolean; limit: string }) => {
       const params = new URLSearchParams({ limit: opts.limit });
-      if (opts.compact) params.set('compact', 'true');
+      if (opts.compact || !opts.json) params.set('compact', 'true');
       const res = await api(`/api/world/status?${params}`, { profile: 'none' });
       if (!res.ok) handleError(res);
-      console.log(JSON.stringify(res.data, null, 2));
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
+        return;
+      }
+      formatWorldStatusLines(res.data as Record<string, unknown>).forEach((line) => console.log(line));
     });
 
   world
     .command('leaderboard')
     .description('Compact world leaderboard')
     .option('-l, --limit <n>', 'Limit results', '10')
-    .action(async (opts: { limit: string }) => {
+    .option('--json', 'Print raw JSON response')
+    .action(async (opts: { limit: string; json?: boolean }) => {
       const res = await api('/api/world/leaderboard', {
         profile: 'none',
         query: { limit: parseInt(opts.limit, 10) || 10 },
       });
       if (!res.ok) handleError(res);
-      console.log(JSON.stringify(res.data, null, 2));
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
+        return;
+      }
+      formatWorldLeaderboardLines(res.data as Record<string, unknown>).forEach((line) => console.log(line));
     });
 
   world
@@ -82,39 +93,44 @@ export function registerWorldCommands(program: Command) {
   world
     .command('events-recent')
     .description('Latest 10 world micro-events')
-    .action(async () => {
+    .option('--json', 'Print raw JSON response')
+    .action(async (opts: { json?: boolean }) => {
       const res = await api('/api/world/events/recent', { profile: 'none' });
       if (!res.ok) handleError(res);
-      console.log(JSON.stringify(res.data, null, 2));
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
+        return;
+      }
+      formatRecentWorldEventsLines(res.data as Record<string, unknown>).forEach((line) => console.log(line));
     });
 
   const tournament = program
     .command('tournament')
     .description('Tournament info and actions')
-    .action(async () => {
+    .option('--json', 'Print raw JSON response')
+    .action(async (opts: { json?: boolean }) => {
       const res = await api('/api/tournaments', { profile: 'none' });
       if (!res.ok) handleError(res);
-      const d = res.data as Record<string, unknown>;
-      const t = (d.tournament ?? d.current ?? d) as Record<string, unknown>;
-      console.log(`${t.name || t.type || 'Tournament'} | ${t.status || 'active'}`);
-      if (t.description) console.log(`  ${t.description}`);
-      const lb = (t.leaderboard ?? d.leaderboard ?? d.top_three) as Array<Record<string, unknown>> | undefined;
-      if (Array.isArray(lb)) {
-        for (let i = 0; i < Math.min(lb.length, 10); i++) {
-          const e = lb[i];
-          console.log(`  #${i + 1} ${e.name || e.agent_name}: ${e.score ?? e.points ?? e.current_score ?? '?'}`);
-        }
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
+        return;
       }
+      formatTournamentOverviewLines(res.data as Record<string, unknown>).forEach((line) => console.log(line));
     });
 
   tournament
     .command('join')
     .description('Join tournament or refresh your score')
-    .action(async () => {
+    .option('--json', 'Print raw JSON response')
+    .action(async (opts: { json?: boolean }) => {
       const res = await api('/api/tournaments/join', { method: 'POST', body: {} });
       if (!res.ok) handleError(res);
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
+        return;
+      }
       const d = res.data as Record<string, unknown>;
-      console.log(`Tournament joined | Score: ${d.score ?? '?'} | Rank: ${d.rank ?? '?'}`);
+      console.log(formatTournamentJoinLine(d));
     });
 
   tournament
@@ -123,7 +139,8 @@ export function registerWorldCommands(program: Command) {
     .option('-l, --limit <n>', 'Leaderboard page size', '50')
     .option('-o, --offset <n>', 'Leaderboard offset', '0')
     .option('--refresh', 'Refresh scores for active tournament')
-    .action(async (id: string, opts: { limit: string; offset: string; refresh?: boolean }) => {
+    .option('--json', 'Print raw JSON response')
+    .action(async (id: string, opts: { limit: string; offset: string; refresh?: boolean; json?: boolean }) => {
       const res = await api(`/api/tournaments/${id}`, {
         profile: 'none',
         query: {
@@ -133,16 +150,37 @@ export function registerWorldCommands(program: Command) {
         },
       });
       if (!res.ok) handleError(res);
-      console.log(JSON.stringify(res.data, null, 2));
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
+        return;
+      }
+      formatTournamentDetailLines(res.data as Record<string, unknown>).forEach((line) => console.log(line));
     });
 
   tournament
     .command('history')
     .description('Tournament hall of fame and recent winners')
-    .action(async () => {
+    .option('--json', 'Print raw JSON response')
+    .action(async (opts: { json?: boolean }) => {
       const res = await api('/api/tournaments/history', { profile: 'none' });
       if (!res.ok) handleError(res);
-      console.log(JSON.stringify(res.data, null, 2));
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
+        return;
+      }
+      const d = res.data as Record<string, unknown>;
+      const hallOfFame = Array.isArray(d.hall_of_fame)
+        ? d.hall_of_fame as Array<Record<string, unknown>>
+        : [];
+      if (hallOfFame.length === 0) {
+        console.log('No tournament history available');
+        return;
+      }
+      for (const winner of hallOfFame.slice(0, 20)) {
+        console.log(
+          `Week ${winner.week_number ?? '?'} | #${winner.rank ?? '?'} ${winner.agent_name || 'Unknown'} | ${winner.tournament_name || winner.tournament_type || 'tournament'} | score:${winner.score ?? winner.final_score ?? 0}`
+        );
+      }
     });
 
   // Backwards-compatible alias.
@@ -153,7 +191,7 @@ export function registerWorldCommands(program: Command) {
       const res = await api('/api/tournaments/join', { method: 'POST', body: {} });
       if (!res.ok) handleError(res);
       const d = res.data as Record<string, unknown>;
-      console.log(`Tournament joined | Score: ${d.score ?? '?'} | Rank: ${d.rank ?? '?'}`);
+      console.log(formatTournamentJoinLine(d));
     });
 
   program

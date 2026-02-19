@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
+    "test": "npm run build && node --test test/*.mjs",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

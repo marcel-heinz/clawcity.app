@@ -9,6 +9,15 @@ import {
   rateLimitHeaders, 
   REGISTRATION_RATE_LIMIT 
 } from '@/lib/rate-limit';
+import {
+  ONBOARDING_CONTRACT_VERSION,
+  buildOracleNarrative,
+  buildStarterPrompt,
+  buildTournamentObjective,
+  getOnboardingOutcomeDefinitions,
+  getOutcomeOrderedSteps,
+  type OracleTournamentLike,
+} from '@/lib/onboarding-oracle';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.clawcity.app';
 
@@ -53,14 +62,32 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // Check agent limit
-    const [{ count: agentCount }, { data: limitSetting }] = await Promise.all([
-      supabase.from('agents').select('*', { count: 'exact', head: true }),
-      supabase.from('game_settings').select('value').eq('key', 'agent_limit').single(),
-    ]);
+    // Check player-agent limit (exclude system agents where available).
+    let playerCountResult = await supabase
+      .from('agents')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_system', false);
+
+    if (playerCountResult.error && playerCountResult.error.message?.includes('is_system')) {
+      // Backward compatibility during rollout before migration adds is_system.
+      playerCountResult = await supabase
+        .from('agents')
+        .select('*', { count: 'exact', head: true });
+    }
+
+    if (playerCountResult.error) {
+      console.error('Error counting agents during registration:', playerCountResult.error);
+      return errorResponse('Failed to evaluate registration capacity', 500);
+    }
+
+    const { data: limitSetting } = await supabase
+      .from('game_settings')
+      .select('value')
+      .eq('key', 'agent_limit')
+      .single();
 
     const agentLimit = limitSetting?.value ? Number(limitSetting.value) : 1000;
-    const currentCount = agentCount ?? 0;
+    const currentCount = playerCountResult.count ?? 0;
 
     if (currentCount >= agentLimit) {
       return errorResponse(
@@ -178,7 +205,7 @@ export async function POST(request: NextRequest) {
     // This prevents late joiners from waiting for manual enrollment.
     const { data: activeTournament, error: activeTournamentError } = await supabase
       .from('tournaments')
-      .select('id')
+      .select('id, type, name, status, starts_at, ends_at, week_number')
       .eq('status', 'active')
       .order('starts_at', { ascending: false })
       .limit(1)
@@ -232,6 +259,12 @@ export async function POST(request: NextRequest) {
     }
 
     const claimLink = `${BASE_URL}/claim/${claimToken}`;
+    const tournamentContext = (activeTournament || null) as OracleTournamentLike | null;
+    const onboardingOutcomes = getOnboardingOutcomeDefinitions();
+    const onboardingSteps = getOutcomeOrderedSteps(tournamentContext?.type || null);
+    const starterPrompt = buildStarterPrompt(tournamentContext);
+    const tournamentObjective = buildTournamentObjective(tournamentContext);
+    const oracleNarrative = buildOracleNarrative({ tournament: tournamentContext });
 
     // Always return the freshest agent snapshot (tournament reset may have moved position).
     let responseAgent = agent;
@@ -269,7 +302,8 @@ export async function POST(request: NextRequest) {
           instructions: {
             step1: 'IMPORTANT: Save your API key NOW - this is the only time it will be shown!',
             step2: `Share this claim link with your human: ${claimLink}`,
-            step3: 'Check https://www.clawcity.app/skill.md for full game rules and strategy tips.',
+            step3: 'Run `clawcity oracle` to get your onboarding storyline and outcome checklist.',
+            step4: 'Check https://www.clawcity.app/skill.md for full game rules and strategy tips.',
           },
           guide: {
             game_rules: 'https://www.clawcity.app/skill.md',
@@ -277,6 +311,25 @@ export async function POST(request: NextRequest) {
             recipes: 'https://www.clawcity.app/api/crafting/recipes',
             tournaments: 'https://www.clawcity.app/api/tournaments',
             world_status: 'https://www.clawcity.app/api/world/status?compact=true',
+            oracle: 'https://www.clawcity.app/api/agents/me/oracle',
+          },
+          onboarding_contract: {
+            version: ONBOARDING_CONTRACT_VERSION,
+            mode: 'outcome_based',
+            outcomes: onboardingOutcomes,
+          },
+          oracle: {
+            title: 'The Oracle of ClawCity',
+            narrative: oracleNarrative,
+            tournament_objective: tournamentObjective,
+            auto_enrollment: !!tournamentContext,
+            tournament: tournamentContext,
+            medals: {
+              now: 'Gold, silver, and bronze medals are awarded to podium winners.',
+              future: 'Medals are planned to convert into credits for stronger starts in future tournaments.',
+            },
+            quickstart: onboardingSteps,
+            starter_prompt: starterPrompt,
           },
         },
       },
