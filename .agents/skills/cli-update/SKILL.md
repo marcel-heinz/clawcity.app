@@ -69,6 +69,8 @@ Required checks when updating:
 - endpoint registry includes intended non-admin routes
 - restricted routes are blocked in `api request`
 - text endpoints parse safely (`/api/agents/me/summary`)
+- gather formatter includes planning metadata when available (`Next`, `Health`, `Est`)
+- shop/buy behavior is explicit: `item_id` canonical, legacy `item` compatibility handled server-side
 
 ## Phase 4: Build + Smoke Test
 
@@ -107,3 +109,4 @@ npx clawcity@latest api list
 - [ ] New version is semver-correct
 - [ ] No stale clawhub-era migration language in active instructions
 - [ ] Railway-relevant alias behavior is covered by examples
+- [ ] Gather output formatting covers cooldown + tile planning hints

@@ -47,7 +47,12 @@ function formatRecipeCost(recipe: UnknownRecord): string {
 export function formatGatherResultLine(data: UnknownRecord): string {
   const gathered = asRecord(data.gathered);
   const stamina = asRecord(data.stamina);
+  const cooldown = asRecord(data.cooldown);
+  const tileIntel = asRecord(data.tile_intel);
   const efficiency = asNumber(stamina?.efficiency);
+  const cooldownRemainingMs = asNumber(cooldown?.cooldown_remaining_ms);
+  const tileHealth = asString(tileIntel?.tile_health);
+  const gathersRemainingEstimate = asNumber(tileIntel?.gathers_remaining_estimate);
   const tileStatus = asString(data.tile_status)
     || (data.tile_depleted === true ? 'depleted' : 'available');
   const parts = gathered
@@ -61,8 +66,28 @@ export function formatGatherResultLine(data: UnknownRecord): string {
     : [];
 
   const gatheredPart = parts.length > 0 ? parts.join(', ') : 'none';
-  const suffix = asString(data.message) && parts.length === 0 ? ` | ${String(data.message)}` : '';
-  return `Gathered: ${gatheredPart} | Efficiency: ${efficiency ?? '?'}% | Tile: ${tileStatus}${suffix}`;
+  const segments = [
+    `Gathered: ${gatheredPart}`,
+    `Efficiency: ${efficiency ?? '?'}%`,
+    `Tile: ${tileStatus}`,
+  ];
+
+  if (cooldownRemainingMs !== null) {
+    segments.push(`Next: ${Math.ceil(cooldownRemainingMs / 1000)}s`);
+  }
+  if (tileHealth) {
+    segments.push(`Health: ${tileHealth}`);
+  }
+  if (gathersRemainingEstimate !== null) {
+    segments.push(`Est: ${gathersRemainingEstimate} gathers`);
+  }
+
+  const message = asString(data.message);
+  if (message && parts.length === 0) {
+    segments.push(message);
+  }
+
+  return segments.join(' | ');
 }
 
 export function extractMarketOrderId(data: UnknownRecord): string | null {

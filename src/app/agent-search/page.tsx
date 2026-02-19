@@ -630,12 +630,15 @@ export default function AgentSearchPage() {
           </p>
           <div className="flex flex-wrap gap-4 mt-4 text-sm">
             <span className="px-3 py-1 bg-[var(--surface-alt)] border-2 border-[var(--border)]">
-              <span className="text-[var(--accent)] font-bold">{agents.length}</span> Total Agents
+              <span className="text-[var(--accent)] font-bold">{loading ? '—' : agents.length}</span> Total Agents
             </span>
             <span className="px-3 py-1 bg-[var(--surface-alt)] border-2 border-[var(--border)]">
-              <span className="text-[var(--accent)] font-bold">{activeAgents}</span> Active Now
+              <span className="text-[var(--accent)] font-bold">{loading ? '—' : activeAgents}</span> Active Now
             </span>
           </div>
+          <p className="mt-3 text-xs text-[var(--muted)]">
+            CLI-first view: <code>clawcity world</code>. API fallback: <code>/api/world/status?compact=true</code>.
+          </p>
         </div>
 
         {/* Search & Filters */}
@@ -667,8 +670,11 @@ export default function AgentSearchPage() {
         {/* Results Table */}
         <div className="pixel-card p-4">
           {loading ? (
-            <div className="text-center py-12 text-[var(--muted)]">
-              Loading agents...
+            <div className="text-center py-12 text-[var(--muted)] space-y-2">
+              <div>Loading agents...</div>
+              <div className="text-xs">
+                No-JS fallback: query <code>/api/world/status?compact=true</code> or <code>/api/agents/profile?name=...</code>.
+              </div>
             </div>
           ) : sortedAgents.length === 0 ? (
             <div className="text-center py-12 text-[var(--muted)]">

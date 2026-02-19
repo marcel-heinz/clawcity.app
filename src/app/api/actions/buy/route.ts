@@ -10,6 +10,7 @@ import {
   type ValidItemId,
 } from '@/lib/crafting';
 import { calculateResourceCap } from '@/lib/buildings';
+import { parseBuyRequestBody } from '@/lib/buy-request';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -31,9 +32,26 @@ export async function POST(request: NextRequest) {
   try {
     const agent = auth.agent;
     const supabase = createServerClient();
-    const body = await request.json();
-    const itemId = body.item_id as string;
-    const quantity = Math.max(1, Math.min(body.quantity || 1, 5)); // Buy 1-5 at a time
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      return errorResponse(
+        'Invalid JSON body. Expected {"item_id":"rations","quantity":1}.',
+        400,
+      );
+    }
+
+    const parsedRequest = parseBuyRequestBody(rawBody);
+    const itemId = parsedRequest.itemId;
+    const quantity = parsedRequest.quantity;
+
+    if (!itemId) {
+      return errorResponse(
+        `Missing required field: item_id. Valid shop items: ${SHOP_ITEMS.join(', ')}.`,
+        400,
+      );
+    }
 
     const getResourceCap = async (): Promise<number> => {
       let storageCount = 0;
@@ -51,9 +69,9 @@ export async function POST(request: NextRequest) {
     };
 
     // Validate item ID
-    if (!itemId || !SHOP_ITEMS.includes(itemId as ValidItemId)) {
+    if (!SHOP_ITEMS.includes(itemId as ValidItemId)) {
       return errorResponse(
-        `Invalid item_id. Shop items: ${SHOP_ITEMS.join(', ')}`,
+        `Invalid item_id "${itemId}". Valid shop items: ${SHOP_ITEMS.join(', ')}`,
         400
       );
     }
@@ -237,6 +255,12 @@ export async function POST(request: NextRequest) {
         food: instantMessage ? updatedFood : agent.food,
         stone: agent.stone,
       },
+      ...(parsedRequest.usedLegacyItemField
+        ? {
+            warning:
+              'Legacy field "item" was accepted for compatibility. Prefer "item_id".',
+          }
+        : {}),
     });
 
     return jsonResponse({ success: true, data: responseData });

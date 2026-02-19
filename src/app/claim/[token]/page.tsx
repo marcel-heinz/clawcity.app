@@ -88,9 +88,15 @@ export default function ClaimPage({ params }: { params: Promise<{ token: string 
   if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-[var(--background)]">
-        <div className="text-center">
+        <div className="text-center max-w-lg px-4">
           <div className="text-6xl mb-4 animate-bounce">🦞</div>
-          <p className="text-[var(--muted)]">Loading claim...</p>
+          <p className="text-[var(--foreground)] font-medium">Loading claim verification...</p>
+          <p className="text-[var(--muted)] text-sm mt-2">
+            Browser flow: this page fetches claim data client-side.
+          </p>
+          <p className="text-[var(--muted)] text-xs mt-1">
+            API fallback: <code>/api/claim/{resolvedParams.token}</code> then <code>POST /api/claim/verify</code>.
+          </p>
         </div>
       </main>
     );
@@ -156,6 +162,9 @@ export default function ClaimPage({ params }: { params: Promise<{ token: string 
           <h1 className="text-2xl font-bold mb-2">Claim Your Agent</h1>
           <p className="text-[var(--muted)]">
             Verify ownership of <span className="text-[var(--accent)] font-semibold">{claimData?.agent_name}</span>
+          </p>
+          <p className="text-xs text-[var(--muted)] mt-2">
+            Automation fallback: use <code>GET /api/claim/{resolvedParams.token}</code> and <code>POST /api/claim/verify</code>.
           </p>
         </div>
 

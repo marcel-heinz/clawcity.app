@@ -24,6 +24,7 @@ import {
 } from '@/lib/crafting';
 import { calculateResourceCap } from '@/lib/buildings';
 import { isTileHarvestable } from '@/lib/tile-state';
+import { buildGatherCooldownMeta, buildGatherTileIntel } from '@/lib/gather-intel';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -58,15 +59,22 @@ export async function POST(request: NextRequest) {
 
     // Get dynamic cooldown setting
     const gatherCooldownMs = await getCooldownMs('gather');
+    const fullCooldownMeta = (cooldownApplied = true) =>
+      buildGatherCooldownMeta(gatherCooldownMs, cooldownApplied ? gatherCooldownMs : 0);
 
     // Atomic cooldown check - prevents race conditions
     const cooldownResult = await atomicCooldownCheck(agent.id, 'gather', gatherCooldownMs);
     
     if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
       const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
-      return errorResponse(
-        `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
-        429
+      return jsonResponse(
+        {
+          success: false,
+          code: 'gather_cooldown',
+          error: `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
+          cooldown: buildGatherCooldownMeta(gatherCooldownMs, cooldownResult.remainingMs),
+        },
+        429,
       );
     }
     
@@ -76,10 +84,16 @@ export async function POST(request: NextRequest) {
         const lastGather = new Date(agent.last_gather_at).getTime();
         const elapsed = Date.now() - lastGather;
         if (elapsed < gatherCooldownMs) {
-          const waitSeconds = Math.ceil((gatherCooldownMs - elapsed) / 1000);
-          return errorResponse(
-            `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
-            429
+          const remainingMs = Math.max(0, gatherCooldownMs - elapsed);
+          const waitSeconds = Math.ceil(remainingMs / 1000);
+          return jsonResponse(
+            {
+              success: false,
+              code: 'gather_cooldown',
+              error: `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
+              cooldown: buildGatherCooldownMeta(gatherCooldownMs, remainingMs),
+            },
+            429,
           );
         }
       }
@@ -113,6 +127,16 @@ export async function POST(request: NextRequest) {
     const terrain = tile.terrain as TerrainType;
     const isOwnedByAgent = tile.owner_id === agent.id;
     const upgradeLevel = tile.upgrade_level || 1;
+    const tileMarkedDepleted = Boolean(tile.depleted || tile.regenerates_at || tile.depleted_at);
+    const tileHarvestable = isTileHarvestable({
+      depleted: tile.depleted,
+      depleted_at: tile.depleted_at,
+      regenerates_at: tile.regenerates_at,
+    });
+
+    const baseGatherCount = Math.max(0, tile.gather_count || 0);
+    const baseTileIntel = (opts: { depleted?: boolean; nonDepleting?: boolean } = {}) =>
+      buildGatherTileIntel(baseGatherCount, opts);
 
     // Building exclusivity: other agents can't gather on tiles with buildings
     if (tile.building_type && !isOwnedByAgent) {
@@ -124,6 +148,10 @@ export async function POST(request: NextRequest) {
           terrain,
           tile_status: 'building_blocked',
           stamina: { cost: 0, penalty_applied: false, food_remaining: agent.food },
+          cooldown: fullCooldownMeta(cooldownResult.success),
+          tile_intel: baseTileIntel({
+            depleted: tileMarkedDepleted && !tileHarvestable,
+          }),
           inventory: currentInventory,
         },
       });
@@ -158,17 +186,12 @@ export async function POST(request: NextRequest) {
             penalty_applied: false,
             food_remaining: agent.food
           },
+          cooldown: fullCooldownMeta(cooldownResult.success),
+          tile_intel: baseTileIntel({ nonDepleting: true }),
           inventory: currentInventory,
         },
       });
     }
-
-    const tileMarkedDepleted = Boolean(tile.depleted || tile.regenerates_at || tile.depleted_at);
-    const tileHarvestable = isTileHarvestable({
-      depleted: tile.depleted,
-      depleted_at: tile.depleted_at,
-      regenerates_at: tile.regenerates_at,
-    });
 
     if (tileMarkedDepleted && !tileHarvestable) {
       // Don't reveal exact regeneration time - this prevents timer exploits
@@ -185,6 +208,8 @@ export async function POST(request: NextRequest) {
             penalty_applied: false,
             food_remaining: agent.food
           },
+          cooldown: fullCooldownMeta(cooldownResult.success),
+          tile_intel: baseTileIntel({ depleted: true }),
           inventory: currentInventory,
         },
       });
@@ -219,6 +244,8 @@ export async function POST(request: NextRequest) {
             terrain,
             tile_status: 'barren',
             stamina: { cost: 0, penalty_applied: false, food_remaining: agent.food },
+            cooldown: fullCooldownMeta(cooldownResult.success),
+            tile_intel: buildGatherTileIntel(currentGatherCount, { nonDepleting: true }),
             inventory: currentInventory,
           },
         });
@@ -249,13 +276,22 @@ export async function POST(request: NextRequest) {
       const newWood = agent.wood + torchYield.wood;
       const newStone = agent.stone + torchYield.stone;
 
+      const torchUpdateData: Record<string, unknown> = {
+        gold: newGold,
+        wood: newWood,
+        food: newFood,
+        stone: newStone,
+        last_gather_x: agent.x,
+        last_gather_y: agent.y,
+        consecutive_same_tile: consecutiveGathers,
+      };
+      if (!cooldownResult.success) {
+        torchUpdateData.last_gather_at = new Date().toISOString();
+      }
+
       await supabase
         .from('agents')
-        .update({
-          gold: newGold, wood: newWood, food: newFood, stone: newStone,
-          last_gather_x: agent.x, last_gather_y: agent.y,
-          consecutive_same_tile: consecutiveGathers,
-        })
+        .update(torchUpdateData)
         .eq('id', agent.id);
 
       const yieldText = Object.entries(torchYield)
@@ -272,6 +308,8 @@ export async function POST(request: NextRequest) {
           tile_status: 'available',
           items_used: torchItems.map(t => t.itemName),
           stamina: { cost: staminaCost, efficiency: efficiencyPercent, food_remaining: newFood },
+          cooldown: fullCooldownMeta(),
+          tile_intel: buildGatherTileIntel(currentGatherCount, { nonDepleting: true }),
           inventory: { gold: newGold, wood: newWood, food: newFood, stone: newStone },
         },
       });
@@ -357,6 +395,8 @@ export async function POST(request: NextRequest) {
             efficiency: efficiencyPercent,
             food_remaining: newFood
           },
+          cooldown: fullCooldownMeta(),
+          tile_intel: buildGatherTileIntel(currentGatherCount, { nonDepleting: true }),
           same_tile: {
             consecutive_gathers: consecutiveGathers,
             penalty_multiplier: sameTileMultiplier
@@ -545,6 +585,8 @@ export async function POST(request: NextRequest) {
       location: { x: agent.x, y: agent.y },
     });
 
+    const tileIntel = buildGatherTileIntel(currentGatherCount, { depleted: tileDepleted });
+
     // Format message based on what was gathered
     const gatheredItems = Object.entries(gathered)
       .filter(([, amount]) => amount > 0)
@@ -574,8 +616,12 @@ export async function POST(request: NextRequest) {
     if (consecutiveGathers > 1) efficiencyParts.push(`${Math.round(sameTileMultiplier * 100)}% from same-tile (gather #${consecutiveGathers})`);
     const penaltyText = efficiencyParts.length > 0 ? ` [${efficiencyParts.join(', ')}]` : '';
 
-    // Don't reveal exact depletion mechanics - vague warning encourages exploration
-    const depletionText = tileDepleted ? ' The land grows barren... time to explore elsewhere!' : '';
+    // Give actionable depletion pressure without exposing exact regeneration timers.
+    const depletionText = tileDepleted
+      ? ' The land grows barren... time to explore elsewhere!'
+      : tileIntel.tile_health === 'fragile' || tileIntel.tile_health === 'critical'
+        ? ` Warning: tile health is ${tileIntel.tile_health}; move soon for steadier yield.`
+        : '';
     const staminaText = ` Stamina cost: ${staminaCost} food.`;
 
     const message = gatheredItems
@@ -591,6 +637,8 @@ export async function POST(request: NextRequest) {
       upgrade_level: isOwnedByAgent ? upgradeLevel : undefined,
       tile_depleted: tileDepleted,
       tile_status: tileDepleted ? 'depleted' : 'available',
+      cooldown: fullCooldownMeta(),
+      tile_intel: tileIntel,
       stamina: {
         cost: staminaCost,
         efficiency: efficiencyPercent,

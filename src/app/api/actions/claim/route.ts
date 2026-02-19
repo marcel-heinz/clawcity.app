@@ -14,6 +14,8 @@ import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
 import { getItemDefinition } from '@/lib/crafting';
 
+const FIRST_CLAIM_DISCOUNT_PERCENT = 30;
+
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
     return errorResponse('Database not configured. Please set up Supabase.', 503);
@@ -116,12 +118,24 @@ export async function POST(request: NextRequest) {
         const effectiveWoodCost = toNumber(cost.wood, CLAIM_COST_WOOD);
         const effectiveStoneCost = toNumber(cost.stone, CLAIM_COST_STONE);
         const totalFoodCost = toNumber(cost.food, CLAIM_COST_FOOD + STAMINA_COST_CLAIM);
-        const deedNote = result.territory_deed_used === true
-          ? ` (with Territory Deed -${deedDiscountPercent}% discount)`
-          : '';
+        const territoryDeedUsed = result.territory_deed_used === true;
+        const firstClaimDiscountUsed = result.first_claim_discount_used === true;
+        const discountPercentApplied = toNumber(
+          result.discount_percent_applied,
+          territoryDeedUsed
+            ? deedDiscountPercent
+            : firstClaimDiscountUsed
+              ? FIRST_CLAIM_DISCOUNT_PERCENT
+              : 0,
+        );
+        const discountNote = territoryDeedUsed
+          ? ` (with Territory Deed -${discountPercentApplied}% discount)`
+          : firstClaimDiscountUsed
+            ? ` (with First Claim Boon -${discountPercentApplied}% discount)`
+            : '';
         return errorResponse(
           `Not enough resources to claim territory. Missing: ${missingResources.join(', ')}. ` +
-          `Full cost: ${effectiveGoldCost} gold, ${effectiveWoodCost} wood, ${effectiveStoneCost} stone, ${totalFoodCost} food${deedNote}.`,
+          `Full cost: ${effectiveGoldCost} gold, ${effectiveWoodCost} wood, ${effectiveStoneCost} stone, ${totalFoodCost} food${discountNote}.`,
           400
         );
       }
@@ -152,12 +166,23 @@ export async function POST(request: NextRequest) {
     const newFood = toNumber(inventory.food, agent.food - totalFoodCost);
 
     const territoryDeedUsed = result.territory_deed_used === true;
-    const deedMessage = territoryDeedUsed
-      ? ` (Territory Deed applied: -${deedDiscountPercent}% cost!)`
-      : '';
+    const firstClaimDiscountUsed = result.first_claim_discount_used === true;
+    const discountPercentApplied = toNumber(
+      result.discount_percent_applied,
+      territoryDeedUsed
+        ? deedDiscountPercent
+        : firstClaimDiscountUsed
+          ? FIRST_CLAIM_DISCOUNT_PERCENT
+          : 0,
+    );
+    const discountMessage = territoryDeedUsed
+      ? ` (Territory Deed applied: -${discountPercentApplied}% cost!)`
+      : firstClaimDiscountUsed
+        ? ` (First Claim Boon applied: -${discountPercentApplied}% cost!)`
+        : '';
 
     const responseData = await withAnnouncements(agent, {
-      message: `You have claimed this ${terrain} tile!${deedMessage} ` +
+      message: `You have claimed this ${terrain} tile!${discountMessage} ` +
         `Cost: ${effectiveGoldCost} gold, ${effectiveWoodCost} wood, ${effectiveStoneCost} stone, ${totalFoodCost} food. ` +
         `You now receive +25% resources when gathering here (upgradeable to +75%). ` +
         `IMPORTANT: Territory upkeep is ${TERRITORY_UPKEEP_FOOD} food/territory/hour (${newTerritoryCount * TERRITORY_UPKEEP_FOOD} food/hour total for your ${newTerritoryCount} territories).`,
@@ -168,6 +193,8 @@ export async function POST(request: NextRequest) {
         wood: effectiveWoodCost,
         stone: effectiveStoneCost,
         food: totalFoodCost,
+        discount_percent_applied: discountPercentApplied,
+        first_claim_discount_used: firstClaimDiscountUsed,
         territory_deed_used: territoryDeedUsed,
         food_breakdown: {
           claim_cost: effectiveFoodClaimCost,

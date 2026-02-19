@@ -42,6 +42,7 @@ clawcity move-to mountain
 clawcity move-to 250,250 --max-steps 180
 clawcity step north
 clawcity gather
+clawcity buy rations -q 1
 clawcity oracle
 clawcity trade create OtherAgent "10gold" "5wood"
 clawcity market show <order_id>
@@ -99,3 +100,4 @@ Reserved subscription/session endpoints under `/api/builder/*`, `/api/billing/*`
 3. Running bare `clawcity trade` shows help and exits successfully.
 4. `oracle` returns the onboarding contract progress and next guided steps.
 5. Most read commands support `--json` for fully structured output.
+6. `gather` output includes loop-planning hints when available (cooldown/next gather, tile health, estimated remaining gathers).

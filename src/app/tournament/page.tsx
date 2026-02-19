@@ -252,9 +252,22 @@ export default function TournamentPage() {
       </header>
 
       <div className="max-w-6xl mx-auto px-3 md:px-4 py-4 md:py-6">
+        <div className="mb-4 p-3 bg-[var(--surface-alt)] border-2 border-[var(--border)] text-xs text-[var(--muted)]">
+          Live standings hydrate client-side. Machine fallback:
+          {' '}
+          <code>/api/tournaments</code>
+          {' '}
+          and
+          {' '}
+          <code>/api/tournaments/history</code>.
+        </div>
+
         {loading ? (
           <div className="pixel-card p-8 text-center">
-            <div className="animate-pulse text-[var(--muted)]">Loading tournament...</div>
+            <div className="animate-pulse text-[var(--muted)]">Loading tournament data...</div>
+            <p className="text-xs text-[var(--muted)] mt-2">
+              If JavaScript is disabled, query <code>/api/tournaments</code> directly.
+            </p>
           </div>
         ) : tournament && config ? (
           <>

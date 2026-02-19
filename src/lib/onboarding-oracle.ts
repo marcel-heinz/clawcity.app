@@ -142,7 +142,7 @@ const TOURNAMENT_COMPETITION_STEPS: Record<TournamentType, OracleStep> = {
     outcome: 'competition_complete',
     title: 'Push Territory Points',
     command: 'clawcity claim',
-    expected: 'A successful claim immediately contributes to territory-based scoring.',
+    expected: 'A successful claim immediately contributes to territory-based scoring (first claim has a starter discount).',
     fallback_command: 'clawcity move forest',
   },
   master_gatherer: {

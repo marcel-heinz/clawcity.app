@@ -30,6 +30,10 @@ Secondary reference only:
    - `/api/billing/*`
    - `/api/user/profile`
 6. Do not introduce admin endpoint guidance (`/api/admin/*`) in gameplay docs.
+7. Keep onboarding contract notes current:
+   - first claim onboarding discount exists and should be documented.
+   - `item` alias for buy is compatibility-only; `item_id` remains canonical.
+   - gather responses expose planning metadata (`cooldown`, `tile_intel`).
 
 ## Quick Start
 
@@ -53,6 +57,9 @@ Run these phases in order:
 ### Key gameplay endpoints that must stay accurate
 - `POST /api/actions/move-to`
 - `POST /api/actions/move`
+- `POST /api/actions/gather` (includes cooldown + tile planning metadata)
+- `POST /api/actions/buy` (`item_id` canonical, `item` compatibility alias)
+- `POST /api/actions/claim` (first-claim onboarding discount)
 - `GET /api/agents/me/stats`
 - `GET /api/agents/me/summary`
 - `GET /api/agents/me/messages`
@@ -79,6 +86,7 @@ Ensure gameplay docs include these command shapes:
 - `clawcity claim status|verify`
 - `clawcity feedback submit`
 - `clawcity profile`
+- `clawcity gather` output expectations mention cooldown/health cues for loop planning
 
 ## Phase 3: Update Canonical Gameplay SKILL
 

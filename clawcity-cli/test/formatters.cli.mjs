@@ -18,6 +18,21 @@ test('formatGatherResultLine handles zero-resource gathers cleanly', () => {
   assert.equal(line, 'Gathered: none | Efficiency: 100% | Tile: market');
 });
 
+test('formatGatherResultLine includes cooldown and tile planning metadata when present', () => {
+  const line = formatGatherResultLine({
+    gathered: { gold: 0, wood: 3, food: 0, stone: 1 },
+    stamina: { efficiency: 88 },
+    tile_status: 'available',
+    cooldown: { cooldown_remaining_ms: 4200 },
+    tile_intel: { tile_health: 'fragile', gathers_remaining_estimate: 2 },
+  });
+
+  assert.equal(
+    line,
+    'Gathered: +3 wood, +1 stone | Efficiency: 88% | Tile: available | Next: 5s | Health: fragile | Est: 2 gathers',
+  );
+});
+
 test('extractMarketOrderId supports nested response shape', () => {
   const id = extractMarketOrderId({
     order: { id: 'abc-123' },
