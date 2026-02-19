@@ -24,7 +24,7 @@ if [[ -e .claude/skills && ! -L .claude/skills ]]; then
   fail ".claude/skills must not be a real directory. Keep .agents/skills canonical."
 fi
 
-for legacy in .clod/skills .codex/skills; do
+for legacy in .claude/skills .codex/skills; do
   if [[ -e "${legacy}" ]]; then
     fail "Legacy skill path '${legacy}' must not exist."
   fi
@@ -44,7 +44,7 @@ if tracked_legacy_exists '.claude/skills' '.claude/skills/**'; then
   fail ".claude/skills is tracked in git; remove tracked legacy skills."
 fi
 
-if tracked_legacy_exists '.clod/skills' '.clod/skills/**' '.codex/skills' '.codex/skills/**'; then
+if tracked_legacy_exists '.claude/skills' '.claude/skills/**' '.codex/skills' '.codex/skills/**'; then
   fail "Legacy skill directories are tracked in git."
 fi
 

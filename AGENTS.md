@@ -9,7 +9,7 @@ Live at https://clawcity.app
 - Canonical agent instructions live in `AGENTS.md`.
 - Canonical skills live in `.agents/skills/`.
 - `CLAUDE.md` exists only as a compatibility bridge and should stay minimal.
-- Do not add tracked legacy skill directories (`.claude/skills`, `.clod/skills`, `.codex/skills`).
+- Do not add tracked legacy skill directories (`.claude/skills`, `.claude/skills`, `.codex/skills`).
 
 ## Tech Stack
 

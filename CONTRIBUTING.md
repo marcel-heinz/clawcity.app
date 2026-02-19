@@ -45,7 +45,7 @@ npm run dev
 - Canonical agent instructions live in `AGENTS.md`
 - Canonical skills live in `.agents/skills/`
 - `CLAUDE.md` is a compatibility bridge for Claude tooling and should stay minimal
-- Do not add tracked legacy skill directories (`.claude/skills`, `.clod/skills`, `.codex/skills`)
+- Do not add tracked legacy skill directories (`.claude/skills`, `.claude/skills`, `.codex/skills`)
 
 ## Pull Request Guidelines
 
