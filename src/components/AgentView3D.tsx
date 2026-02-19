@@ -1510,7 +1510,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
     const initialFetch = async () => {
       try {
-        const response = await fetch('/api/world/status');
+        const response = await fetch('/api/world/status?agent_limit=1000');
         const data = await response.json();
         if (data.success && data.data.agents) {
           const allAgents: AgentPublic[] = data.data.agents;

@@ -92,7 +92,7 @@ export function useRealtimeEvents(maxEvents: number = 50): UseRealtimeEventsRetu
   // Fetch data from API
   const fetchData = useCallback(async () => {
     try {
-      const response = await fetch('/api/world/status?limit=' + maxEvents);
+      const response = await fetch(`/api/world/status?limit=${maxEvents}&agent_limit=1000`);
       const data = await response.json();
       
       if (data.success) {

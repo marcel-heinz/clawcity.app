@@ -257,8 +257,34 @@ export async function GET(request: NextRequest) {
       return errorResponse('Failed to fetch events', 500);
     }
 
-    // Enrich events with agent names
+    // Enrich events with agent names.
+    // Resolve missing IDs from the DB so event labels don't depend on agent_limit.
     const agentMap = new Map(agents.map(a => [a.id, a.name]));
+    const missingEventAgentIds = Array.from(
+      new Set(
+        (events || [])
+          .map(event => event.agent_id)
+          .filter((agentId) => !!agentId && !agentMap.has(agentId))
+      )
+    );
+
+    if (missingEventAgentIds.length > 0) {
+      const { data: missingEventAgents, error: missingEventAgentsError } = await supabase
+        .from('agents')
+        .select('id, name')
+        .in('id', missingEventAgentIds);
+
+      if (missingEventAgentsError) {
+        console.error('Error resolving event agent names:', missingEventAgentsError);
+      } else {
+        missingEventAgents?.forEach(agent => {
+          if (agent.id && agent.name) {
+            agentMap.set(agent.id, agent.name);
+          }
+        });
+      }
+    }
+
     const enrichedEvents = events?.map(e => ({
       ...e,
       agent_name: agentMap.get(e.agent_id) || 'Unknown',
