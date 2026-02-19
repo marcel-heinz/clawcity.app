@@ -1,14 +1,38 @@
 import * as THREE from 'three';
 import { TerrainType } from '@/lib/types';
 
-export type RenderLabAssetPackId = 'current' | 'wildlands' | 'citadel';
-export type PrototypeBuildingType = 'watchtower' | 'windmill' | 'greenhouse' | 'foundry';
+export type RenderLabAssetPackId = 'current' | 'wildlands' | 'citadel' | 'frontier';
+export type PrototypeBuildingType =
+  | 'watchtower'
+  | 'windmill'
+  | 'greenhouse'
+  | 'foundry'
+  | 'cottage'
+  | 'townhouse'
+  | 'barn'
+  | 'hall';
+
+export interface RenderLabTerrainProfile {
+  baseHeight: Record<TerrainType, number>;
+  macroNoise: number;
+  microNoise: number;
+  ridgeNoise: number;
+  waterLevel: number;
+}
+
+export interface RenderLabRoadStyle {
+  baseColor: number;
+  lineColor: number;
+  shoulderColor: number;
+}
 
 export interface RenderLabAssetPack {
   id: RenderLabAssetPackId;
   label: string;
   description: string;
   groundColor: (terrain: TerrainType, seed: number) => number;
+  terrainProfile: RenderLabTerrainProfile;
+  roadStyle: RenderLabRoadStyle;
   createTerrainFeature: (terrain: TerrainType, seed: number) => THREE.Object3D | null;
   createBuilding: (buildingType: string, seed: number) => THREE.Object3D | null;
   createPrototypeBuilding: (buildingType: PrototypeBuildingType, seed: number) => THREE.Object3D | null;
@@ -539,6 +563,131 @@ function createPrototypeFoundry(seed: number): THREE.Object3D {
   return group;
 }
 
+function createPrototypeCottage(seed: number): THREE.Object3D {
+  const group = new THREE.Group();
+
+  const walls = new THREE.Mesh(
+    new THREE.BoxGeometry(0.78, 0.46, 0.66),
+    new THREE.MeshStandardMaterial({ color: 0xcab18f, roughness: 0.84 })
+  );
+  walls.position.y = 0.23;
+  walls.castShadow = true;
+  walls.receiveShadow = true;
+  group.add(walls);
+
+  const roof = new THREE.Mesh(
+    new THREE.ConeGeometry(0.58, 0.34, 4),
+    new THREE.MeshStandardMaterial({ color: 0x7a4f2c, roughness: 0.72 })
+  );
+  roof.rotation.y = Math.PI / 4 + (seeded(seed, 941) - 0.5) * 0.18;
+  roof.position.y = 0.63;
+  roof.castShadow = true;
+  group.add(roof);
+
+  const chimney = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, 0.2, 0.08),
+    new THREE.MeshStandardMaterial({ color: 0x6d5f57, roughness: 0.9 })
+  );
+  chimney.position.set(0.22, 0.7, -0.1);
+  chimney.castShadow = true;
+  group.add(chimney);
+
+  return group;
+}
+
+function createPrototypeTownhouse(seed: number): THREE.Object3D {
+  const group = new THREE.Group();
+
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.68, 0.72, 0.58),
+    new THREE.MeshStandardMaterial({ color: 0xb8bfc8, roughness: 0.76 })
+  );
+  body.position.y = 0.36;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  group.add(body);
+
+  const roof = new THREE.Mesh(
+    new THREE.BoxGeometry(0.8, 0.12, 0.7),
+    new THREE.MeshStandardMaterial({ color: 0x4a4f5d, roughness: 0.65 })
+  );
+  roof.position.y = 0.78;
+  roof.rotation.y = (seeded(seed, 951) - 0.5) * 0.16;
+  roof.castShadow = true;
+  group.add(roof);
+
+  const balcony = new THREE.Mesh(
+    new THREE.BoxGeometry(0.26, 0.06, 0.12),
+    new THREE.MeshStandardMaterial({ color: 0x939ba8, roughness: 0.74 })
+  );
+  balcony.position.set(0, 0.47, 0.35);
+  group.add(balcony);
+
+  return group;
+}
+
+function createPrototypeBarn(seed: number): THREE.Object3D {
+  const group = new THREE.Group();
+
+  const shell = new THREE.Mesh(
+    new THREE.BoxGeometry(0.88, 0.5, 0.66),
+    new THREE.MeshStandardMaterial({ color: 0xa55a3a, roughness: 0.82 })
+  );
+  shell.position.y = 0.25;
+  shell.castShadow = true;
+  shell.receiveShadow = true;
+  group.add(shell);
+
+  const roof = new THREE.Mesh(
+    new THREE.ConeGeometry(0.64, 0.3, 4),
+    new THREE.MeshStandardMaterial({ color: 0x5b2f1b, roughness: 0.74 })
+  );
+  roof.rotation.y = Math.PI / 4 + (seeded(seed, 961) - 0.5) * 0.18;
+  roof.position.y = 0.65;
+  roof.castShadow = true;
+  group.add(roof);
+
+  const door = new THREE.Mesh(
+    new THREE.BoxGeometry(0.2, 0.3, 0.03),
+    new THREE.MeshStandardMaterial({ color: 0x412716, roughness: 0.92 })
+  );
+  door.position.set(0, 0.15, 0.35);
+  group.add(door);
+
+  return group;
+}
+
+function createPrototypeHall(seed: number): THREE.Object3D {
+  const group = new THREE.Group();
+
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 0.52, 0.75),
+    new THREE.MeshStandardMaterial({ color: 0x7b848f, roughness: 0.84, flatShading: true })
+  );
+  base.position.y = 0.26;
+  base.castShadow = true;
+  base.receiveShadow = true;
+  group.add(base);
+
+  const roof = new THREE.Mesh(
+    new THREE.ConeGeometry(0.66, 0.38, 6),
+    new THREE.MeshStandardMaterial({ color: 0x4e5460, roughness: 0.72, flatShading: true })
+  );
+  roof.position.y = 0.73;
+  roof.rotation.y = seeded(seed, 971) * 0.2;
+  roof.castShadow = true;
+  group.add(roof);
+
+  const entry = new THREE.Mesh(
+    new THREE.BoxGeometry(0.26, 0.2, 0.12),
+    new THREE.MeshStandardMaterial({ color: 0x939ba4, roughness: 0.76 })
+  );
+  entry.position.set(0, 0.12, 0.41);
+  group.add(entry);
+
+  return group;
+}
+
 function createPrototypeBuilding(buildingType: PrototypeBuildingType, seed: number): THREE.Object3D {
   switch (buildingType) {
     case 'watchtower':
@@ -549,6 +698,14 @@ function createPrototypeBuilding(buildingType: PrototypeBuildingType, seed: numb
       return createPrototypeGreenhouse(seed);
     case 'foundry':
       return createPrototypeFoundry(seed);
+    case 'cottage':
+      return createPrototypeCottage(seed);
+    case 'townhouse':
+      return createPrototypeTownhouse(seed);
+    case 'barn':
+      return createPrototypeBarn(seed);
+    case 'hall':
+      return createPrototypeHall(seed);
     default:
       return createPrototypeWatchtower(seed);
   }
@@ -568,12 +725,16 @@ function buildPack(options: {
   marshColor: number;
   groundVariation: number;
   groundBias: number;
+  terrainProfile: RenderLabTerrainProfile;
+  roadStyle: RenderLabRoadStyle;
 }): RenderLabAssetPack {
   return {
     id: options.id,
     label: options.label,
     description: options.description,
     groundColor: (terrain, seed) => tint(baseGroundColor(terrain, seed, options.groundVariation), options.groundBias),
+    terrainProfile: options.terrainProfile,
+    roadStyle: options.roadStyle,
     createTerrainFeature: (terrain, seed) => {
       switch (terrain) {
         case 'forest':
@@ -726,6 +887,125 @@ function createCitadelFortification(seed: number): THREE.Object3D {
   return group;
 }
 
+function createFrontierTree(seed: number): THREE.Object3D {
+  const group = new THREE.Group();
+  const variant = seeded(seed, 501);
+
+  if (variant < 0.34) {
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.08, 0.68, 7),
+      new THREE.MeshStandardMaterial({ color: 0x5a3a24, roughness: 0.92 })
+    );
+    trunk.position.y = 0.34;
+    trunk.castShadow = true;
+    group.add(trunk);
+
+    const canopy = new THREE.Mesh(
+      new THREE.SphereGeometry(0.32, 9, 7),
+      new THREE.MeshStandardMaterial({ color: 0x2f7834, roughness: 0.78 })
+    );
+    canopy.position.y = 0.86;
+    canopy.scale.set(1.12, 0.9, 1.08);
+    canopy.castShadow = true;
+    canopy.receiveShadow = true;
+    group.add(canopy);
+    return group;
+  }
+
+  if (variant < 0.68) {
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.045, 0.065, 0.56, 6),
+      new THREE.MeshStandardMaterial({ color: 0x4f321f, roughness: 0.92, flatShading: true })
+    );
+    trunk.position.y = 0.28;
+    trunk.castShadow = true;
+    group.add(trunk);
+
+    const cone = new THREE.Mesh(
+      new THREE.ConeGeometry(0.28, 0.92, 7),
+      new THREE.MeshStandardMaterial({ color: 0x2b6233, roughness: 0.86, flatShading: true })
+    );
+    cone.position.y = 0.78;
+    cone.castShadow = true;
+    cone.receiveShadow = true;
+    group.add(cone);
+    return group;
+  }
+
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.04, 0.06, 0.62, 6),
+    new THREE.MeshStandardMaterial({ color: 0x6a4726, roughness: 0.9 })
+  );
+  trunk.position.y = 0.31;
+  trunk.castShadow = true;
+  group.add(trunk);
+
+  for (let i = 0; i < 3; i++) {
+    const blob = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.18 + seeded(seed, 511 + i) * 0.08, 0),
+      new THREE.MeshStandardMaterial({ color: 0x3b8a42 + i * 0x040404, roughness: 0.74, flatShading: true })
+    );
+    blob.position.set((i - 1) * 0.16, 0.64 + i * 0.1, (seeded(seed, 521 + i) - 0.5) * 0.14);
+    blob.castShadow = true;
+    blob.receiveShadow = true;
+    group.add(blob);
+  }
+
+  return group;
+}
+
+function createFrontierMountain(seed: number): THREE.Object3D {
+  const group = new THREE.Group();
+  const ridgeCount = 3 + Math.floor(seeded(seed, 531) * 3);
+
+  for (let i = 0; i < ridgeCount; i++) {
+    const height = 1.1 + seeded(seed, 541 + i) * 1.2;
+    const radius = 0.24 + seeded(seed, 551 + i) * 0.25;
+    const peak = new THREE.Mesh(
+      new THREE.ConeGeometry(radius, height, 8),
+      new THREE.MeshStandardMaterial({ color: 0x6b727b, roughness: 0.92, flatShading: true })
+    );
+    peak.position.set(
+      (i - (ridgeCount - 1) / 2) * 0.22,
+      height * 0.5,
+      (seeded(seed, 561 + i) - 0.5) * 0.35
+    );
+    peak.rotation.y = seeded(seed, 571 + i) * Math.PI * 2;
+    peak.castShadow = true;
+    peak.receiveShadow = true;
+    group.add(peak);
+  }
+
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.82, 0.9, 0.2, 8),
+    new THREE.MeshStandardMaterial({ color: 0x565b62, roughness: 0.96, flatShading: true })
+  );
+  base.position.y = 0.1;
+  base.receiveShadow = true;
+  group.add(base);
+
+  return group;
+}
+
+function createFrontierStorage(seed: number): THREE.Object3D {
+  const group = createPrototypeBarn(seed);
+  group.scale.set(1.05, 1, 1.05);
+  return group;
+}
+
+function createFrontierWorkshop(seed: number): THREE.Object3D {
+  const group = createPrototypeFoundry(seed);
+  group.scale.set(0.96, 1.02, 0.96);
+  return group;
+}
+
+function createFrontierFortification(seed: number): THREE.Object3D {
+  const group = createPrototypeHall(seed);
+  group.scale.set(1.08, 1, 1.08);
+  group.rotation.y = seeded(seed, 581) * 0.35;
+  return group;
+}
+
 const CURRENT_PACK = buildPack({
   id: 'current',
   label: 'Current Classic',
@@ -740,6 +1020,28 @@ const CURRENT_PACK = buildPack({
   marshColor: 0x4a7a6a,
   groundVariation: 0.05,
   groundBias: 0,
+  terrainProfile: {
+    baseHeight: {
+      plains: 0.18,
+      forest: 0.24,
+      mountain: 1.08,
+      market: 0.2,
+      water: -0.18,
+      rocky: 0.48,
+      sand: 0.1,
+      deep_water: -0.48,
+      marsh: -0.08,
+    },
+    macroNoise: 0.2,
+    microNoise: 0.08,
+    ridgeNoise: 0.34,
+    waterLevel: -0.12,
+  },
+  roadStyle: {
+    baseColor: 0x73604b,
+    lineColor: 0xb79a73,
+    shoulderColor: 0x4d3f30,
+  },
 });
 
 const WILDLANDS_PACK = buildPack({
@@ -756,6 +1058,28 @@ const WILDLANDS_PACK = buildPack({
   marshColor: 0x416a5d,
   groundVariation: 0.08,
   groundBias: 0.02,
+  terrainProfile: {
+    baseHeight: {
+      plains: 0.2,
+      forest: 0.3,
+      mountain: 1.24,
+      market: 0.22,
+      water: -0.24,
+      rocky: 0.56,
+      sand: 0.12,
+      deep_water: -0.56,
+      marsh: -0.12,
+    },
+    macroNoise: 0.28,
+    microNoise: 0.11,
+    ridgeNoise: 0.42,
+    waterLevel: -0.18,
+  },
+  roadStyle: {
+    baseColor: 0x66553f,
+    lineColor: 0xaa8d66,
+    shoulderColor: 0x4b3c2a,
+  },
 });
 
 const CITADEL_PACK = buildPack({
@@ -772,12 +1096,73 @@ const CITADEL_PACK = buildPack({
   marshColor: 0x3f6157,
   groundVariation: 0.06,
   groundBias: -0.01,
+  terrainProfile: {
+    baseHeight: {
+      plains: 0.16,
+      forest: 0.22,
+      mountain: 1.14,
+      market: 0.24,
+      water: -0.2,
+      rocky: 0.52,
+      sand: 0.14,
+      deep_water: -0.54,
+      marsh: -0.14,
+    },
+    macroNoise: 0.22,
+    microNoise: 0.09,
+    ridgeNoise: 0.36,
+    waterLevel: -0.16,
+  },
+  roadStyle: {
+    baseColor: 0x62697a,
+    lineColor: 0xb7c0d2,
+    shoulderColor: 0x454b58,
+  },
+});
+
+const FRONTIER_PACK = buildPack({
+  id: 'frontier',
+  label: 'Frontier Realism',
+  description: 'Sandbox pack for open-world silhouettes with stronger terrain relief and settlement readability.',
+  createTree: createFrontierTree,
+  createMountain: createFrontierMountain,
+  createStorage: createFrontierStorage,
+  createWorkshop: createFrontierWorkshop,
+  createFortification: createFrontierFortification,
+  dryWaterColor: 0x2f88c0,
+  deepWaterColor: 0x173754,
+  marshColor: 0x3f6d63,
+  groundVariation: 0.09,
+  groundBias: 0.01,
+  terrainProfile: {
+    baseHeight: {
+      plains: 0.24,
+      forest: 0.34,
+      mountain: 1.46,
+      market: 0.26,
+      water: -0.28,
+      rocky: 0.66,
+      sand: 0.16,
+      deep_water: -0.62,
+      marsh: -0.16,
+    },
+    macroNoise: 0.34,
+    microNoise: 0.14,
+    ridgeNoise: 0.56,
+    waterLevel: -0.2,
+  },
+  roadStyle: {
+    baseColor: 0x7b6750,
+    lineColor: 0xc7a97d,
+    shoulderColor: 0x4f4132,
+  },
 });
 
 export const RENDER_LAB_ASSET_PACKS: RenderLabAssetPack[] = [
   CURRENT_PACK,
   WILDLANDS_PACK,
   CITADEL_PACK,
+  FRONTIER_PACK,
 ];
 
 const PACK_MAP = new Map<RenderLabAssetPackId, RenderLabAssetPack>(
@@ -793,4 +1178,8 @@ export const RENDER_LAB_PROTOTYPE_BUILDINGS: PrototypeBuildingType[] = [
   'windmill',
   'greenhouse',
   'foundry',
+  'cottage',
+  'townhouse',
+  'barn',
+  'hall',
 ];

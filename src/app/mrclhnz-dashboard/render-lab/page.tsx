@@ -38,6 +38,14 @@ const DEFAULT_VISUAL_CONTROLS: RenderLabVisualControls = {
   assetScale: 1,
   showGrid: false,
   showPrototypeBuildings: true,
+  showRoads: true,
+  showSettlements: true,
+  showHorizonMountains: true,
+  terrainRelief: 1,
+  mountainBoost: 1,
+  roadDensity: 0.45,
+  settlementDensity: 0.22,
+  renderDistance: 96,
   ambientIntensity: 0.45,
   sunIntensity: 1.2,
   fogNear: 28,
@@ -119,7 +127,7 @@ export default function RenderLabPage() {
   const [compareMode, setCompareMode] = useState(true);
   const [cameraPreset, setCameraPreset] = useState<RenderLabCameraPreset>('isometric');
   const [leftPackId, setLeftPackId] = useState<RenderLabAssetPackId>('current');
-  const [rightPackId, setRightPackId] = useState<RenderLabAssetPackId>('wildlands');
+  const [rightPackId, setRightPackId] = useState<RenderLabAssetPackId>('frontier');
   const [controls, setControls] = useState<RenderLabVisualControls>(DEFAULT_VISUAL_CONTROLS);
 
   const [leftMetrics, setLeftMetrics] = useState<RenderLabPerfMetrics | null>(null);
@@ -651,6 +659,30 @@ export default function RenderLabPage() {
                   />
                   Grid helper
                 </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={controls.showRoads}
+                    onChange={(event) => updateControl('showRoads', event.target.checked)}
+                  />
+                  Road overlay
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={controls.showSettlements}
+                    onChange={(event) => updateControl('showSettlements', event.target.checked)}
+                  />
+                  Settlement overlay
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={controls.showHorizonMountains}
+                    onChange={(event) => updateControl('showHorizonMountains', event.target.checked)}
+                  />
+                  Horizon mountains
+                </label>
               </div>
 
               <label className="mt-2 flex flex-col gap-1 text-sm">
@@ -719,6 +751,28 @@ export default function RenderLabPage() {
                   />
                 </label>
                 <label className="flex flex-col gap-1">
+                  <span className="text-[var(--muted)]">Terrain relief: {controls.terrainRelief.toFixed(2)}</span>
+                  <input
+                    type="range"
+                    min={0.5}
+                    max={2}
+                    step={0.01}
+                    value={controls.terrainRelief}
+                    onChange={(event) => updateControl('terrainRelief', Number(event.target.value))}
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[var(--muted)]">Mountain boost: {controls.mountainBoost.toFixed(2)}</span>
+                  <input
+                    type="range"
+                    min={0.5}
+                    max={2.4}
+                    step={0.01}
+                    value={controls.mountainBoost}
+                    onChange={(event) => updateControl('mountainBoost', Number(event.target.value))}
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
                   <span className="text-[var(--muted)]">Asset scale: {controls.assetScale.toFixed(2)}</span>
                   <input
                     type="range"
@@ -738,6 +792,39 @@ export default function RenderLabPage() {
                     step={0.01}
                     value={controls.jitter}
                     onChange={(event) => updateControl('jitter', Number(event.target.value))}
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[var(--muted)]">Road density: {controls.roadDensity.toFixed(2)}</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={controls.roadDensity}
+                    onChange={(event) => updateControl('roadDensity', Number(event.target.value))}
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[var(--muted)]">Settlement density: {controls.settlementDensity.toFixed(2)}</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={0.7}
+                    step={0.01}
+                    value={controls.settlementDensity}
+                    onChange={(event) => updateControl('settlementDensity', Number(event.target.value))}
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[var(--muted)]">Render distance: {controls.renderDistance.toFixed(0)}</span>
+                  <input
+                    type="range"
+                    min={30}
+                    max={170}
+                    step={1}
+                    value={controls.renderDistance}
+                    onChange={(event) => updateControl('renderDistance', Number(event.target.value))}
                   />
                 </label>
                 <label className="flex flex-col gap-1">
