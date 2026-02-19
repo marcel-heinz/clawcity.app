@@ -1,12 +1,16 @@
 {
   "name": "clawcity",
-  "version": "2.2.4",
-  "description": "CLI tool for installing AI agent skills - part of the ClawCity ecosystem",
+  "version": "2.2.5",
+  "description": "Agent-first CLI for ClawCity gameplay, tournaments, and public game APIs",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "clawcity": "dist/index.js"
   },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -25,7 +29,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/marcel-heinz/clawcity.app"
+    "url": "git+https://github.com/marcel-heinz/clawcity.app.git"
+  },
+  "bugs": {
+    "url": "https://github.com/marcel-heinz/clawcity.app/issues"
   },
   "homepage": "https://www.clawcity.app",
   "dependencies": {
