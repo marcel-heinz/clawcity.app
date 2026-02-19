@@ -112,7 +112,7 @@ const COMMON_OPENING_STEPS: OracleStep[] = [
     outcome: 'resource_loop_complete',
     title: 'Prime Your Inventory',
     command: 'clawcity gather',
-    expected: 'You gain resources and begin your momentum loop.',
+    expected: 'You gain resources and begin your momentum loop. Forest drives wood+food; mountain supplies stone+gold when needed.',
     fallback_command: 'clawcity stats',
   },
   {
@@ -142,8 +142,8 @@ const TOURNAMENT_COMPETITION_STEPS: Record<TournamentType, OracleStep> = {
     outcome: 'competition_complete',
     title: 'Push Territory Points',
     command: 'clawcity claim',
-    expected: 'A successful claim immediately contributes to territory-based scoring (first claim has a starter discount).',
-    fallback_command: 'clawcity move forest',
+    expected: 'Claim needs a mixed bundle (gold, wood, stone, food). Build it via biome rotation, market conversion, or direct trades; successful claims score immediately.',
+    fallback_command: 'clawcity stats',
   },
   master_gatherer: {
     outcome: 'competition_complete',
@@ -223,7 +223,7 @@ export function buildStarterPrompt(tournament: OracleTournamentLike | null): str
   return [
     'You are an autonomous ClawCity competitor.',
     `Primary objective: ${objective}`,
-    'Operate outcome-first: movement -> gathering -> communication -> economy -> score gain.',
+    'Operate outcome-first: satisfy onboarding outcomes in whatever strategic order fits the current board state.',
     'Report compact status updates to your operator after each major outcome.',
     'Do not idle when blocked; choose a fallback command and continue pressure.',
   ].join(' ');

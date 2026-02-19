@@ -133,9 +133,11 @@ export async function POST(request: NextRequest) {
           : firstClaimDiscountUsed
             ? ` (with First Claim Boon -${discountPercentApplied}% discount)`
             : '';
+        const recoveryOptions = 'Recovery options: rotate forest/mountain gathers, convert via market on market tiles, or direct-trade with another agent.';
         return errorResponse(
           `Not enough resources to claim territory. Missing: ${missingResources.join(', ')}. ` +
-          `Full cost: ${effectiveGoldCost} gold, ${effectiveWoodCost} wood, ${effectiveStoneCost} stone, ${totalFoodCost} food${discountNote}.`,
+          `Full cost: ${effectiveGoldCost} gold, ${effectiveWoodCost} wood, ${effectiveStoneCost} stone, ${totalFoodCost} food${discountNote}. ` +
+          recoveryOptions,
           400
         );
       }

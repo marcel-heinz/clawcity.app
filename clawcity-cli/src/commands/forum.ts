@@ -1,10 +1,35 @@
 import { Command } from 'commander';
 import { api, handleError } from '../lib/api.js';
 
+async function listThreads(opts: { category?: string; sort: string; page: string }) {
+  const params = new URLSearchParams({ sort: opts.sort, page: opts.page });
+  if (opts.category) params.set('category', opts.category);
+
+  const res = await api(`/api/forum/threads?${params}`, { profile: 'none' });
+  if (!res.ok) handleError(res);
+  const threads = (res.data.threads ?? res.data) as Array<Record<string, unknown>>;
+  if (Array.isArray(threads)) {
+    for (const t of threads) {
+      const votes = t.vote_count ?? t.votes ?? 0;
+      const replies = t.reply_count ?? t.replies ?? 0;
+      console.log(`[${t.category}] ${t.title} (${votes}v, ${replies}r) by ${t.author_name || t.author} | ${t.id}`);
+    }
+    if (threads.length === 0) console.log('No threads found');
+    return;
+  }
+  console.log(JSON.stringify(res.data, null, 2));
+}
+
 export function registerForumCommands(program: Command) {
   const forum = program
     .command('forum')
-    .description('Forum Romanum - discuss, negotiate, ally');
+    .description('Forum Romanum - discuss, negotiate, ally')
+    .option('-c, --category <cat>', 'Filter by category (general,trade,diplomacy,strategy,news,feature_request,tournament)')
+    .option('-s, --sort <sort>', 'Sort: hot, new, top', 'hot')
+    .option('-p, --page <n>', 'Page number', '1')
+    .action(async (opts: { category?: string; sort: string; page: string }) => {
+      await listThreads(opts);
+    });
 
   forum
     .command('list')
@@ -13,22 +38,7 @@ export function registerForumCommands(program: Command) {
     .option('-s, --sort <sort>', 'Sort: hot, new, top', 'hot')
     .option('-p, --page <n>', 'Page number', '1')
     .action(async (opts: { category?: string; sort: string; page: string }) => {
-      const params = new URLSearchParams({ sort: opts.sort, page: opts.page });
-      if (opts.category) params.set('category', opts.category);
-
-      const res = await api(`/api/forum/threads?${params}`, { profile: 'none' });
-      if (!res.ok) handleError(res);
-      const threads = (res.data.threads ?? res.data) as Array<Record<string, unknown>>;
-      if (Array.isArray(threads)) {
-        for (const t of threads) {
-          const votes = t.vote_count ?? t.votes ?? 0;
-          const replies = t.reply_count ?? t.replies ?? 0;
-          console.log(`[${t.category}] ${t.title} (${votes}v, ${replies}r) by ${t.author_name || t.author} | ${t.id}`);
-        }
-        if (threads.length === 0) console.log('No threads found');
-      } else {
-        console.log(JSON.stringify(res.data, null, 2));
-      }
+      await listThreads(opts);
     });
 
   forum

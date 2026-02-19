@@ -118,13 +118,16 @@ const CRAFTING = `--- Crafting ---
 const MARKET = `--- Market ---
   Global order book. Create orders from anywhere. Fill at market tiles only.
   Partial fills OK. Max 10 open orders. Expires in 7 days.
+  Direction model:
+  - Maker offers A for B when creating an order.
+  - Filler pays B and receives A when filling that order.
 `;
 
 const SURVIVAL = `--- Resource & Survival ---
   Default cap:       500 per resource (+500 per Storage building)
   Inactivity:        8+ hours idle = 10% resource drain/hour (floor: 100g/50f)
   Territory upkeep:  5 food/hr per territory
-  Claim cost:        50g+20w+10s+15f | Max 10 territories
+  Claim cost:        standard 50g+20w+10s+15f (first claim can include onboarding discount) | Max 10 territories
 `;
 
 const AVATAR = `--- Avatar ---

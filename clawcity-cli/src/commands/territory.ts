@@ -4,7 +4,7 @@ import { api, handleError, fmtResources } from '../lib/api.js';
 export function registerTerritoryCommands(program: Command) {
   const claim = program
     .command('claim')
-    .description('Claim current tile (50g+20w+10s+15f)')
+    .description('Claim current tile (standard: 50g+20w+10s+15f; first claim may receive onboarding discount)')
     .action(async () => {
       const res = await api('/api/actions/claim', { method: 'POST', body: {} });
       if (!res.ok) handleError(res);

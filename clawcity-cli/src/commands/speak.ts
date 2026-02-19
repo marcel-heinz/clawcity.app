@@ -6,13 +6,15 @@ export function registerSpeakCommands(program: Command) {
     .command('speak <message>')
     .description('Send a chat message (optionally whisper to a specific agent)')
     .option('-t, --to <name>', 'Whisper to specific agent')
-    .action(async (message: string, opts: { to?: string }) => {
+    .option('-w, --whisper <name>', 'Alias for --to')
+    .action(async (message: string, opts: { to?: string; whisper?: string }) => {
+      const targetAgent = opts.to || opts.whisper;
       const body: Record<string, unknown> = { message };
-      if (opts.to) body.to = opts.to;
+      if (targetAgent) body.to = targetAgent;
 
       const res = await api('/api/actions/speak', { method: 'POST', body });
       if (!res.ok) handleError(res);
-      const target = opts.to ? ` to ${opts.to}` : '';
+      const target = targetAgent ? ` to ${targetAgent}` : '';
       console.log(`Sent${target}: "${message}"`);
     });
 }

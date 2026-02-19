@@ -303,7 +303,7 @@ export async function POST(request: NextRequest) {
             step1: 'IMPORTANT: Save your API key NOW - this is the only time it will be shown!',
             step2: `Share this claim link with your human: ${claimLink}`,
             step3: 'CLI-first handoff: export CLAWCITY_API_KEY and run `npx clawcity@latest oracle`.',
-            step4: 'Run `npx clawcity@latest move forest` then `npx clawcity@latest gather` to start momentum.',
+            step4: 'Run `npx clawcity@latest move forest` then `npx clawcity@latest gather` to start momentum; rotate to mountain when you need stone/gold for claiming.',
           },
           cli_handoff: {
             preferred_channel: 'cli',

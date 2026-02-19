@@ -2,10 +2,74 @@ import { Command } from 'commander';
 import { api, handleError } from '../lib/api.js';
 import { extractMarketOrderId, formatMarketPricesLines } from '../lib/formatters.js';
 
+function asNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function asString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function parseAmount(value: string | undefined): number | null {
+  if (!value) return null;
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function formatOrderLine(order: Record<string, unknown>): string {
+  const remainingOffer = asNumber(order.remaining_offer) ?? asNumber(order.offer_amount) ?? 0;
+  const remainingRequest = asNumber(order.remaining_request) ?? asNumber(order.request_amount) ?? 0;
+  const offerResource = asString(order.offer_resource) || '?';
+  const requestResource = asString(order.request_resource) || '?';
+  const rate = typeof order.exchange_rate === 'number' ? order.exchange_rate.toFixed(2) : '?';
+  const id = asString(order.id) || '?';
+  const by = asString(order.agent_name) || asString(order.creator) || 'Unknown';
+
+  return (
+    `${offerResource}:${remainingOffer} -> ${requestResource}:${remainingRequest} | ` +
+    `filler pays ${remainingRequest} ${requestResource} to receive ${remainingOffer} ${offerResource} | ` +
+    `rate:${rate} ${requestResource}/${offerResource} | by ${by} | ${id}`
+  );
+}
+
+async function listOrders(opts: { offer?: string; request?: string; json?: boolean }) {
+  const params = new URLSearchParams();
+  if (opts.offer) params.set('offer', opts.offer);
+  if (opts.request) params.set('request', opts.request);
+  const qs = params.toString();
+
+  const res = await api(`/api/market/orders${qs ? `?${qs}` : ''}`, { profile: 'none' });
+  if (!res.ok) handleError(res);
+  if (opts.json) {
+    console.log(JSON.stringify(res.data, null, 2));
+    return;
+  }
+
+  const orders = (res.data.orders ?? res.data) as Array<Record<string, unknown>>;
+  if (!Array.isArray(orders)) {
+    console.log(JSON.stringify(res.data, null, 2));
+    return;
+  }
+  if (orders.length === 0) {
+    console.log('No orders found');
+    return;
+  }
+
+  for (const order of orders) {
+    console.log(formatOrderLine(order));
+  }
+}
+
 export function registerMarketCommands(program: Command) {
   const market = program
     .command('market')
-    .description('Global market order book');
+    .description('Global market order book')
+    .option('-o, --offer <resource>', 'Filter by offer resource')
+    .option('-r, --request <resource>', 'Filter by request resource')
+    .option('--json', 'Print raw JSON response')
+    .action(async (opts: { offer?: string; request?: string; json?: boolean }) => {
+      await listOrders(opts);
+    });
 
   market
     .command('list')
@@ -14,35 +78,7 @@ export function registerMarketCommands(program: Command) {
     .option('-r, --request <resource>', 'Filter by request resource')
     .option('--json', 'Print raw JSON response')
     .action(async (opts: { offer?: string; request?: string; json?: boolean }) => {
-      const params = new URLSearchParams();
-      if (opts.offer) params.set('offer', opts.offer);
-      if (opts.request) params.set('request', opts.request);
-      const qs = params.toString();
-
-      const res = await api(`/api/market/orders${qs ? `?${qs}` : ''}`, { profile: 'none' });
-      if (!res.ok) handleError(res);
-      if (opts.json) {
-        console.log(JSON.stringify(res.data, null, 2));
-        return;
-      }
-
-      const orders = (res.data.orders ?? res.data) as Array<Record<string, unknown>>;
-      if (Array.isArray(orders)) {
-        if (orders.length === 0) {
-          console.log('No orders found');
-          return;
-        }
-        for (const o of orders) {
-          const remainingOffer = o.remaining_offer ?? o.offer_amount ?? '?';
-          const remainingRequest = o.remaining_request ?? o.request_amount ?? '?';
-          const rate = typeof o.exchange_rate === 'number' ? o.exchange_rate.toFixed(2) : '?';
-          console.log(
-            `${o.offer_resource}:${remainingOffer} -> ${o.request_resource}:${remainingRequest} | rate:${rate} | by ${o.agent_name || o.creator} | ${o.id}`
-          );
-        }
-      } else {
-        console.log(JSON.stringify(res.data, null, 2));
-      }
+      await listOrders(opts);
     });
 
   market
@@ -57,10 +93,15 @@ export function registerMarketCommands(program: Command) {
         return;
       }
       const d = res.data as Record<string, unknown>;
-      const offer = `${d.offer_resource}:${d.remaining_offer ?? d.offer_amount ?? '?'}`;
-      const request = `${d.request_resource}:${d.remaining_request ?? d.request_amount ?? '?'}`;
+      const offerAmount = asNumber(d.remaining_offer) ?? asNumber(d.offer_amount) ?? 0;
+      const requestAmount = asNumber(d.remaining_request) ?? asNumber(d.request_amount) ?? 0;
+      const offerResource = asString(d.offer_resource) || '?';
+      const requestResource = asString(d.request_resource) || '?';
+      const offer = `${offerResource}:${offerAmount}`;
+      const request = `${requestResource}:${requestAmount}`;
       const rate = typeof d.exchange_rate === 'number' ? d.exchange_rate.toFixed(2) : '?';
       console.log(`${offer} -> ${request} | rate:${rate} | by ${d.agent_name || 'Unknown'} | status:${d.status || '?'}`);
+      console.log(`Filler direction: pay ${requestAmount} ${requestResource} to receive ${offerAmount} ${offerResource}`);
       if (d.expires_at) {
         console.log(`Expires: ${d.expires_at}`);
       }
@@ -94,14 +135,82 @@ export function registerMarketCommands(program: Command) {
 
   market
     .command('fill <order_id>')
-    .description('Fill a market order')
+    .description('Fill a market order (preview first; use --yes to execute in interactive shells)')
     .option('-a, --amount <n>', 'Partial fill amount')
-    .action(async (orderId: string, opts: { amount?: string }) => {
-      const body: Record<string, unknown> = { order_id: orderId };
-      if (opts.amount) body.amount = parseInt(opts.amount, 10);
+    .option('--expect-pay <resource>', 'Guard: abort unless fill requires paying this resource')
+    .option('--expect-receive <resource>', 'Guard: abort unless fill receives this resource')
+    .option('--preview', 'Preview fill direction/amount without executing')
+    .option('-y, --yes', 'Execute fill after preview in interactive shells')
+    .action(async (
+      orderId: string,
+      opts: {
+        amount?: string;
+        expectPay?: string;
+        expectReceive?: string;
+        preview?: boolean;
+        yes?: boolean;
+      },
+    ) => {
+      const parsedAmount = parseAmount(opts.amount);
+      if (opts.amount && !parsedAmount) {
+        console.error('Error: --amount must be a positive integer');
+        process.exit(1);
+      }
 
-      const res = await api('/api/market/orders/fill', { method: 'POST', body });
+      const previewBody: Record<string, unknown> = {
+        order_id: orderId,
+        preview: true,
+      };
+      if (parsedAmount) previewBody.amount = parsedAmount;
+      if (opts.expectPay) previewBody.expect_pay_resource = opts.expectPay.toLowerCase();
+      if (opts.expectReceive) previewBody.expect_receive_resource = opts.expectReceive.toLowerCase();
+
+      const previewRes = await api('/api/market/orders/fill', { method: 'POST', body: previewBody });
+      if (!previewRes.ok) handleError(previewRes);
+
+      const preview = (previewRes.data.preview ?? previewRes.data) as Record<string, unknown>;
+      const pay = (preview.pay && typeof preview.pay === 'object')
+        ? preview.pay as Record<string, unknown>
+        : {};
+      const receive = (preview.receive && typeof preview.receive === 'object')
+        ? preview.receive as Record<string, unknown>
+        : {};
+
+      const payAmount = asNumber(pay.amount) ?? 0;
+      const payResource = asString(pay.resource) || '?';
+      const receiveAmount = asNumber(receive.amount) ?? 0;
+      const receiveResource = asString(receive.resource) || '?';
+      console.log(`Fill preview | You pay ${payAmount} ${payResource} -> receive ${receiveAmount} ${receiveResource}`);
+
+      if (opts.preview) {
+        return;
+      }
+
+      const isInteractive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
+      if (isInteractive && !opts.yes) {
+        console.error('Not executed. Re-run with --yes to confirm this fill.');
+        process.exit(1);
+      }
+
+      const fillBody: Record<string, unknown> = { order_id: orderId };
+      if (parsedAmount) fillBody.amount = parsedAmount;
+      if (opts.expectPay) fillBody.expect_pay_resource = opts.expectPay.toLowerCase();
+      if (opts.expectReceive) fillBody.expect_receive_resource = opts.expectReceive.toLowerCase();
+
+      const res = await api('/api/market/orders/fill', { method: 'POST', body: fillBody });
       if (!res.ok) handleError(res);
+      const tx = (res.data.transaction && typeof res.data.transaction === 'object')
+        ? res.data.transaction as Record<string, unknown>
+        : null;
+      if (tx) {
+        const gave = (tx.gave && typeof tx.gave === 'object') ? tx.gave as Record<string, unknown> : {};
+        const got = (tx.received && typeof tx.received === 'object') ? tx.received as Record<string, unknown> : {};
+        console.log(
+          `Order ${orderId} filled | paid ${asNumber(gave.amount) ?? '?'} ${asString(gave.resource) || '?'} | ` +
+          `received ${asNumber(got.amount) ?? '?'} ${asString(got.resource) || '?'}`
+        );
+        return;
+      }
       console.log(`Order ${orderId} filled`);
     });
 

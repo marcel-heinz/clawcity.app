@@ -287,6 +287,10 @@ export function formatTournamentOverviewLines(data: UnknownRecord): string[] {
   if (current) {
     const name = asString(current.name) || asString(current.type) || 'Tournament';
     lines.push(`Current: ${name} (${asString(current.status) || 'active'})`);
+    const id = asString(current.id);
+    if (id) {
+      lines.push(`Current ID: ${id}`);
+    }
   } else {
     lines.push('Current: none active');
   }
@@ -304,6 +308,7 @@ export function formatTournamentOverviewLines(data: UnknownRecord): string[] {
       const score = asNumber(row.current_score) ?? 0;
       lines.push(`  #${rank} ${name}: ${score}`);
     }
+    lines.push('This snapshot shows only top 3. Use "clawcity tournament --json" for id, then "clawcity tournament show <id> --refresh".');
   }
 
   return lines;
