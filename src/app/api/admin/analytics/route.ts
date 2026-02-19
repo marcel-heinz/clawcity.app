@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminSession, isAdminConfigured } from '@/lib/admin-auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
+import {
+  buildOnboardingFunnel,
+  type OnboardingFunnelSummary,
+} from '@/lib/admin-onboarding-funnel';
 
 interface DailyMetric {
   date: string;
@@ -33,6 +37,12 @@ interface AnalyticsData {
     hour: number;
     count: number;
   }>;
+  onboardingFunnel: OnboardingFunnelData;
+}
+
+interface OnboardingFunnelData extends OnboardingFunnelSummary {
+  active_tournament_id: string | null;
+  active_tournament_name: string | null;
 }
 
 // Helper to get date string in YYYY-MM-DD format
@@ -57,6 +67,116 @@ interface EventsSummary {
   events_per_hour: Array<{ hour: number; count: number }> | null;
   top_agents: Array<{ agent_id: string; event_count: number }> | null;
   total_events: number;
+}
+
+interface RecentAgentRecord {
+  id: string;
+  name: string;
+  created_at: string;
+  last_active: string | null;
+  last_move_at: string | null;
+  last_gather_at: string | null;
+  last_trade_at: string | null;
+  last_craft_at: string | null;
+  gold: number;
+  wood: number;
+  food: number;
+  stone: number;
+}
+
+function buildEmptyOnboardingFunnel(): OnboardingFunnelData {
+  return {
+    ...buildOnboardingFunnel([]),
+    active_tournament_id: null,
+    active_tournament_name: null,
+  };
+}
+
+async function fetchRecentPlayerAgents(
+  supabase: ReturnType<typeof createServerClient>,
+  sinceIso: string,
+): Promise<RecentAgentRecord[]> {
+  const selectFields = 'id, name, created_at, last_active, last_move_at, last_gather_at, last_trade_at, last_craft_at, gold, wood, food, stone';
+
+  let { data, error } = await supabase
+    .from('agents')
+    .select(selectFields)
+    .gte('created_at', sinceIso)
+    .eq('is_system', false)
+    .limit(10000);
+
+  if (error && error.message?.includes('is_system')) {
+    const fallback = await supabase
+      .from('agents')
+      .select(selectFields)
+      .gte('created_at', sinceIso)
+      .limit(10000);
+    data = fallback.data;
+    error = fallback.error;
+  }
+
+  if (error) {
+    throw new Error(`Failed to fetch recent agents: ${error.message}`);
+  }
+
+  return (data || []) as RecentAgentRecord[];
+}
+
+async function getDistinctEventActorsForCohort(
+  supabase: ReturnType<typeof createServerClient>,
+  cohortAgentIds: string[],
+  sinceIso: string,
+  eventTypes: string[],
+): Promise<Record<string, Set<string>>> {
+  const byType: Record<string, Set<string>> = {};
+  for (const type of eventTypes) {
+    byType[type] = new Set<string>();
+  }
+
+  if (cohortAgentIds.length === 0) {
+    return byType;
+  }
+
+  const CHUNK_SIZE = 200;
+  const PAGE_SIZE = 1000;
+
+  for (let chunkStart = 0; chunkStart < cohortAgentIds.length; chunkStart += CHUNK_SIZE) {
+    const idChunk = cohortAgentIds.slice(chunkStart, chunkStart + CHUNK_SIZE);
+    let offset = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('events')
+        .select('agent_id, type')
+        .in('agent_id', idChunk)
+        .in('type', eventTypes)
+        .gte('created_at', sinceIso)
+        .order('created_at', { ascending: true })
+        .range(offset, offset + PAGE_SIZE - 1);
+
+      if (error) {
+        throw new Error(`Failed to fetch onboarding event signals: ${error.message}`);
+      }
+
+      if (!data || data.length === 0) {
+        break;
+      }
+
+      for (const row of data) {
+        if (row.agent_id && row.type && byType[row.type]) {
+          byType[row.type].add(row.agent_id);
+        }
+      }
+
+      if (data.length < PAGE_SIZE) {
+        break;
+      }
+
+      offset += PAGE_SIZE;
+    }
+  }
+
+  return byType;
 }
 
 // Try to use the RPC function for efficient aggregated analytics.
@@ -193,6 +313,7 @@ export async function GET(request: NextRequest) {
         topAgentsByActivity: [],
         resourceDistribution: { totalGold: 0, totalWood: 0, totalFood: 0, totalStone: 0 },
         hourlyActivityHeatmap: Array.from({ length: 24 }, (_, i) => ({ hour: i, count: 0 })),
+        onboardingFunnel: buildEmptyOnboardingFunnel(),
       } as AnalyticsData,
     });
   }
@@ -203,18 +324,14 @@ export async function GET(request: NextRequest) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // Fetch all agents created in last 30 days (for new agents metric)
-    const { data: agents } = await supabase
-      .from('agents')
-      .select('id, name, created_at, last_active, gold, wood, food, stone')
-      .gte('created_at', thirtyDaysAgo.toISOString())
-      .limit(10000);
+    // Fetch non-system agents created in last 30 days.
+    const agents = await fetchRecentPlayerAgents(supabase, thirtyDaysAgo.toISOString());
 
     // Calculate new agents per day
     const newAgentsMap: Record<string, number> = {};
     last30Days.forEach(day => { newAgentsMap[day] = 0; });
 
-    (agents || []).forEach(agent => {
+    agents.forEach(agent => {
       const day = formatDateKey(new Date(agent.created_at));
       if (newAgentsMap[day] !== undefined) {
         newAgentsMap[day]++;
@@ -379,6 +496,76 @@ export async function GET(request: NextRequest) {
       count: postsMap[date] || 0,
     }));
 
+    // ========================================
+    // ONBOARDING FUNNEL (Outcome-Based Contract)
+    // Cohort: player agents created in the last 30 days.
+    // ========================================
+    const cohortIds = agents.map((agent) => agent.id);
+    const eventActors = await getDistinctEventActorsForCohort(
+      supabase,
+      cohortIds,
+      thirtyDaysAgo.toISOString(),
+      ['speak', 'buy', 'trade', 'craft'],
+    );
+
+    const economyEventActors = new Set<string>([
+      ...(eventActors.buy || []),
+      ...(eventActors.trade || []),
+      ...(eventActors.craft || []),
+    ]);
+
+    let activeTournamentId: string | null = null;
+    let activeTournamentName: string | null = null;
+    const competitionActors = new Set<string>();
+
+    const { data: activeTournament, error: activeTournamentError } = await supabase
+      .from('tournaments')
+      .select('id, name')
+      .eq('status', 'active')
+      .order('starts_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (activeTournamentError) {
+      console.error('Error fetching active tournament for onboarding funnel:', activeTournamentError);
+    } else if (activeTournament?.id) {
+      activeTournamentId = activeTournament.id;
+      activeTournamentName = activeTournament.name || null;
+
+      const { data: scoredRows, error: scoredRowsError } = await supabase
+        .from('tournament_leaderboard')
+        .select('agent_id, current_score')
+        .eq('tournament_id', activeTournament.id)
+        .gt('current_score', 0)
+        .limit(10000);
+
+      if (scoredRowsError) {
+        console.error('Error fetching tournament scores for onboarding funnel:', scoredRowsError);
+      } else {
+        (scoredRows || []).forEach((row) => {
+          if (row.agent_id) competitionActors.add(row.agent_id);
+        });
+      }
+    }
+
+    const onboardingSignals = agents.map((agent) => ({
+      id: agent.id,
+      hasMoved: Boolean(agent.last_move_at),
+      hasGathered: Boolean(agent.last_gather_at),
+      hasCommunicated: eventActors.speak?.has(agent.id) || false,
+      hasEconomyAction:
+        Boolean(agent.last_trade_at) ||
+        Boolean(agent.last_craft_at) ||
+        economyEventActors.has(agent.id),
+      hasCompetitionScore: competitionActors.has(agent.id),
+    }));
+
+    const onboardingFunnel: OnboardingFunnelData = {
+      ...buildOnboardingFunnel(onboardingSignals),
+      active_tournament_id: activeTournamentId,
+      active_tournament_name: activeTournamentName,
+    };
+
     // Calculate retention rates
     const { data: allAgentsForRetention } = await supabase
       .from('agents')
@@ -442,6 +629,7 @@ export async function GET(request: NextRequest) {
       topAgentsByActivity,
       resourceDistribution,
       hourlyActivityHeatmap,
+      onboardingFunnel,
     };
 
     return NextResponse.json({

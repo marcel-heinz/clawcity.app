@@ -24,6 +24,27 @@ interface DailyMetric {
   count: number;
 }
 
+interface OnboardingFunnelOutcome {
+  key: string;
+  title: string;
+  standalone_count: number;
+  standalone_rate: number;
+  funnel_count: number;
+  funnel_rate: number;
+  conversion_from_previous: number;
+  dropoff_from_previous: number;
+}
+
+interface OnboardingFunnelData {
+  cohort_label: string;
+  cohort_total: number;
+  outcomes: OnboardingFunnelOutcome[];
+  completed_all_count: number;
+  completed_all_rate: number;
+  active_tournament_id: string | null;
+  active_tournament_name: string | null;
+}
+
 interface AnalyticsData {
   newAgentsPerDay: DailyMetric[];
   activeAgentsPerDay: DailyMetric[];
@@ -50,6 +71,7 @@ interface AnalyticsData {
     hour: number;
     count: number;
   }>;
+  onboardingFunnel: OnboardingFunnelData;
 }
 
 const CHART_COLORS = {
@@ -200,6 +222,15 @@ export default function AnalyticsDashboard() {
       { name: 'Food', value: totalFood, color: RESOURCE_COLORS.food },
       { name: 'Stone', value: totalStone, color: RESOURCE_COLORS.stone },
     ].filter(r => r.value > 0);
+  };
+
+  const getOnboardingFunnelChartData = () => {
+    if (!analyticsData) return [];
+    return analyticsData.onboardingFunnel.outcomes.map((outcome) => ({
+      step: outcome.title,
+      completed: outcome.funnel_count,
+      rate: outcome.funnel_rate,
+    }));
   };
 
   // Loading auth state
@@ -409,6 +440,102 @@ export default function AnalyticsDashboard() {
                     />
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Onboarding Funnel */}
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4 mb-6">
+              <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <span>🧭</span> Onboarding Funnel (Outcome Contract)
+                  </h2>
+                  <p className="text-sm text-[var(--muted)]">
+                    {analyticsData.onboardingFunnel.cohort_label} | Active tournament: {analyticsData.onboardingFunnel.active_tournament_name || 'None'}
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                  <div className="px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded">
+                    <div className="text-xs text-[var(--muted)] uppercase">Cohort</div>
+                    <div className="font-semibold">{analyticsData.onboardingFunnel.cohort_total}</div>
+                  </div>
+                  <div className="px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded">
+                    <div className="text-xs text-[var(--muted)] uppercase">Completed All</div>
+                    <div className="font-semibold text-[var(--accent)]">{analyticsData.onboardingFunnel.completed_all_count}</div>
+                  </div>
+                  <div className="px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded col-span-2 md:col-span-1">
+                    <div className="text-xs text-[var(--muted)] uppercase">Completion Rate</div>
+                    <div className="font-semibold">{analyticsData.onboardingFunnel.completed_all_rate}%</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="h-[320px] mb-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={getOnboardingFunnelChartData()}
+                    layout="vertical"
+                    margin={{ left: 20, right: 20, top: 10, bottom: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis
+                      type="number"
+                      domain={[0, Math.max(analyticsData.onboardingFunnel.cohort_total, 1)]}
+                      stroke="var(--muted)"
+                      tick={{ fill: 'var(--muted)', fontSize: 10 }}
+                      allowDecimals={false}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="step"
+                      width={180}
+                      stroke="var(--muted)"
+                      tick={{ fill: 'var(--muted)', fontSize: 11 }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '8px',
+                      }}
+                      formatter={(value, _name, payload) => {
+                        const completed = Number(value) || 0;
+                        const rate = Number(payload?.payload?.rate) || 0;
+                        return [`${completed} agents (${rate}%)`, 'Completed'];
+                      }}
+                    />
+                    <Bar
+                      dataKey="completed"
+                      fill="#A78BFA"
+                      radius={[0, 4, 4, 0]}
+                      name="Completed"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-2">
+                {analyticsData.onboardingFunnel.outcomes.map((outcome) => (
+                  <div
+                    key={outcome.key}
+                    className="p-3 bg-[var(--background)] border border-[var(--border)] rounded"
+                  >
+                    <div className="text-sm font-semibold text-[var(--foreground)]">
+                      {outcome.title}
+                    </div>
+                    <div className="text-xs text-[var(--muted)] mt-1">
+                      Funnel: {outcome.funnel_count}/{analyticsData.onboardingFunnel.cohort_total} ({outcome.funnel_rate}%)
+                    </div>
+                    <div className="text-xs text-[var(--muted)]">
+                      Standalone: {outcome.standalone_count} ({outcome.standalone_rate}%)
+                    </div>
+                    <div className="text-xs mt-1">
+                      <span className="text-green-400">Conversion: {outcome.conversion_from_previous}%</span>
+                      <span className="text-[var(--muted)]"> | </span>
+                      <span className="text-red-400">Dropoff: {outcome.dropoff_from_previous}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
