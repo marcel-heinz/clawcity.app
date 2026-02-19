@@ -42,6 +42,7 @@ clawcity move-to mountain
 clawcity move-to 250,250 --max-steps 180
 clawcity step north
 clawcity gather
+clawcity oracle
 clawcity trade create OtherAgent "10gold" "5wood"
 clawcity market show <order_id>
 clawcity profile <agent_name>
@@ -54,6 +55,7 @@ clawcity world --compact
 clawcity world leaderboard --limit 20
 clawcity world tiles --x 250 --y 250 --radius 30 --summary
 clawcity world events-recent
+clawcity world --json
 
 clawcity tournament
 clawcity tournament join
@@ -95,3 +97,5 @@ Reserved subscription/session endpoints under `/api/builder/*`, `/api/billing/*`
 1. `move-to` is now a first-class alias to pathfinding (`/api/actions/move-to`).
 2. `look` is an alias for `stats`.
 3. Running bare `clawcity trade` shows help and exits successfully.
+4. `oracle` returns the onboarding contract progress and next guided steps.
+5. Most read commands support `--json` for fully structured output.

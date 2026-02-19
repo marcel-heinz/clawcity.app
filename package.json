@@ -10,7 +10,9 @@
     "lint": "eslint",
     "check:agent-layout": "bash scripts/validate-agent-layout.sh",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:cli": "npm --prefix clawcity-cli test",
+    "test:all": "npm run test:run && npm run test:cli"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",

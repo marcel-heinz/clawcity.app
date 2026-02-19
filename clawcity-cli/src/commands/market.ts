@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { api, handleError } from '../lib/api.js';
+import { extractMarketOrderId, formatMarketPricesLines } from '../lib/formatters.js';
 
 export function registerMarketCommands(program: Command) {
   const market = program
@@ -11,7 +12,8 @@ export function registerMarketCommands(program: Command) {
     .description('List market orders')
     .option('-o, --offer <resource>', 'Filter by offer resource')
     .option('-r, --request <resource>', 'Filter by request resource')
-    .action(async (opts: { offer?: string; request?: string }) => {
+    .option('--json', 'Print raw JSON response')
+    .action(async (opts: { offer?: string; request?: string; json?: boolean }) => {
       const params = new URLSearchParams();
       if (opts.offer) params.set('offer', opts.offer);
       if (opts.request) params.set('request', opts.request);
@@ -19,14 +21,25 @@ export function registerMarketCommands(program: Command) {
 
       const res = await api(`/api/market/orders${qs ? `?${qs}` : ''}`, { profile: 'none' });
       if (!res.ok) handleError(res);
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
+        return;
+      }
+
       const orders = (res.data.orders ?? res.data) as Array<Record<string, unknown>>;
       if (Array.isArray(orders)) {
+        if (orders.length === 0) {
+          console.log('No orders found');
+          return;
+        }
         for (const o of orders) {
+          const remainingOffer = o.remaining_offer ?? o.offer_amount ?? '?';
+          const remainingRequest = o.remaining_request ?? o.request_amount ?? '?';
+          const rate = typeof o.exchange_rate === 'number' ? o.exchange_rate.toFixed(2) : '?';
           console.log(
-            `${o.offer_resource}:${o.offer_amount} -> ${o.request_resource}:${o.request_amount} | by ${o.agent_name || o.creator} | ${o.id}`
+            `${o.offer_resource}:${remainingOffer} -> ${o.request_resource}:${remainingRequest} | rate:${rate} | by ${o.agent_name || o.creator} | ${o.id}`
           );
         }
-        if (orders.length === 0) console.log('No orders found');
       } else {
         console.log(JSON.stringify(res.data, null, 2));
       }
@@ -35,10 +48,22 @@ export function registerMarketCommands(program: Command) {
   market
     .command('show <order_id>')
     .description('Show a market order by id')
-    .action(async (orderId: string) => {
+    .option('--json', 'Print raw JSON response')
+    .action(async (orderId: string, opts: { json?: boolean }) => {
       const res = await api(`/api/market/orders/${orderId}`, { profile: 'none' });
       if (!res.ok) handleError(res);
-      console.log(JSON.stringify(res.data, null, 2));
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
+        return;
+      }
+      const d = res.data as Record<string, unknown>;
+      const offer = `${d.offer_resource}:${d.remaining_offer ?? d.offer_amount ?? '?'}`;
+      const request = `${d.request_resource}:${d.remaining_request ?? d.request_amount ?? '?'}`;
+      const rate = typeof d.exchange_rate === 'number' ? d.exchange_rate.toFixed(2) : '?';
+      console.log(`${offer} -> ${request} | rate:${rate} | by ${d.agent_name || 'Unknown'} | status:${d.status || '?'}`);
+      if (d.expires_at) {
+        console.log(`Expires: ${d.expires_at}`);
+      }
     });
 
   market
@@ -63,7 +88,8 @@ export function registerMarketCommands(program: Command) {
       });
       if (!res.ok) handleError(res);
       const d = res.data as Record<string, unknown>;
-      console.log(`Order created: ${offer} -> ${request} | ID: ${d.id || d.order_id || '?'}`);
+      const orderId = extractMarketOrderId(d) || '?';
+      console.log(`Order created: ${offer} -> ${request} | ID: ${orderId}`);
     });
 
   market
@@ -91,16 +117,14 @@ export function registerMarketCommands(program: Command) {
   market
     .command('prices')
     .description('Current market price stats')
-    .action(async () => {
+    .option('--json', 'Print raw JSON response')
+    .action(async (opts: { json?: boolean }) => {
       const res = await api('/api/market/prices', { profile: 'none' });
       if (!res.ok) handleError(res);
-      const prices = res.data.prices ?? res.data;
-      if (typeof prices === 'object' && prices !== null) {
-        for (const [pair, data] of Object.entries(prices as Record<string, Record<string, unknown>>)) {
-          console.log(`${pair}: avg=${data.avg ?? data.average ?? '?'} vol=${data.volume ?? '?'}`);
-        }
-      } else {
+      if (opts.json) {
         console.log(JSON.stringify(res.data, null, 2));
+        return;
       }
+      formatMarketPricesLines(res.data as Record<string, unknown>).forEach((line) => console.log(line));
     });
 }

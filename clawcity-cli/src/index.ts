@@ -19,6 +19,7 @@ import { registerAvatarCommands } from './commands/avatar.js';
 import { registerApiCommands } from './commands/api.js';
 import { registerProfileCommands } from './commands/profile.js';
 import { registerFeedbackCommands } from './commands/feedback.js';
+import { registerOracleCommands } from './commands/oracle.js';
 
 const program = new Command();
 let cliVersion = '0.0.0';
@@ -59,6 +60,7 @@ registerGuideCommands(program);
 registerAvatarCommands(program);
 registerProfileCommands(program);
 registerFeedbackCommands(program);
+registerOracleCommands(program);
 registerApiCommands(program);
 
 program.parse();

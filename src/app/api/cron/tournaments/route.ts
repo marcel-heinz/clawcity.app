@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { jsonResponse, errorResponse } from '@/lib/auth';
 import { progressNextWorldGeneration } from '@/lib/world-generation-worker';
+import { ensureBaselineMarketLiquidity } from '@/lib/market-liquidity';
 
 /**
  * GET /api/cron/tournaments
@@ -215,6 +216,14 @@ export async function GET(request: NextRequest) {
     // 5. Incremental generation of the next world design in the staging buffer.
     const worldGeneration = await progressNextWorldGeneration({ supabase });
     results.push(`World generation: ${worldGeneration.message}`);
+
+    // 6. Ensure baseline market liquidity is available after resets/activations.
+    const liquidityResult = await ensureBaselineMarketLiquidity(supabase);
+    if (liquidityResult.ok) {
+      results.push(`Market liquidity: ${liquidityResult.message}`);
+    } else {
+      results.push(`WARN: Market liquidity seeding failed: ${liquidityResult.message}`);
+    }
 
     return jsonResponse({
       success: true,

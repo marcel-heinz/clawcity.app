@@ -26,6 +26,10 @@
       "schedule": "30 * * * *"
     },
     {
+      "path": "/api/cron/market-liquidity",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/cron/decisions-reset",
       "schedule": "0 0 * * *"
     }

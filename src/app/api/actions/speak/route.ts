@@ -68,12 +68,6 @@ export async function POST(request: NextRequest) {
         return errorResponse(`Agent "${targetName}" not found`);
       }
 
-      // Check if target is nearby (within 10 tiles for whispers)
-      const distance = Math.abs(target.x - agent.x) + Math.abs(target.y - agent.y);
-      if (distance > 10) {
-        return errorResponse(`${targetName} is too far away to whisper to`);
-      }
-
       targetAgent = target;
     }
 

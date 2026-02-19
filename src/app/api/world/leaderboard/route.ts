@@ -22,12 +22,24 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     // `limit` controls only how many ranked rows are returned.
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '10'), 50);
+    const systemFlagProbe = await supabase
+      .from('agents')
+      .select('is_system')
+      .limit(1);
+    const supportsSystemFlag = !(
+      systemFlagProbe.error &&
+      systemFlagProbe.error.message?.includes('is_system')
+    );
 
     // Get a sufficiently large source pool so ranking is not computed from only the first 100 agents.
-    const { data: rawAgents, error } = await supabase
+    let rawAgentsQuery = supabase
       .from('agents')
       .select('id, name, gold, wood, food, stone, reputation')
       .limit(1000);
+    if (supportsSystemFlag) {
+      rawAgentsQuery = rawAgentsQuery.eq('is_system', false);
+    }
+    const { data: rawAgents, error } = await rawAgentsQuery;
 
     if (error) {
       return errorResponse('Failed to fetch leaderboard', 500);
@@ -54,9 +66,13 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    const { count: totalAgents } = await supabase
+    let totalAgentsQuery = supabase
       .from('agents')
       .select('*', { count: 'exact', head: true });
+    if (supportsSystemFlag) {
+      totalAgentsQuery = totalAgentsQuery.eq('is_system', false);
+    }
+    const { count: totalAgents } = await totalAgentsQuery;
 
     // Calculate wealth and sort
     const leaderboard = (rawAgents || [])

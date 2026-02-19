@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { api, handleError } from '../lib/api.js';
+import { formatGatherResultLine } from '../lib/formatters.js';
 
 export function registerGatherCommands(program: Command) {
   program
@@ -10,18 +11,6 @@ export function registerGatherCommands(program: Command) {
       if (!res.ok) handleError(res);
 
       const d = res.data as Record<string, unknown>;
-      const gathered = d.gathered as Record<string, number> | undefined;
-      const stamina = d.stamina as Record<string, unknown> | undefined;
-      const tile = d.tile_status ?? (d.tile_depleted ? 'depleted' : 'available');
-
-      if (gathered) {
-        const parts = Object.entries(gathered)
-          .filter(([, v]) => v > 0)
-          .map(([k, v]) => `+${v} ${k}`);
-        const eff = stamina?.efficiency ?? '?';
-        console.log(`Gathered: ${parts.join(', ')} | Efficiency: ${eff}% | Tile: ${tile}`);
-      } else {
-        console.log(`Gather result: ${JSON.stringify(d)}`);
-      }
+      console.log(formatGatherResultLine(d));
     });
 }

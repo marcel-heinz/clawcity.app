@@ -43,11 +43,24 @@ export async function GET(request: NextRequest) {
     // compact=true returns only leaderboard + stats (no agents array, no events)
     const compact = url.searchParams.get('compact') === 'true';
 
+    const systemFlagProbe = await supabase
+      .from('agents')
+      .select('is_system')
+      .limit(1);
+    const supportsSystemFlag = !(
+      systemFlagProbe.error &&
+      systemFlagProbe.error.message?.includes('is_system')
+    );
+
     // Get all agents with resources and gathering stats
     let agentsQuery = supabase
       .from('agents')
       .select('id, name, x, y, gold, wood, food, stone, reputation, last_active, created_at, total_gathered_gold, total_gathered_wood, total_gathered_food, total_gathered_stone, claimed, claimed_by_twitter, avatar')
       .order('reputation', { ascending: false });
+
+    if (supportsSystemFlag) {
+      agentsQuery = agentsQuery.eq('is_system', false);
+    }
 
     // Filter by area if coordinates provided
     if (x !== null && y !== null) {
@@ -192,16 +205,24 @@ export async function GET(request: NextRequest) {
       }));
 
     // Get world stats
-    const { count: totalAgents } = await supabase
+    let totalAgentsQuery = supabase
       .from('agents')
       .select('*', { count: 'exact', head: true });
+    if (supportsSystemFlag) {
+      totalAgentsQuery = totalAgentsQuery.eq('is_system', false);
+    }
+    const { count: totalAgents } = await totalAgentsQuery;
 
     // Count active agents (active in last 5 minutes)
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const { count: activeAgents } = await supabase
+    let activeAgentsQuery = supabase
       .from('agents')
       .select('*', { count: 'exact', head: true })
       .gte('last_active', fiveMinutesAgo);
+    if (supportsSystemFlag) {
+      activeAgentsQuery = activeAgentsQuery.eq('is_system', false);
+    }
+    const { count: activeAgents } = await activeAgentsQuery;
 
     // Count completed trades
     const { count: totalTrades } = await supabase
@@ -269,10 +290,14 @@ export async function GET(request: NextRequest) {
     );
 
     if (missingEventAgentIds.length > 0) {
-      const { data: missingEventAgents, error: missingEventAgentsError } = await supabase
+      let missingEventAgentsQuery = supabase
         .from('agents')
         .select('id, name')
         .in('id', missingEventAgentIds);
+      if (supportsSystemFlag) {
+        missingEventAgentsQuery = missingEventAgentsQuery.eq('is_system', false);
+      }
+      const { data: missingEventAgents, error: missingEventAgentsError } = await missingEventAgentsQuery;
 
       if (missingEventAgentsError) {
         console.error('Error resolving event agent names:', missingEventAgentsError);
@@ -285,10 +310,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const enrichedEvents = events?.map(e => ({
-      ...e,
-      agent_name: agentMap.get(e.agent_id) || 'Unknown',
-    })) || [];
+    const enrichedEvents = (events || [])
+      .filter((event) => agentMap.has(event.agent_id))
+      .map(e => ({
+        ...e,
+        agent_name: agentMap.get(e.agent_id) || 'Unknown',
+      }));
 
     // Calculate total resources in the world (sum across all agents)
     const totalResources = agents.reduce((acc, agent) => ({
