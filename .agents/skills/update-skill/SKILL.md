@@ -10,23 +10,26 @@ This agent keeps ClawCity gameplay skills aligned with the live codebase and CLI
 ## Scope
 
 This workflow is for gameplay skill docs and their maintenance sync:
-- `/Users/marcelheinz/Desktop/clawcity.app-main/openclaw-gateway/clawcity-skill/SKILL.md` (canonical gameplay doc)
-- `/Users/marcelheinz/Desktop/clawcity.app-main/skill/clawcity/SKILL.md` (synced copy)
-- `/Users/marcelheinz/Desktop/clawcity.app-main/public/skill.md` (public copy)
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/openclaw-gateway/clawcity-skill/SKILL.md` (canonical gameplay doc)
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/skill/clawcity/SKILL.md` (synced copy)
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/public/skill.md` (public copy)
 
 Secondary reference only:
-- `/Users/marcelheinz/Desktop/clawcity.app-main/skill/clawcity.skill.ts` (legacy OpenClaw TS skill)
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/skill/clawcity.skill.ts` (legacy OpenClaw TS skill)
 
 ## Contract Rules
 
 1. **Primary contract is CLI-based SKILL.md docs** (not legacy TS tool names).
 2. Keep all three gameplay SKILL copies in sync.
 3. Prefer CLI command guidance over raw API calls for agent behavior.
-4. Explicitly preserve reserved-route policy in docs:
-- `/api/builder/*`
-- `/api/billing/*`
-- `/api/user/profile`
-5. Do not introduce admin endpoint guidance (`/api/admin/*`) in gameplay docs.
+4. Keep "How to Join" CLI-first:
+   - Primary: `npx clawcity@latest install clawcity --name <agent>`
+   - API registration shown as fallback only.
+5. Explicitly preserve reserved-route policy in docs:
+   - `/api/builder/*`
+   - `/api/billing/*`
+   - `/api/user/profile`
+6. Do not introduce admin endpoint guidance (`/api/admin/*`) in gameplay docs.
 
 ## Quick Start
 
@@ -40,12 +43,12 @@ Run these phases in order:
 ## Phase 1: Scan Sources
 
 ### API source of truth
-- `/Users/marcelheinz/Desktop/clawcity.app-main/src/app/api`
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/src/app/api`
 
 ### CLI source of truth
-- `/Users/marcelheinz/Desktop/clawcity.app-main/clawcity-cli/src/index.ts`
-- `/Users/marcelheinz/Desktop/clawcity.app-main/clawcity-cli/src/commands`
-- `/Users/marcelheinz/Desktop/clawcity.app-main/clawcity-cli/src/lib/endpoints.ts`
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/clawcity-cli/src/index.ts`
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/clawcity-cli/src/commands`
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/clawcity-cli/src/lib/endpoints.ts`
 
 ### Key gameplay endpoints that must stay accurate
 - `POST /api/actions/move-to`
@@ -80,27 +83,27 @@ Ensure gameplay docs include these command shapes:
 ## Phase 3: Update Canonical Gameplay SKILL
 
 Edit only:
-- `/Users/marcelheinz/Desktop/clawcity.app-main/openclaw-gateway/clawcity-skill/SKILL.md`
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/openclaw-gateway/clawcity-skill/SKILL.md`
 
 Then sync by copying to:
-- `/Users/marcelheinz/Desktop/clawcity.app-main/skill/clawcity/SKILL.md`
-- `/Users/marcelheinz/Desktop/clawcity.app-main/public/skill.md`
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/skill/clawcity/SKILL.md`
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/public/skill.md`
 
 ## Phase 4: Validate
 
 Run these checks:
 
 ```bash
-diff -u /Users/marcelheinz/Desktop/clawcity.app-main/openclaw-gateway/clawcity-skill/SKILL.md /Users/marcelheinz/Desktop/clawcity.app-main/skill/clawcity/SKILL.md
-diff -u /Users/marcelheinz/Desktop/clawcity.app-main/openclaw-gateway/clawcity-skill/SKILL.md /Users/marcelheinz/Desktop/clawcity.app-main/public/skill.md
+diff -u /Users/marcelheinz/Desktop/clawcity.app-main-fresh/openclaw-gateway/clawcity-skill/SKILL.md /Users/marcelheinz/Desktop/clawcity.app-main-fresh/skill/clawcity/SKILL.md
+diff -u /Users/marcelheinz/Desktop/clawcity.app-main-fresh/openclaw-gateway/clawcity-skill/SKILL.md /Users/marcelheinz/Desktop/clawcity.app-main-fresh/public/skill.md
 
 rg -n "/api/agents/messages|/api/agents/announcements|/api/market/fill|/api/agents/profile/\[name\]" \
-  /Users/marcelheinz/Desktop/clawcity.app-main/openclaw-gateway/clawcity-skill/SKILL.md \
-  /Users/marcelheinz/Desktop/clawcity.app-main/skill/clawcity/SKILL.md \
-  /Users/marcelheinz/Desktop/clawcity.app-main/public/skill.md
+  /Users/marcelheinz/Desktop/clawcity.app-main-fresh/openclaw-gateway/clawcity-skill/SKILL.md \
+  /Users/marcelheinz/Desktop/clawcity.app-main-fresh/skill/clawcity/SKILL.md \
+  /Users/marcelheinz/Desktop/clawcity.app-main-fresh/public/skill.md
 
 rg -n "move-to|\blook\b|step <|trade create|trade accept|trade reject" \
-  /Users/marcelheinz/Desktop/clawcity.app-main/openclaw-gateway/clawcity-skill/SKILL.md
+  /Users/marcelheinz/Desktop/clawcity.app-main-fresh/openclaw-gateway/clawcity-skill/SKILL.md
 ```
 
 ## Maintenance Notes

@@ -9,11 +9,11 @@ This agent maintains the `clawcity` npm package used by gameplay agents and Rail
 
 ## Canonical Paths
 
-- CLI package root: `/Users/marcelheinz/Desktop/clawcity.app-main/clawcity-cli/`
-- API source: `/Users/marcelheinz/Desktop/clawcity.app-main/src/app/api/`
+- CLI package root: `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/clawcity-cli/`
+- API source: `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/src/app/api/`
 - Gameplay skill docs:
-  - `/Users/marcelheinz/Desktop/clawcity.app-main/openclaw-gateway/clawcity-skill/SKILL.md`
-  - `/Users/marcelheinz/Desktop/clawcity.app-main/public/skill.md`
+  - `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/openclaw-gateway/clawcity-skill/SKILL.md`
+  - `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/public/skill.md`
 
 ## Contract Rules
 
@@ -25,6 +25,9 @@ This agent maintains the `clawcity` npm package used by gameplay agents and Rail
 3. Endpoint registry is authoritative for generic API coverage:
 - `clawcity-cli/src/lib/endpoints.ts`
 4. Keep compatibility aliases stable for autoplay resilience (`move-to`, `look`).
+5. Keep onboarding CLI-first:
+   - `clawcity install clawcity` remains the primary registration handoff.
+   - Oracle guidance output must stay clear (`clawcity oracle`).
 
 ## Quick Start
 
@@ -45,7 +48,7 @@ npm view clawcity time --json
 ## Phase 2: Scan for Drift
 
 ```bash
-cd /Users/marcelheinz/Desktop/clawcity.app-main
+cd /Users/marcelheinz/Desktop/clawcity.app-main-fresh
 
 rg -n "export async function (GET|POST|PUT|PATCH|DELETE)" src/app/api -g"route.ts"
 rg -n "move-to|look|api request|builder|billing|user/profile" clawcity-cli/src -g"*.ts"
@@ -70,7 +73,7 @@ Required checks when updating:
 ## Phase 4: Build + Smoke Test
 
 ```bash
-cd /Users/marcelheinz/Desktop/clawcity.app-main
+cd /Users/marcelheinz/Desktop/clawcity.app-main-fresh
 npm --prefix clawcity-cli install
 npm --prefix clawcity-cli run build
 
@@ -83,7 +86,7 @@ node clawcity-cli/dist/index.js api list
 ## Phase 5: Publish
 
 ```bash
-cd /Users/marcelheinz/Desktop/clawcity.app-main/clawcity-cli
+cd /Users/marcelheinz/Desktop/clawcity.app-main-fresh/clawcity-cli
 npm whoami
 npm publish
 ```
@@ -99,6 +102,7 @@ npx clawcity@latest api list
 ## Validation Checklist
 
 - [ ] README reflects current command catalog
+- [ ] `files` in `clawcity-cli/package.json` includes `README.md` so npm package shows docs
 - [ ] Reserved routes exclusion is documented
 - [ ] New version is semver-correct
 - [ ] No stale clawhub-era migration language in active instructions

@@ -107,6 +107,9 @@ export interface Tile {
   // New depletion system
   gather_count?: number;        // Consecutive gathers since regeneration
   regenerates_at?: string | null; // When tile will be available again
+  // Derived API convenience fields
+  harvestable?: boolean;
+  tile_status?: 'available' | 'depleted';
   // Territory upkeep (deprecated - now handled via scheduled cron)
   last_upkeep_paid?: string | null;
   // Territory upgrade level (1-3)

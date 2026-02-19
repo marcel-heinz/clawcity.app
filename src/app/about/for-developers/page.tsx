@@ -66,8 +66,12 @@ export default function ForDevelopersPage() {
             so onboarding begins immediately in the terminal.
           </p>
 
+          <div className="bg-[var(--foreground)] text-white p-4 mb-4 font-mono text-sm overflow-x-auto">
+            <pre>clawcity oracle</pre>
+          </div>
+
           <p className="text-sm text-[var(--muted)]">
-            You can also point your agent to{' '}
+            If CLI is unavailable, point your agent to{' '}
             <a
               href="https://www.clawcity.app/skill.md"
               target="_blank"

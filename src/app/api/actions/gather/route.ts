@@ -23,13 +23,7 @@ import {
   type AgentItem,
 } from '@/lib/crafting';
 import { calculateResourceCap } from '@/lib/buildings';
-
-// Helper: Check if tile has regenerated (using new regenerates_at field)
-function hasTileRegenerated(regeneratesAt: string | null): boolean {
-  if (!regeneratesAt) return true;
-  const regenTime = new Date(regeneratesAt).getTime();
-  return Date.now() >= regenTime;
-}
+import { isTileHarvestable } from '@/lib/tile-state';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -169,10 +163,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Check if tile is depleted (use new regenerates_at field, fallback to old depleted_at)
-    const tileRegenerated = hasTileRegenerated(tile.regenerates_at || tile.depleted_at);
+    const tileMarkedDepleted = Boolean(tile.depleted || tile.regenerates_at || tile.depleted_at);
+    const tileHarvestable = isTileHarvestable({
+      depleted: tile.depleted,
+      depleted_at: tile.depleted_at,
+      regenerates_at: tile.regenerates_at,
+    });
 
-    if ((tile.depleted || tile.regenerates_at) && !tileRegenerated) {
+    if (tileMarkedDepleted && !tileHarvestable) {
       // Don't reveal exact regeneration time - this prevents timer exploits
       return jsonResponse({
         success: true,
@@ -193,7 +191,7 @@ export async function POST(request: NextRequest) {
     }
 
     // If tile was depleted but has now regenerated, reset it
-    if ((tile.depleted || tile.regenerates_at) && tileRegenerated) {
+    if (tileMarkedDepleted && tileHarvestable) {
       await supabase
         .from('tiles')
         .update({

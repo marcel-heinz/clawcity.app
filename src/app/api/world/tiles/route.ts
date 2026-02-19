@@ -4,6 +4,7 @@ import { jsonResponse, errorResponse } from '@/lib/auth';
 import { generateWorldTiles, generateWorldTilesWithConfig } from '@/lib/game-logic';
 import { WORLD_SIZE } from '@/lib/types';
 import { getActiveWorldConfig } from '@/lib/world-runtime';
+import { isTileHarvestable } from '@/lib/tile-state';
 
 /**
  * Generate an array of sampled coordinates within a range
@@ -17,6 +18,34 @@ function getSampledCoordinates(min: number, max: number, sample: number): number
     coords.push(i);
   }
   return coords;
+}
+
+interface TileResponseRow {
+  x: number;
+  y: number;
+  terrain: string;
+  owner_id: string | null;
+  building_type: string | null;
+  depleted?: boolean | null;
+  depleted_at?: string | null;
+  regenerates_at?: string | null;
+  gather_count?: number | null;
+}
+
+function attachTileState(tile: TileResponseRow): TileResponseRow & {
+  harvestable: boolean;
+  tile_status: 'available' | 'depleted';
+} {
+  const harvestable = isTileHarvestable({
+    depleted: tile.depleted ?? false,
+    depleted_at: tile.depleted_at ?? null,
+    regenerates_at: tile.regenerates_at ?? null,
+  });
+  return {
+    ...tile,
+    harvestable,
+    tile_status: harvestable ? 'available' : 'depleted',
+  };
 }
 
 // GET tiles (with optional area filter)
@@ -44,11 +73,17 @@ export async function GET(request: NextRequest) {
       filteredTiles = filteredTiles.filter(t => t.x % sample === 0 && t.y % sample === 0);
     }
 
+    const responseTiles = filteredTiles.map((tile) => ({
+      ...tile,
+      harvestable: true,
+      tile_status: 'available' as const,
+    }));
+
     return jsonResponse({
       success: true,
       data: {
-        tiles: filteredTiles,
-        count: filteredTiles.length,
+        tiles: responseTiles,
+        count: responseTiles.length,
         preview: true,
       },
     });
@@ -83,7 +118,7 @@ export async function GET(request: NextRequest) {
       
       // Fetch tiles with pagination (Supabase has a ~1000 row default limit)
       const PAGE_SIZE = 1000;
-      const allTiles: Array<{ x: number; y: number; terrain: string; owner_id: string | null; building_type: string | null }> = [];
+      const allTiles: TileResponseRow[] = [];
       let page = 0;
 
       while (allTiles.length < expectedCount) {
@@ -92,7 +127,7 @@ export async function GET(request: NextRequest) {
 
         const { data: pageTiles, error } = await supabase
           .from('tiles')
-          .select('x, y, terrain, owner_id, building_type')
+          .select('x, y, terrain, owner_id, building_type, depleted, depleted_at, regenerates_at, gather_count')
           .in('x', xCoords)
           .in('y', yCoords)
           .order('x', { ascending: true })
@@ -122,7 +157,7 @@ export async function GET(request: NextRequest) {
       return jsonResponse({
         success: true,
         data: {
-          tiles: allTiles,
+          tiles: allTiles.map(attachTileState),
           count: allTiles.length,
         },
       });
@@ -136,7 +171,7 @@ export async function GET(request: NextRequest) {
     const maxTiles = (radius * 2 + 1) * (radius * 2 + 1);
     const cappedMaxTiles = Math.min(maxTiles, 50000);
     const PAGE_SIZE = 1000;
-    const allTiles: Array<{ x: number; y: number; terrain: string; owner_id: string | null; building_type: string | null }> = [];
+    const allTiles: TileResponseRow[] = [];
     let page = 0;
 
     while (allTiles.length < cappedMaxTiles) {
@@ -144,7 +179,9 @@ export async function GET(request: NextRequest) {
       if (from >= cappedMaxTiles) break;
       const to = Math.min(from + PAGE_SIZE - 1, cappedMaxTiles - 1);
 
-      let pageQuery = supabase.from('tiles').select('x, y, terrain, owner_id, building_type');
+      let pageQuery = supabase
+        .from('tiles')
+        .select('x, y, terrain, owner_id, building_type, depleted, depleted_at, regenerates_at, gather_count');
 
       // Filter by area if coordinates provided
       if (x !== null && y !== null) {
@@ -186,6 +223,7 @@ export async function GET(request: NextRequest) {
     if (sample > 1) {
       resultTiles = resultTiles.filter(t => t.x % sample === 0 && t.y % sample === 0);
     }
+    const tilesWithState = resultTiles.map(attachTileState);
 
     // Summary mode: return terrain counts + nearest of each type
     if (summary && x !== null && y !== null) {
@@ -194,7 +232,7 @@ export async function GET(request: NextRequest) {
       const terrainCounts: Record<string, number> = {};
       const nearest: Record<string, { x: number; y: number; dist: number }> = {};
 
-      for (const t of resultTiles) {
+      for (const t of tilesWithState) {
         const terrain = t.terrain as string;
         terrainCounts[terrain] = (terrainCounts[terrain] || 0) + 1;
 
@@ -216,6 +254,7 @@ export async function GET(request: NextRequest) {
           terrain_counts: terrainCounts,
           nearest: nearestClean,
           total: resultTiles.length,
+          depleted_tiles: tilesWithState.filter((tile) => tile.tile_status === 'depleted').length,
           radius,
         },
       });
@@ -224,8 +263,8 @@ export async function GET(request: NextRequest) {
     return jsonResponse({
       success: true,
       data: {
-        tiles: resultTiles,
-        count: resultTiles.length,
+        tiles: tilesWithState,
+        count: tilesWithState.length,
       },
     });
   } catch (error) {

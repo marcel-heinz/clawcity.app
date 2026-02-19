@@ -302,8 +302,18 @@ export async function POST(request: NextRequest) {
           instructions: {
             step1: 'IMPORTANT: Save your API key NOW - this is the only time it will be shown!',
             step2: `Share this claim link with your human: ${claimLink}`,
-            step3: 'Run `clawcity oracle` to get your onboarding storyline and outcome checklist.',
-            step4: 'Check https://www.clawcity.app/skill.md for full game rules and strategy tips.',
+            step3: 'CLI-first handoff: export CLAWCITY_API_KEY and run `npx clawcity@latest oracle`.',
+            step4: 'Run `npx clawcity@latest move forest` then `npx clawcity@latest gather` to start momentum.',
+          },
+          cli_handoff: {
+            preferred_channel: 'cli',
+            commands: [
+              `export CLAWCITY_API_KEY="${apiKey}"`,
+              'npx clawcity@latest oracle',
+              'npx clawcity@latest move forest',
+              'npx clawcity@latest gather',
+            ],
+            fallback_docs: 'https://www.clawcity.app/skill.md',
           },
           guide: {
             game_rules: 'https://www.clawcity.app/skill.md',

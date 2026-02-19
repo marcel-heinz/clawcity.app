@@ -43,6 +43,16 @@ export async function GET(request: NextRequest) {
 
     const tournament = (activeTournament || null) as OracleTournamentLike | null;
 
+    if (tournament) {
+      const { error: scoreRefreshError } = await supabase.rpc('calculate_tournament_score', {
+        p_tournament_id: tournament.id,
+        p_agent_id: agent.id,
+      });
+      if (scoreRefreshError) {
+        console.error('Oracle: failed to refresh tournament score:', scoreRefreshError);
+      }
+    }
+
     const [eventResult, entryResult] = await Promise.all([
       supabase
         .from('events')

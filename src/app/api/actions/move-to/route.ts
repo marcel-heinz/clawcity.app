@@ -7,6 +7,14 @@ import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
 import { createTerrainResolver } from '@/lib/game-logic';
 import { getActiveWorldConfig } from '@/lib/world-runtime';
+import { isTileHarvestable } from '@/lib/tile-state';
+import {
+  buildBlockedGoalSet,
+  buildTerrainTileStateMap,
+  findNearestFreshTerrainTile,
+  tileCoordKey,
+  type TerrainTileState,
+} from '@/lib/move-to-targeting';
 
 /**
  * move-to: Server-side multi-tile pathfinding + stepped movement.
@@ -34,6 +42,7 @@ const MAX_STEPS_LIMIT = 300;
 const DEFAULT_MAX_STEPS = 60;
 // Delay between steps in ms — gives Supabase Realtime time to broadcast each position
 const STEP_DELAY_MS = 120;
+const FRESH_TILE_SEARCH_RADII = [8, 16, 24, 32, 48, 72, 120, 180, 240, 300];
 
 const VALID_TERRAINS: TerrainType[] = [
   'plains', 'forest', 'mountain', 'market', 'water', 'rocky', 'sand', 'deep_water', 'marsh',
@@ -72,6 +81,54 @@ function spiralScanDistance(
     }
   }
   return null;
+}
+
+async function fetchTerrainTileStates(
+  supabase: ReturnType<typeof createServerClient>,
+  centerX: number,
+  centerY: number,
+  radius: number,
+  terrain: TerrainType,
+): Promise<TerrainTileState[]> {
+  const minX = Math.max(0, centerX - radius);
+  const maxX = Math.min(WORLD_SIZE - 1, centerX + radius);
+  const minY = Math.max(0, centerY - radius);
+  const maxY = Math.min(WORLD_SIZE - 1, centerY + radius);
+
+  const PAGE_SIZE = 1000;
+  const tiles: TerrainTileState[] = [];
+  let page = 0;
+
+  while (page < 50) {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('tiles')
+      .select('x, y, depleted, depleted_at, regenerates_at')
+      .eq('terrain', terrain)
+      .gte('x', minX)
+      .lte('x', maxX)
+      .gte('y', minY)
+      .lte('y', maxY)
+      .order('x', { ascending: true })
+      .order('y', { ascending: true })
+      .range(from, to);
+
+    if (error) {
+      throw error;
+    }
+    if (!data || data.length === 0) {
+      break;
+    }
+
+    tiles.push(...(data as TerrainTileState[]));
+    if (data.length < PAGE_SIZE) {
+      break;
+    }
+    page++;
+  }
+
+  return tiles;
 }
 
 /**
@@ -238,33 +295,101 @@ export async function POST(request: NextRequest) {
     let goalDescription: string;
     let isGoal: (x: number, y: number, terrain: TerrainType) => boolean;
     let effectiveMaxSteps = maxSteps;
+    const nowMs = Date.now();
+    let blockedTerrainGoals = new Set<string>();
 
     if (hasCoords) {
       goalDescription = `(${targetX}, ${targetY})`;
       isGoal = (x, y) => x === targetX && y === targetY;
     } else {
-      goalDescription = `nearest ${targetTerrain} tile`;
-      isGoal = (_x, _y, terrain) => terrain === targetTerrain;
+      const desiredTerrain = targetTerrain as TerrainType;
+      goalDescription = `nearest ${desiredTerrain} tile`;
+      isGoal = (_x, _y, terrain) => terrain === desiredTerrain;
     }
 
     // Check if already on target terrain
     if (hasTerrain) {
+      const desiredTerrain = targetTerrain as TerrainType;
       const currentTerrain = terrainAt(agent.x, agent.y);
-      if (currentTerrain === targetTerrain) {
-        return jsonResponse({
-          success: true,
-          data: {
-            message: `Already on ${targetTerrain} terrain.`,
-            position: { x: agent.x, y: agent.y },
-            terrain: currentTerrain,
-            steps: 0,
-            path: [],
-          },
-        });
+      if (currentTerrain === desiredTerrain) {
+        const { data: currentTile, error: currentTileError } = await supabase
+          .from('tiles')
+          .select('depleted, depleted_at, regenerates_at')
+          .eq('x', agent.x)
+          .eq('y', agent.y)
+          .maybeSingle();
+
+        if (currentTileError) {
+          console.error('move-to: failed to read current tile depletion state:', currentTileError);
+        }
+
+        const currentTileHarvestable = currentTile
+          ? isTileHarvestable(currentTile, nowMs)
+          : true;
+
+        if (currentTileHarvestable) {
+          return jsonResponse({
+            success: true,
+            data: {
+              message: `Already on ${desiredTerrain} terrain.`,
+              position: { x: agent.x, y: agent.y },
+              terrain: currentTerrain,
+              steps: 0,
+              path: [],
+            },
+          });
+        }
+
+        // Current tile is depleted: find nearest fresh tile of the same terrain if possible.
+        const radii = [...FRESH_TILE_SEARCH_RADII.filter((radius) => radius < effectiveMaxSteps), effectiveMaxSteps]
+          .filter((radius, index, all) => radius > 0 && all.indexOf(radius) === index);
+        let freshTarget: { x: number; y: number; distance: number } | null = null;
+
+        for (const radius of radii) {
+          try {
+            const terrainTiles = await fetchTerrainTileStates(supabase, agent.x, agent.y, radius, desiredTerrain);
+            if (terrainTiles.length === 0) continue;
+
+            blockedTerrainGoals = new Set([
+              ...blockedTerrainGoals,
+              ...buildBlockedGoalSet(terrainTiles, nowMs),
+            ]);
+
+            const target = findNearestFreshTerrainTile({
+              startX: agent.x,
+              startY: agent.y,
+              targetTerrain: desiredTerrain,
+              maxSteps: radius,
+              terrainAt,
+              tileStateMap: buildTerrainTileStateMap(terrainTiles),
+              nowMs,
+            });
+
+            if (target) {
+              freshTarget = target;
+              break;
+            }
+          } catch (error) {
+            console.error('move-to: failed to scan nearby terrain tiles:', error);
+            break;
+          }
+        }
+
+        if (freshTarget) {
+          const targetPoint = freshTarget;
+          goalDescription = `fresh ${desiredTerrain} tile`;
+          isGoal = (x, y) => x === targetPoint.x && y === targetPoint.y;
+          effectiveMaxSteps = Math.max(effectiveMaxSteps, targetPoint.distance + 6);
+          effectiveMaxSteps = Math.min(effectiveMaxSteps, MAX_STEPS_LIMIT);
+        } else if (blockedTerrainGoals.size > 0) {
+          goalDescription = `nearest fresh ${desiredTerrain} tile`;
+          isGoal = (x, y, terrain) =>
+            terrain === desiredTerrain && !blockedTerrainGoals.has(tileCoordKey(x, y));
+        }
       }
 
       // Spiral scan to find nearest matching terrain and auto-expand max_steps
-      const nearestDist = spiralScanDistance(agent.x, agent.y, targetTerrain as TerrainType, terrainAt);
+      const nearestDist = spiralScanDistance(agent.x, agent.y, desiredTerrain, terrainAt);
       if (nearestDist !== null) {
         effectiveMaxSteps = Math.max(effectiveMaxSteps, nearestDist + 10);
         effectiveMaxSteps = Math.min(effectiveMaxSteps, MAX_STEPS_LIMIT);
