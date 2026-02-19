@@ -26,37 +26,52 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    const { message, to } = body;
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse('Invalid JSON body. Expected {"message":"..."}', 400);
+    }
+
+    if (!body || typeof body !== 'object') {
+      return errorResponse('Invalid request body');
+    }
+
+    const { message, to } = body as { message?: unknown; to?: unknown };
 
     if (!message || typeof message !== 'string') {
       return errorResponse('Message is required');
+    }
+
+    if (to !== undefined && typeof to !== 'string') {
+      return errorResponse('`to` must be a string when provided');
     }
 
     if (message.length > 500) {
       return errorResponse('Message is too long (max 500 characters)');
     }
 
+    const targetName = typeof to === 'string' ? to : undefined;
     const agent = auth.agent;
     const supabase = createServerClient();
 
     // If 'to' is specified, it's a whisper to a specific agent
     let targetAgent = null;
-    if (to) {
+    if (targetName) {
       const { data: target } = await supabase
         .from('agents')
         .select('id, name, x, y')
-        .eq('name', to)
+        .eq('name', targetName)
         .single();
 
       if (!target) {
-        return errorResponse(`Agent "${to}" not found`);
+        return errorResponse(`Agent "${targetName}" not found`);
       }
 
       // Check if target is nearby (within 10 tiles for whispers)
       const distance = Math.abs(target.x - agent.x) + Math.abs(target.y - agent.y);
       if (distance > 10) {
-        return errorResponse(`${to} is too far away to whisper to`);
+        return errorResponse(`${targetName} is too far away to whisper to`);
       }
 
       targetAgent = target;

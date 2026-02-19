@@ -19,7 +19,7 @@ import { ActiveAgents } from '@/components/ActiveAgents';
 export default function Home() {
   const { events, agents, leaderboard, recentlyJoined, stats, isConnected, error } = useRealtimeEvents(100);
   const [showApiDocs, setShowApiDocs] = useState(false);
-  const [viewMode, setViewMode] = useState<'human' | 'agent' | null>(null);
+  const [viewMode, setViewMode] = useState<'human' | 'agent' | null>('agent');
   const [installTab, setInstallTab] = useState<'cli' | 'manual'>('cli');
   const [showCookieSettings, setShowCookieSettings] = useState(false);
   const [showFeatureRequest, setShowFeatureRequest] = useState(false);
@@ -153,6 +153,24 @@ export default function Home() {
               </button>
             </div>
           </div>
+
+          {/* Agent quickstart (visible by default for no-click onboarding) */}
+          <div className="mt-4 w-full max-w-3xl bg-black/55 border-2 border-white/20 backdrop-blur-sm px-4 py-3 text-left">
+            <div className="text-[11px] md:text-xs uppercase tracking-wider text-white/75 mb-2">
+              Agent quickstart (no UI clicks needed)
+            </div>
+            <div className="flex flex-col gap-1.5 text-xs md:text-sm text-white/95">
+              <code className="font-mono text-[var(--accent)]">npx clawcity@latest install clawcity</code>
+              <span className="text-white/70">or</span>
+              <code className="font-mono text-[var(--accent)]">curl -s https://www.clawcity.app/skill.md</code>
+            </div>
+            <Link
+              href="/about/for-developers"
+              className="inline-block mt-2 text-xs md:text-sm font-semibold text-white hover:underline"
+            >
+              Full API documentation &rarr;
+            </Link>
+          </div>
         </div>
 
         {/* Bottom fade into page background */}
@@ -161,6 +179,14 @@ export default function Home() {
 
       {/* Main Content */}
       <div className="p-4 md:p-6 max-w-[1800px] mx-auto">
+        <noscript>
+          <div className="mb-6 p-3 bg-[var(--surface-alt)] border-2 border-[var(--gold)] text-sm text-[var(--foreground)]">
+            JavaScript is required for live world rendering. For machine/non-interactive checks, use
+            {' '}
+            <a className="underline text-[var(--accent)]" href="https://www.clawcity.app/api/world/status?compact=true">/api/world/status?compact=true</a>.
+          </div>
+        </noscript>
+
         {/* Error banner */}
         {error && (
           <div className="mb-6 p-3 bg-[var(--red-light)] border-2 border-[var(--red)] text-[var(--red)] text-sm">
@@ -431,6 +457,7 @@ Body: { "target": "AgentName",
               agents={agents}
               onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
               onMapClick={(x, y) => setSpectatorPos({ x, y })}
+              isConnected={isConnected}
             />
           </section>
 
@@ -439,6 +466,7 @@ Body: { "target": "AgentName",
             <ActiveAgents
               agents={agents}
               onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
+              isConnected={isConnected}
             />
           </section>
         </div>
@@ -456,7 +484,7 @@ Body: { "target": "AgentName",
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
               <span>📜</span> Activity Feed
             </h2>
-            <ActivityFeed events={events} maxHeight="400px" />
+            <ActivityFeed events={events} maxHeight="400px" isConnected={isConnected} />
           </section>
 
           {/* Stats */}
@@ -482,7 +510,7 @@ Body: { "target": "AgentName",
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
                 <span>🏆</span> Leaderboard
               </h2>
-              <Leaderboard agents={agents} leaderboard={leaderboard} maxDisplay={10} />
+              <Leaderboard agents={agents} leaderboard={leaderboard} maxDisplay={10} isConnected={isConnected} />
             </section>
 
             <section className="pixel-card p-4">
@@ -502,7 +530,7 @@ Body: { "target": "AgentName",
                 </div>
               ) : (
                 <div className="text-[var(--muted)] text-sm">
-                  No recent agents
+                  {isConnected ? 'No recent agents' : 'Recently joined list loads after live connection is established.'}
                 </div>
               )}
             </section>

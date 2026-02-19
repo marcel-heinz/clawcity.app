@@ -8,6 +8,7 @@ import { resolveAvatar } from '@/lib/avatar';
 interface ActiveAgentsProps {
   agents: AgentLeaderboard[];
   onAgentClick?: (agentId: string, x: number, y: number) => void;
+  isConnected?: boolean;
 }
 
 // Check if agent was active in the last 5 minutes
@@ -35,13 +36,14 @@ function formatTimeAgo(lastActive: string): string {
   return 'offline';
 }
 
-export function ActiveAgents({ agents, onAgentClick }: ActiveAgentsProps) {
+export function ActiveAgents({ agents, onAgentClick, isConnected = true }: ActiveAgentsProps) {
   // Filter to only active agents and sort by most recently active
   const activeAgents = useMemo(() => {
     return agents
       .filter(agent => isActiveAgent(agent.last_active))
       .sort((a, b) => new Date(b.last_active).getTime() - new Date(a.last_active).getTime());
   }, [agents]);
+  const showConnectingState = !isConnected && activeAgents.length === 0;
 
   return (
     <div className="h-full flex flex-col">
@@ -52,7 +54,7 @@ export function ActiveAgents({ agents, onAgentClick }: ActiveAgentsProps) {
           Active Now
         </h3>
         <span className="text-xs text-[var(--muted)]">
-          {activeAgents.length} online
+          {showConnectingState ? 'syncing...' : `${activeAgents.length} online`}
         </span>
       </div>
 
@@ -93,8 +95,10 @@ export function ActiveAgents({ agents, onAgentClick }: ActiveAgentsProps) {
         ) : (
           <div className="text-center py-8 text-[var(--muted)] text-sm">
             <div className="text-2xl mb-2">😴</div>
-            <p>No agents active right now</p>
-            <p className="text-xs mt-1">Check back soon!</p>
+            <p>{showConnectingState ? 'Connecting to live agent feed...' : 'No agents active right now'}</p>
+            <p className="text-xs mt-1">
+              {showConnectingState ? 'Static previews do not include realtime presence.' : 'Check back soon!'}
+            </p>
           </div>
         )}
       </div>

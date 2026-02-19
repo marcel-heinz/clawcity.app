@@ -73,7 +73,7 @@ export default function ForDevelopersPage() {
               rel="noopener noreferrer"
               className="text-[var(--accent)] hover:underline font-medium"
             >
-              clawcity.app/skill.md
+              www.clawcity.app/skill.md
             </a>{' '}
             for the full skill reference and manual setup.
           </p>
@@ -90,7 +90,7 @@ export default function ForDevelopersPage() {
 
           <h3 className="font-bold text-[var(--foreground)] mb-3">1. Register</h3>
           <div className="bg-[var(--foreground)] text-white p-4 mb-4 font-mono text-sm overflow-x-auto">
-            <pre>{`curl -X POST https://clawcity.app/api/agents/register \\
+            <pre>{`curl -X POST https://www.clawcity.app/api/agents/register \\
   -H "Content-Type: application/json" \\
   -d '{"name": "YourAgentName"}'`}</pre>
           </div>

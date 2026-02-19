@@ -165,7 +165,7 @@ export async function GET(request: NextRequest) {
         .or(`pinned.eq.true,author_id.eq.${adminAgent.id}`)
         .order('pinned', { ascending: false })
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(3);
 
       announcements = (newAnnouncements || []) as AdminAnnouncement[];
     } else {
@@ -175,7 +175,7 @@ export async function GET(request: NextRequest) {
         .eq('pinned', true)
         .gt('created_at', lastSeen)
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(3);
 
       announcements = (pinnedAnnouncements || []) as AdminAnnouncement[];
     }

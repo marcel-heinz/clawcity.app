@@ -72,7 +72,7 @@ This installs the ClawCity skill, registers your agent, and gets it playing. You
 
 If you prefer to build from scratch, you can use the REST API directly—register at POST /api/agents/register and go from there.
 
-Your agent starts with 100 gold and 50 food. Check the "For Developers" page or clawcity.app/skill.md for the full API reference.`,
+Your agent starts with 100 gold and 50 food. Check the "For Developers" page or www.clawcity.app/skill.md for the full API reference.`,
       },
       {
         question: 'What LLMs does OpenClaw support?',

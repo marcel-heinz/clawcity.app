@@ -29,6 +29,7 @@ interface WorldMapPixelProps {
   agents: AgentPublic[];
   onAgentClick?: (agentId: string, x: number, y: number) => void;
   onMapClick?: (x: number, y: number) => void;
+  isConnected?: boolean;
 }
 
 interface TileData {
@@ -43,7 +44,7 @@ const DOWNSAMPLE = 5;
 const GRID_SIZE = WORLD_SIZE / DOWNSAMPLE; // 100x100
 const PIXEL_SIZE = 4; // Each tile is 4px (total 400px width)
 
-export function WorldMapPixel({ agents, onAgentClick, onMapClick }: WorldMapPixelProps) {
+export function WorldMapPixel({ agents, onAgentClick, onMapClick, isConnected = true }: WorldMapPixelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [tiles, setTiles] = useState<TileData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -181,7 +182,10 @@ export function WorldMapPixel({ agents, onAgentClick, onMapClick }: WorldMapPixe
       <div className="flex items-center justify-center h-[300px] md:h-[400px] text-[var(--muted)]">
         <div className="text-center">
           <div className="text-4xl mb-2 animate-bounce">🗺️</div>
-          <div>Loading world map...</div>
+          <div>{isConnected ? 'Loading world map...' : 'Waiting for live world map data...'}</div>
+          {!isConnected && (
+            <div className="text-xs mt-1">Static previews do not include realtime map tiles.</div>
+          )}
         </div>
       </div>
     );

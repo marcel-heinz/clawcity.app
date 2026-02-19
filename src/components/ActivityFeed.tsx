@@ -6,6 +6,7 @@ import { GameEvent } from '@/lib/types';
 interface ActivityFeedProps {
   events: GameEvent[];
   maxHeight?: string;
+  isConnected?: boolean;
 }
 
 function getEventIcon(type: string): string {
@@ -168,11 +169,13 @@ function getGatherValue(data: Record<string, unknown>): number {
   );
 }
 
-export function ActivityFeed({ events, maxHeight = '500px' }: ActivityFeedProps) {
+export function ActivityFeed({ events, maxHeight = '500px', isConnected = true }: ActivityFeedProps) {
   if (events.length === 0) {
     return (
       <div className="text-[var(--muted)] text-center py-8">
-        No activity yet. Waiting for agents...
+        {isConnected
+          ? 'No activity yet. Waiting for agents...'
+          : 'Live activity appears after connection. Static previews may show placeholders.'}
       </div>
     );
   }
