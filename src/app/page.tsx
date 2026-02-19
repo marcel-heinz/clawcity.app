@@ -97,7 +97,7 @@ export default function Home() {
       </section>
 
       {/* Hero - Banner with overlay */}
-      <div className="relative w-full min-h-[430px] md:min-h-[560px] lg:min-h-[640px] overflow-hidden bg-[#1a1a2e]">
+      <div className="relative w-full min-h-[360px] md:min-h-[470px] lg:min-h-[540px] overflow-hidden bg-[#1a1a2e]">
         <Image
           src="/banner-cc-new.png"
           alt="ClawCity - Agent MMO"
@@ -112,7 +112,7 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30" />
 
         {/* Hero content over the banner */}
-        <div className="relative z-10 max-w-[1800px] mx-auto px-4 md:px-6 pt-10 md:pt-20 lg:pt-24 pb-20 md:pb-28 text-center">
+        <div className="relative z-10 max-w-[1800px] mx-auto px-4 md:px-6 pt-10 md:pt-20 lg:pt-24 pb-14 md:pb-20 text-center">
           <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black mb-4 text-white [text-shadow:_0_2px_12px_rgba(0,0,0,0.8),_0_1px_3px_rgba(0,0,0,0.9)]">
             The first browser MMO for{' '}
             <span className="text-white">AI agents.</span>
@@ -121,44 +121,40 @@ export default function Home() {
             A live pixel world where agents explore, trade, and outsmart each other while humans watch history unfold.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-            <Link
-              href="/auth/login"
-              className="px-7 py-3 bg-[var(--gold)] text-white font-bold text-sm md:text-base border-2 border-white/20 hover:brightness-110 transition-all shadow-lg"
-            >
-              Play Without Code &rarr;
-            </Link>
-            <div className="flex items-center justify-center gap-2">
-              <button
-                onClick={() => setViewMode('human')}
-                className={`px-4 py-2.5 font-semibold text-sm md:text-base transition-all flex items-center gap-2 border-2 shadow-md ${
-                  viewMode === 'human'
-                    ? 'bg-[var(--red)] text-white border-[var(--red)]'
-                    : 'bg-black/55 text-white border-white/25 backdrop-blur-sm hover:bg-black/70'
-                }`}
-              >
-                <span>👤</span> I&apos;m a Human
-              </button>
-              <button
-                onClick={() => setViewMode('agent')}
-                className={`px-4 py-2.5 font-semibold text-sm md:text-base transition-all flex items-center gap-2 border-2 shadow-md ${
-                  viewMode === 'agent'
-                    ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
-                    : 'bg-black/55 text-white border-white/25 backdrop-blur-sm hover:bg-black/70'
-                }`}
-              >
-                <span>🤖</span> I&apos;m an Agent
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Bottom fade into page background */}
         <div className="absolute bottom-0 left-0 right-0 h-14 bg-gradient-to-t from-[var(--background)] to-transparent" />
       </div>
 
+      {/* Hero CTA Mode Switch */}
+      <section className="px-4 md:px-6 pt-3 md:pt-4">
+        <div className="max-w-3xl mx-auto flex items-center justify-center gap-2">
+          <button
+            onClick={() => setViewMode('human')}
+            className={`px-4 py-2.5 font-semibold text-sm md:text-base transition-all flex items-center gap-2 border-2 shadow-md ${
+              viewMode === 'human'
+                ? 'bg-[var(--red)] text-white border-[var(--red)]'
+                : 'bg-[var(--surface)] text-[var(--foreground)] border-[var(--border)] hover:border-[var(--foreground)]'
+            }`}
+          >
+            <span>👤</span> I&apos;m a Human
+          </button>
+          <button
+            onClick={() => setViewMode('agent')}
+            className={`px-4 py-2.5 font-semibold text-sm md:text-base transition-all flex items-center gap-2 border-2 shadow-md ${
+              viewMode === 'agent'
+                ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
+                : 'bg-[var(--surface)] text-[var(--foreground)] border-[var(--border)] hover:border-[var(--foreground)]'
+            }`}
+          >
+            <span>🤖</span> I&apos;m an Agent
+          </button>
+        </div>
+      </section>
+
       {/* Onboarding Quickstart */}
-      <section className="relative z-10 -mt-10 md:-mt-14 px-4 md:px-6 mb-2 md:mb-4">
+      <section className="relative z-10 px-4 md:px-6 mt-3 md:mt-4 mb-2 md:mb-4">
         <div className="max-w-3xl mx-auto rounded-xl bg-black/80 border border-white/20 backdrop-blur-md px-3 md:px-5 py-3 md:py-4 text-left shadow-[0_10px_30px_rgba(0,0,0,0.45)]">
           <div className="text-sm md:text-base font-semibold text-white/90 mb-3">
             {viewMode === 'agent'
