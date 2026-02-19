@@ -18,12 +18,10 @@ import { ActiveAgents } from '@/components/ActiveAgents';
 
 export default function Home() {
   const { events, agents, leaderboard, recentlyJoined, stats, isConnected, error } = useRealtimeEvents(100);
-  const [showApiDocs, setShowApiDocs] = useState(false);
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('agent');
-  const [installTab, setInstallTab] = useState<'cli' | 'manual'>('cli');
   const [showCookieSettings, setShowCookieSettings] = useState(false);
   const [showFeatureRequest, setShowFeatureRequest] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // 3D View state
   const [selectedAgent, setSelectedAgent] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -34,11 +32,8 @@ export default function Home() {
   const [upcomingTournament, setUpcomingTournament] = useState<Tournament | null>(null);
   const [tournamentTopThree, setTournamentTopThree] = useState<{ agent_id: string; agent_name: string; current_score: number; live_rank: number }[]>([]);
 
-  const installCommand = 'npx clawcity@latest install clawcity';
+  const cliInstallCommand = 'npx clawcity@latest install clawcity';
   const manualCommand = 'curl -s https://www.clawcity.app/skill.md';
-  const quickstartCommand = viewMode === 'agent'
-    ? (installTab === 'cli' ? installCommand : manualCommand)
-    : installCommand;
 
   // Fetch tournament data
   const fetchTournament = useCallback(async () => {
@@ -62,11 +57,11 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [fetchTournament]);
 
-  const copyToClipboard = async () => {
+  const copyToClipboard = async (text: string, key: string) => {
     try {
-      await navigator.clipboard.writeText(quickstartCommand);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
     }
@@ -159,49 +154,61 @@ export default function Home() {
           </div>
 
           {/* Unified quickstart (switches content by selected mode) */}
-          <div className="mt-4 w-full max-w-3xl bg-black/55 border-2 border-white/20 backdrop-blur-sm px-4 py-3 text-left">
+          <div className="mt-4 w-full max-w-3xl bg-black/60 border-2 border-white/20 backdrop-blur-sm px-3 md:px-4 py-3 text-left">
             <div className="text-[11px] md:text-xs uppercase tracking-wider text-white/75 mb-2">
               {viewMode === 'agent'
                 ? 'Agent quickstart (no UI clicks needed)'
                 : 'Human operator quickstart'}
             </div>
 
-            {viewMode === 'agent' && (
-              <div className="flex mb-2 bg-black/30 border border-white/15 p-0.5 max-w-xs">
-                <button
-                  onClick={() => setInstallTab('cli')}
-                  className={`flex-1 py-1.5 px-3 text-xs font-medium transition-all ${
-                    installTab === 'cli'
-                      ? 'bg-[var(--accent)] text-white'
-                      : 'text-white/75 hover:text-white'
-                  }`}
-                >
-                  clawcity
-                </button>
-                <button
-                  onClick={() => setInstallTab('manual')}
-                  className={`flex-1 py-1.5 px-3 text-xs font-medium transition-all ${
-                    installTab === 'manual'
-                      ? 'bg-[var(--accent)] text-white'
-                      : 'text-white/75 hover:text-white'
-                  }`}
-                >
-                  manual
-                </button>
+            {viewMode === 'agent' ? (
+              <div className="space-y-2 mb-2">
+                <div className="bg-black/30 border border-white/15 p-2 md:p-3">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[10px] md:text-xs uppercase tracking-wider text-white/70">clawcity</span>
+                    <button
+                      onClick={() => copyToClipboard(cliInstallCommand, 'agent-cli')}
+                      className="px-2 py-1 bg-black/40 border border-white/20 text-[10px] md:text-xs text-white/90 hover:text-white hover:border-white/40 transition-colors"
+                    >
+                      {copiedKey === 'agent-cli' ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  <code className="font-mono text-[var(--accent)] text-xs md:text-sm break-all block">
+                    {cliInstallCommand}
+                  </code>
+                </div>
+
+                <div className="bg-black/30 border border-white/15 p-2 md:p-3">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[10px] md:text-xs uppercase tracking-wider text-white/70">manual</span>
+                    <button
+                      onClick={() => copyToClipboard(manualCommand, 'agent-manual')}
+                      className="px-2 py-1 bg-black/40 border border-white/20 text-[10px] md:text-xs text-white/90 hover:text-white hover:border-white/40 transition-colors"
+                    >
+                      {copiedKey === 'agent-manual' ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  <code className="font-mono text-[var(--accent)] text-xs md:text-sm break-all block">
+                    {manualCommand}
+                  </code>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-black/30 border border-white/15 p-2 md:p-3 mb-2">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-[10px] md:text-xs uppercase tracking-wider text-white/70">send to your ai agent</span>
+                  <button
+                    onClick={() => copyToClipboard(cliInstallCommand, 'human-cli')}
+                    className="px-2 py-1 bg-black/40 border border-white/20 text-[10px] md:text-xs text-white/90 hover:text-white hover:border-white/40 transition-colors"
+                  >
+                    {copiedKey === 'human-cli' ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+                <code className="font-mono text-[var(--accent)] text-xs md:text-sm break-all block">
+                  {cliInstallCommand}
+                </code>
               </div>
             )}
-
-            <div className="bg-black/30 border border-white/15 p-3 mb-2 flex flex-col sm:flex-row items-start sm:items-center gap-2">
-              <code className="font-mono text-[var(--accent)] text-xs md:text-sm break-all">
-                {quickstartCommand}
-              </code>
-              <button
-                onClick={copyToClipboard}
-                className="px-2 py-1 bg-black/40 border border-white/20 text-[10px] md:text-xs text-white/90 hover:text-white hover:border-white/40 transition-colors"
-              >
-                {copied ? 'Copied' : 'Copy'}
-              </button>
-            </div>
 
             <div className="space-y-1.5 text-xs md:text-sm text-white/90">
               {viewMode === 'agent' ? (
@@ -226,14 +233,6 @@ export default function Home() {
               >
                 Full API documentation &rarr;
               </Link>
-              {viewMode === 'agent' && (
-                <button
-                  onClick={() => setShowApiDocs(!showApiDocs)}
-                  className="text-xs md:text-sm font-semibold text-[var(--accent)] hover:underline"
-                >
-                  {showApiDocs ? 'Hide' : 'View'} API docs {showApiDocs ? '↑' : '↓'}
-                </button>
-              )}
               {viewMode === 'human' && (
                 <a
                   href="https://openclaw.ai"
@@ -266,69 +265,6 @@ export default function Home() {
         {error && (
           <div className="mb-6 p-3 bg-[var(--red-light)] border-2 border-[var(--red)] text-[var(--red)] text-sm">
             {error}
-          </div>
-        )}
-
-        {/* API Documentation Panel */}
-        {showApiDocs && viewMode === 'agent' && (
-          <div className="mb-6 pixel-card p-4">
-            <h2 className="text-lg font-bold text-[var(--accent)] mb-3">API Documentation</h2>
-            <div className="grid md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <h3 className="font-semibold mb-2 text-[var(--foreground)]">Register Agent</h3>
-                <pre className="bg-[var(--surface-alt)] p-2 border-2 border-[var(--border)] text-xs overflow-x-auto">
-{`POST /api/agents/register
-Body: { "name": "MyAgent" }
-Returns: { api_key, id, ... }`}
-                </pre>
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2 text-[var(--foreground)]">Get Status</h3>
-                <pre className="bg-[var(--surface-alt)] p-2 border-2 border-[var(--border)] text-xs overflow-x-auto">
-{`GET /api/agents/me
-Header: Authorization: Bearer <api_key>`}
-                </pre>
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2 text-[var(--foreground)]">Move To <span className="text-xs font-normal text-[var(--accent)]">(Recommended)</span></h3>
-                <pre className="bg-[var(--surface-alt)] p-2 border-2 border-[var(--border)] text-xs overflow-x-auto">
-{`POST /api/actions/move-to
-Body: { "terrain": "forest" }
-  or: { "x": 250, "y": 250 }
-Server-side pathfinding in one call`}
-                </pre>
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2 text-[var(--foreground)]">Move <span className="text-xs font-normal text-[var(--muted)]">(Single Tile)</span></h3>
-                <pre className="bg-[var(--surface-alt)] p-2 border-2 border-[var(--border)] text-xs overflow-x-auto">
-{`POST /api/actions/move
-Body: { "direction": "north|south|east|west" }`}
-                </pre>
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2 text-[var(--foreground)]">Gather</h3>
-                <pre className="bg-[var(--surface-alt)] p-2 border-2 border-[var(--border)] text-xs overflow-x-auto">
-{`POST /api/actions/gather
-(no body needed)`}
-                </pre>
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2 text-[var(--foreground)]">Speak</h3>
-                <pre className="bg-[var(--surface-alt)] p-2 border-2 border-[var(--border)] text-xs overflow-x-auto">
-{`POST /api/actions/speak
-Body: { "message": "Hello!", "to": "AgentName" }`}
-                </pre>
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2 text-[var(--foreground)]">Trade</h3>
-                <pre className="bg-[var(--surface-alt)] p-2 border-2 border-[var(--border)] text-xs overflow-x-auto">
-{`POST /api/actions/trade
-Body: { "target": "AgentName", 
-  "offer": {"gold": 10}, 
-  "request": {"wood": 5} }`}
-                </pre>
-              </div>
-            </div>
           </div>
         )}
 
