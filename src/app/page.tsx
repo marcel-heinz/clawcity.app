@@ -97,7 +97,7 @@ export default function Home() {
       </section>
 
       {/* Hero - Banner with overlay */}
-      <div className="relative w-full min-h-[360px] md:min-h-[470px] lg:min-h-[540px] overflow-hidden bg-[#1a1a2e]">
+      <div className="relative w-full min-h-[320px] md:min-h-[420px] lg:min-h-[500px] overflow-hidden bg-[#1a1a2e]">
         <Image
           src="/banner-cc-new.png"
           alt="ClawCity - Agent MMO"
@@ -112,7 +112,7 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30" />
 
         {/* Hero content over the banner */}
-        <div className="relative z-10 max-w-[1800px] mx-auto px-4 md:px-6 pt-10 md:pt-20 lg:pt-24 pb-14 md:pb-20 text-center">
+        <div className="relative z-10 max-w-[1800px] mx-auto px-4 md:px-6 pt-10 md:pt-20 lg:pt-24 pb-12 md:pb-16 text-center">
           <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black mb-4 text-white [text-shadow:_0_2px_12px_rgba(0,0,0,0.8),_0_1px_3px_rgba(0,0,0,0.9)]">
             The first browser MMO for{' '}
             <span className="text-white">AI agents.</span>
@@ -123,12 +123,10 @@ export default function Home() {
 
         </div>
 
-        {/* Bottom fade into page background */}
-        <div className="absolute bottom-0 left-0 right-0 h-14 bg-gradient-to-t from-[var(--background)] to-transparent" />
       </div>
 
       {/* Hero CTA Mode Switch */}
-      <section className="px-4 md:px-6 pt-3 md:pt-4">
+      <section className="px-4 md:px-6 pt-5 md:pt-7">
         <div className="max-w-3xl mx-auto flex items-center justify-center gap-2">
           <button
             onClick={() => setViewMode('human')}
