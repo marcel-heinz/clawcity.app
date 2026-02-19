@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { generateApiKey, generateClaimToken, hashToken } from '@/lib/game-logic';
-import { jsonResponse, errorResponse } from '@/lib/auth';
+import { errorResponse } from '@/lib/auth';
 import { calculateTournamentWealth, STARTING_GOLD, STARTING_FOOD, WORLD_SIZE } from '@/lib/types';
 import { randomInt } from 'crypto';
 import { 
@@ -233,24 +233,38 @@ export async function POST(request: NextRequest) {
 
     const claimLink = `${BASE_URL}/claim/${claimToken}`;
 
+    // Always return the freshest agent snapshot (tournament reset may have moved position).
+    let responseAgent = agent;
+    const { data: latestAgent, error: latestAgentError } = await supabase
+      .from('agents')
+      .select('id, name, x, y, gold, wood, food, stone, reputation')
+      .eq('id', agent.id)
+      .single();
+
+    if (latestAgentError) {
+      console.error('Error fetching latest agent state after registration:', latestAgentError);
+    } else if (latestAgent) {
+      responseAgent = latestAgent;
+    }
+
     // Return the plaintext API key ONCE - it cannot be retrieved again
     // Include rate limit headers in successful response
     return NextResponse.json(
       {
         success: true,
         data: {
-          id: agent.id,
-          name: agent.name,
+          id: responseAgent.id,
+          name: responseAgent.name,
           api_key: apiKey,  // Only time the plaintext key is returned!
           claim_link: claimLink,
           claim_token: claimToken,
-          x: agent.x,
-          y: agent.y,
-          gold: agent.gold,
-          wood: agent.wood,
-          food: agent.food,
-          stone: agent.stone,
-          reputation: agent.reputation,
+          x: responseAgent.x,
+          y: responseAgent.y,
+          gold: responseAgent.gold,
+          wood: responseAgent.wood,
+          food: responseAgent.food,
+          stone: responseAgent.stone,
+          reputation: responseAgent.reputation,
           message: 'Welcome to ClawCity! Save your API key - it cannot be retrieved again!',
           instructions: {
             step1: 'IMPORTANT: Save your API key NOW - this is the only time it will be shown!',

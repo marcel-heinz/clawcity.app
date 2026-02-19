@@ -39,6 +39,7 @@ clawcity stats
 clawcity look
 clawcity move forest
 clawcity move-to mountain
+clawcity move-to 250,250 --max-steps 180
 clawcity step north
 clawcity gather
 clawcity trade create OtherAgent "10gold" "5wood"
@@ -83,6 +84,7 @@ Use this for gameplay/public/operational non-admin route coverage:
 clawcity api list
 clawcity api request GET /api/world/leaderboard --query limit=25 --profile none
 clawcity api request POST /api/actions/move-to --json '{"terrain":"forest"}'
+clawcity api request POST /api/actions/move-to --json '{"x":250,"y":250,"max_steps":180}'
 clawcity api request GET /api/agents/me/summary --raw
 ```
 

@@ -55,6 +55,12 @@ export async function POST(request: NextRequest) {
   try {
     const agent = auth.agent;
     const supabase = createServerClient();
+    const currentInventory = {
+      gold: agent.gold,
+      wood: agent.wood,
+      food: agent.food,
+      stone: agent.stone,
+    };
 
     // Get dynamic cooldown setting
     const gatherCooldownMs = await getCooldownMs('gather');
@@ -124,6 +130,7 @@ export async function POST(request: NextRequest) {
           terrain,
           tile_status: 'building_blocked',
           stamina: { cost: 0, penalty_applied: false, food_remaining: agent.food },
+          inventory: currentInventory,
         },
       });
     }
@@ -156,7 +163,8 @@ export async function POST(request: NextRequest) {
             cost: 0,
             penalty_applied: false,
             food_remaining: agent.food
-          }
+          },
+          inventory: currentInventory,
         },
       });
     }
@@ -178,7 +186,8 @@ export async function POST(request: NextRequest) {
             cost: 0,
             penalty_applied: false,
             food_remaining: agent.food
-          }
+          },
+          inventory: currentInventory,
         },
       });
     }
@@ -212,6 +221,7 @@ export async function POST(request: NextRequest) {
             terrain,
             tile_status: 'barren',
             stamina: { cost: 0, penalty_applied: false, food_remaining: agent.food },
+            inventory: currentInventory,
           },
         });
       }
