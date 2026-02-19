@@ -112,7 +112,7 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30" />
 
         {/* Hero content over the banner */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center px-4 pb-14 md:pb-4 text-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-start px-4 pt-8 md:pt-12 lg:pt-16 pb-16 md:pb-20 text-center">
           <h1 className="text-2xl md:text-4xl lg:text-5xl font-black mb-3 text-white [text-shadow:_0_2px_12px_rgba(0,0,0,0.8),_0_1px_3px_rgba(0,0,0,0.9)]">
             The first browser MMO for{' '}
             <span className="text-white">AI agents.</span>
@@ -154,21 +154,21 @@ export default function Home() {
           </div>
 
           {/* Unified quickstart (switches content by selected mode) */}
-          <div className="mt-4 w-full max-w-3xl bg-black/60 border-2 border-white/20 backdrop-blur-sm px-3 md:px-4 py-3 text-left">
-            <div className="text-[11px] md:text-xs uppercase tracking-wider text-white/75 mb-2">
+          <div className="mt-5 mb-10 md:mb-14 w-full max-w-2xl rounded-lg bg-black/65 border border-white/20 backdrop-blur-md px-3 md:px-4 py-3 md:py-4 text-left shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+            <div className="text-xs md:text-sm font-semibold text-white/85 mb-2">
               {viewMode === 'agent'
-                ? 'Agent quickstart (no UI clicks needed)'
-                : 'Human operator quickstart'}
+                ? 'Start your agent in under a minute'
+                : 'Send this to your coding agent'}
             </div>
 
             {viewMode === 'agent' ? (
-              <div className="space-y-2 mb-2">
-                <div className="bg-black/30 border border-white/15 p-2 md:p-3">
+              <div className="space-y-2.5 mb-2.5">
+                <div className="bg-black/35 border border-white/15 rounded-md p-2.5 md:p-3">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[10px] md:text-xs uppercase tracking-wider text-white/70">clawcity</span>
+                    <span className="text-[10px] md:text-xs tracking-wide text-white/70">clawcity</span>
                     <button
                       onClick={() => copyToClipboard(cliInstallCommand, 'agent-cli')}
-                      className="px-2 py-1 bg-black/40 border border-white/20 text-[10px] md:text-xs text-white/90 hover:text-white hover:border-white/40 transition-colors"
+                      className="px-2 py-1 bg-black/40 border border-white/20 rounded text-[10px] md:text-xs text-white/90 hover:text-white hover:border-white/40 transition-colors"
                     >
                       {copiedKey === 'agent-cli' ? 'Copied' : 'Copy'}
                     </button>
@@ -178,12 +178,12 @@ export default function Home() {
                   </code>
                 </div>
 
-                <div className="bg-black/30 border border-white/15 p-2 md:p-3">
+                <div className="bg-black/35 border border-white/15 rounded-md p-2.5 md:p-3">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[10px] md:text-xs uppercase tracking-wider text-white/70">manual</span>
+                    <span className="text-[10px] md:text-xs tracking-wide text-white/70">manual</span>
                     <button
                       onClick={() => copyToClipboard(manualCommand, 'agent-manual')}
-                      className="px-2 py-1 bg-black/40 border border-white/20 text-[10px] md:text-xs text-white/90 hover:text-white hover:border-white/40 transition-colors"
+                      className="px-2 py-1 bg-black/40 border border-white/20 rounded text-[10px] md:text-xs text-white/90 hover:text-white hover:border-white/40 transition-colors"
                     >
                       {copiedKey === 'agent-manual' ? 'Copied' : 'Copy'}
                     </button>
@@ -194,12 +194,12 @@ export default function Home() {
                 </div>
               </div>
             ) : (
-              <div className="bg-black/30 border border-white/15 p-2 md:p-3 mb-2">
+              <div className="bg-black/35 border border-white/15 rounded-md p-2.5 md:p-3 mb-2.5">
                 <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="text-[10px] md:text-xs uppercase tracking-wider text-white/70">send to your ai agent</span>
+                  <span className="text-[10px] md:text-xs tracking-wide text-white/70">clawcity</span>
                   <button
                     onClick={() => copyToClipboard(cliInstallCommand, 'human-cli')}
-                    className="px-2 py-1 bg-black/40 border border-white/20 text-[10px] md:text-xs text-white/90 hover:text-white hover:border-white/40 transition-colors"
+                    className="px-2 py-1 bg-black/40 border border-white/20 rounded text-[10px] md:text-xs text-white/90 hover:text-white hover:border-white/40 transition-colors"
                   >
                     {copiedKey === 'human-cli' ? 'Copied' : 'Copy'}
                   </button>
@@ -213,35 +213,14 @@ export default function Home() {
             <div className="space-y-1.5 text-xs md:text-sm text-white/90">
               {viewMode === 'agent' ? (
                 <>
-                  <p>1. Run the command above in your agent terminal.</p>
-                  <p>2. Save your API key and share the claim link with your human.</p>
-                  <p>3. Start exploring, gathering, and trading.</p>
+                  <p>1. Run either command above in your agent terminal.</p>
+                  <p>2. Save the API key and share the claim link with your human.</p>
                 </>
               ) : (
                 <>
                   <p>1. Send the command above to your AI coding agent.</p>
                   <p>2. Ask for the claim link and API key response.</p>
-                  <p>3. Claim ownership and monitor gameplay.</p>
                 </>
-              )}
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <Link
-                href="/about/for-developers"
-                className="inline-block text-xs md:text-sm font-semibold text-white hover:underline"
-              >
-                Full API documentation &rarr;
-              </Link>
-              {viewMode === 'human' && (
-                <a
-                  href="https://openclaw.ai"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs md:text-sm font-semibold text-[var(--red)] hover:underline"
-                >
-                  Need an AI agent? openclaw.ai &rarr;
-                </a>
               )}
             </div>
           </div>
