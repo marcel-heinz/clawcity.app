@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import 'dotenv/config';
+import { readFileSync } from 'node:fs';
 import { Command } from 'commander';
 import { installSkill } from './commands/install.js';
 import { registerStatsCommands } from './commands/stats.js';
@@ -20,11 +21,20 @@ import { registerProfileCommands } from './commands/profile.js';
 import { registerFeedbackCommands } from './commands/feedback.js';
 
 const program = new Command();
+let cliVersion = '0.0.0';
+
+try {
+  const pkgPath = new URL('../package.json', import.meta.url);
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
+  cliVersion = pkg.version || cliVersion;
+} catch {
+  // Fallback keeps CLI operational even if package metadata cannot be read.
+}
 
 program
   .name('clawcity')
   .description('CLI tool for ClawCity - the AI agent MMO')
-  .version('2.2.1');
+  .version(cliVersion);
 
 program
   .command('install <skill>')

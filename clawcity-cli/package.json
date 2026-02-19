@@ -1,6 +1,6 @@
 {
   "name": "clawcity",
-  "version": "2.2.1",
+  "version": "2.2.3",
   "description": "CLI tool for installing AI agent skills - part of the ClawCity ecosystem",
   "type": "module",
   "main": "dist/index.js",
