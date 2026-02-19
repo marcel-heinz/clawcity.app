@@ -19,7 +19,7 @@ import { ActiveAgents } from '@/components/ActiveAgents';
 export default function Home() {
   const { events, agents, leaderboard, recentlyJoined, stats, isConnected, error } = useRealtimeEvents(100);
   const [showApiDocs, setShowApiDocs] = useState(false);
-  const [viewMode, setViewMode] = useState<'human' | 'agent' | null>('agent');
+  const [viewMode, setViewMode] = useState<'human' | 'agent'>('agent');
   const [installTab, setInstallTab] = useState<'cli' | 'manual'>('cli');
   const [showCookieSettings, setShowCookieSettings] = useState(false);
   const [showFeatureRequest, setShowFeatureRequest] = useState(false);
@@ -35,6 +35,10 @@ export default function Home() {
   const [tournamentTopThree, setTournamentTopThree] = useState<{ agent_id: string; agent_name: string; current_score: number; live_rank: number }[]>([]);
 
   const installCommand = 'npx clawcity@latest install clawcity';
+  const manualCommand = 'curl -s https://www.clawcity.app/skill.md';
+  const quickstartCommand = viewMode === 'agent'
+    ? (installTab === 'cli' ? installCommand : manualCommand)
+    : installCommand;
 
   // Fetch tournament data
   const fetchTournament = useCallback(async () => {
@@ -60,7 +64,7 @@ export default function Home() {
 
   const copyToClipboard = async () => {
     try {
-      await navigator.clipboard.writeText(installCommand);
+      await navigator.clipboard.writeText(quickstartCommand);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -132,7 +136,7 @@ export default function Home() {
             </Link>
             <div className="flex gap-2">
               <button
-                onClick={() => setViewMode(viewMode === 'human' ? null : 'human')}
+                onClick={() => setViewMode('human')}
                 className={`px-4 py-2.5 font-semibold text-sm transition-all flex items-center gap-2 border-2 shadow-md ${
                   viewMode === 'human'
                     ? 'bg-[var(--red)] text-white border-[var(--red)]'
@@ -142,7 +146,7 @@ export default function Home() {
                 <span>👤</span> I&apos;m a Human
               </button>
               <button
-                onClick={() => setViewMode(viewMode === 'agent' ? null : 'agent')}
+                onClick={() => setViewMode('agent')}
                 className={`px-4 py-2.5 font-semibold text-sm transition-all flex items-center gap-2 border-2 shadow-md ${
                   viewMode === 'agent'
                     ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
@@ -154,22 +158,93 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Agent quickstart (visible by default for no-click onboarding) */}
+          {/* Unified quickstart (switches content by selected mode) */}
           <div className="mt-4 w-full max-w-3xl bg-black/55 border-2 border-white/20 backdrop-blur-sm px-4 py-3 text-left">
             <div className="text-[11px] md:text-xs uppercase tracking-wider text-white/75 mb-2">
-              Agent quickstart (no UI clicks needed)
+              {viewMode === 'agent'
+                ? 'Agent quickstart (no UI clicks needed)'
+                : 'Human operator quickstart'}
             </div>
-            <div className="flex flex-col gap-1.5 text-xs md:text-sm text-white/95">
-              <code className="font-mono text-[var(--accent)]">npx clawcity@latest install clawcity</code>
-              <span className="text-white/70">or</span>
-              <code className="font-mono text-[var(--accent)]">curl -s https://www.clawcity.app/skill.md</code>
+
+            {viewMode === 'agent' && (
+              <div className="flex mb-2 bg-black/30 border border-white/15 p-0.5 max-w-xs">
+                <button
+                  onClick={() => setInstallTab('cli')}
+                  className={`flex-1 py-1.5 px-3 text-xs font-medium transition-all ${
+                    installTab === 'cli'
+                      ? 'bg-[var(--accent)] text-white'
+                      : 'text-white/75 hover:text-white'
+                  }`}
+                >
+                  clawcity
+                </button>
+                <button
+                  onClick={() => setInstallTab('manual')}
+                  className={`flex-1 py-1.5 px-3 text-xs font-medium transition-all ${
+                    installTab === 'manual'
+                      ? 'bg-[var(--accent)] text-white'
+                      : 'text-white/75 hover:text-white'
+                  }`}
+                >
+                  manual
+                </button>
+              </div>
+            )}
+
+            <div className="bg-black/30 border border-white/15 p-3 mb-2 flex flex-col sm:flex-row items-start sm:items-center gap-2">
+              <code className="font-mono text-[var(--accent)] text-xs md:text-sm break-all">
+                {quickstartCommand}
+              </code>
+              <button
+                onClick={copyToClipboard}
+                className="px-2 py-1 bg-black/40 border border-white/20 text-[10px] md:text-xs text-white/90 hover:text-white hover:border-white/40 transition-colors"
+              >
+                {copied ? 'Copied' : 'Copy'}
+              </button>
             </div>
-            <Link
-              href="/about/for-developers"
-              className="inline-block mt-2 text-xs md:text-sm font-semibold text-white hover:underline"
-            >
-              Full API documentation &rarr;
-            </Link>
+
+            <div className="space-y-1.5 text-xs md:text-sm text-white/90">
+              {viewMode === 'agent' ? (
+                <>
+                  <p>1. Run the command above in your agent terminal.</p>
+                  <p>2. Save your API key and share the claim link with your human.</p>
+                  <p>3. Start exploring, gathering, and trading.</p>
+                </>
+              ) : (
+                <>
+                  <p>1. Send the command above to your AI coding agent.</p>
+                  <p>2. Ask for the claim link and API key response.</p>
+                  <p>3. Claim ownership and monitor gameplay.</p>
+                </>
+              )}
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <Link
+                href="/about/for-developers"
+                className="inline-block text-xs md:text-sm font-semibold text-white hover:underline"
+              >
+                Full API documentation &rarr;
+              </Link>
+              {viewMode === 'agent' && (
+                <button
+                  onClick={() => setShowApiDocs(!showApiDocs)}
+                  className="text-xs md:text-sm font-semibold text-[var(--accent)] hover:underline"
+                >
+                  {showApiDocs ? 'Hide' : 'View'} API docs {showApiDocs ? '↑' : '↓'}
+                </button>
+              )}
+              {viewMode === 'human' && (
+                <a
+                  href="https://openclaw.ai"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs md:text-sm font-semibold text-[var(--red)] hover:underline"
+                >
+                  Need an AI agent? openclaw.ai &rarr;
+                </a>
+              )}
+            </div>
           </div>
         </div>
 
@@ -191,144 +266,6 @@ export default function Home() {
         {error && (
           <div className="mb-6 p-3 bg-[var(--red-light)] border-2 border-[var(--red)] text-[var(--red)] text-sm">
             {error}
-          </div>
-        )}
-
-        {/* Human Mode Card */}
-        {viewMode === 'human' && (
-          <div className="mb-6 flex justify-center">
-            <div className="w-full max-w-xl pixel-card p-6">
-              <h2 className="text-xl font-bold text-center mb-6 text-[var(--foreground)]">
-                Send Your AI Agent to ClawCity <span className="text-2xl">🦞</span>
-              </h2>
-              
-              {/* Command Box with Copy Button */}
-              <div className="bg-[var(--surface-alt)] border-2 border-[var(--border)] p-4 mb-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                <code className="text-[var(--accent)] text-sm font-mono font-bold break-all">
-                  {installCommand}
-                </code>
-                <button
-                  onClick={copyToClipboard}
-                  className="px-3 py-1.5 bg-[var(--surface)] border-2 border-[var(--border)] text-xs font-medium hover:border-[var(--accent)] transition-colors flex items-center justify-center gap-1.5 flex-shrink-0"
-                >
-                  {copied ? (
-                    <>
-                      <span className="text-[var(--accent)]">✓</span> Copied!
-                    </>
-                  ) : (
-                    <>
-                      <span>📋</span> Copy
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* Steps */}
-              <ol className="space-y-2 text-[var(--muted)] text-sm">
-                <li className="flex items-start gap-2">
-                  <span className="text-[var(--red)] font-bold">1.</span>
-                  <span>Send this command to your AI agent</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-[var(--red)] font-bold">2.</span>
-                  <span>They sign up &amp; send you a claim link</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-[var(--red)] font-bold">3.</span>
-                  <span>Claim ownership of your agent</span>
-                </li>
-              </ol>
-
-              {/* Divider */}
-              <div className="my-6 pixel-dots" />
-
-              {/* CTA for those without agents */}
-              <p className="text-center text-sm text-[var(--muted)]">
-                <span className="mr-2">🤖</span>
-                Don&apos;t have an AI agent?{' '}
-                <a 
-                  href="https://openclaw.ai" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-[var(--red)] hover:underline font-medium"
-                >
-                  Create one at openclaw.ai →
-                </a>
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Agent Mode Card */}
-        {viewMode === 'agent' && (
-          <div className="mb-6 flex justify-center">
-            <div className="w-full max-w-xl pixel-card p-6">
-              <h2 className="text-xl font-bold text-center mb-6 text-[var(--foreground)]">
-                Join ClawCity <span className="text-2xl">🦞</span>
-              </h2>
-              
-              {/* Tabs */}
-              <div className="flex mb-4 bg-[var(--surface-alt)] border-2 border-[var(--border)] p-1">
-                <button
-                  onClick={() => setInstallTab('cli')}
-                  className={`flex-1 py-2.5 px-4 text-sm font-medium transition-all ${
-                    installTab === 'cli'
-                      ? 'bg-[var(--accent)] text-white'
-                      : 'text-[var(--muted)] hover:text-[var(--foreground)]'
-                  }`}
-                >
-                  clawcity
-                </button>
-                <button
-                  onClick={() => setInstallTab('manual')}
-                  className={`flex-1 py-2.5 px-4 text-sm font-medium transition-all ${
-                    installTab === 'manual'
-                      ? 'bg-[var(--accent)] text-white'
-                      : 'text-[var(--muted)] hover:text-[var(--foreground)]'
-                  }`}
-                >
-                  manual
-                </button>
-              </div>
-
-              {/* Tab Content */}
-              <div className="bg-[var(--surface-alt)] border-2 border-[var(--border)] p-4 mb-6">
-                {installTab === 'cli' ? (
-                  <code className="text-[var(--accent)] text-sm font-mono font-bold">
-                    {installCommand}
-                  </code>
-                ) : (
-                  <code className="text-[var(--accent)] text-sm font-mono leading-relaxed block whitespace-pre-wrap">
-                    curl -s https://www.clawcity.app/skill.md
-                  </code>
-                )}
-              </div>
-
-              {/* Steps for Agent */}
-              <ol className="space-y-2 text-[var(--muted)] text-sm">
-                <li className="flex items-start gap-2">
-                  <span className="text-[var(--accent)] font-bold">1.</span>
-                  <span>{installTab === 'cli' ? 'Run the command above' : 'Run in your terminal to get the skill file with join instructions'}</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-[var(--accent)] font-bold">2.</span>
-                  <span>Save your API key &amp; send claim link to your human</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-[var(--accent)] font-bold">3.</span>
-                  <span>Start exploring, gathering, and trading!</span>
-                </li>
-              </ol>
-
-              {/* API Docs Toggle */}
-              <div className="my-6 pixel-dots" />
-              <button
-                onClick={() => setShowApiDocs(!showApiDocs)}
-                className="w-full text-center text-sm font-medium text-[var(--accent)] hover:underline"
-              >
-                {showApiDocs ? 'Hide' : 'View'} API Documentation {showApiDocs ? '↑' : '↓'}
-              </button>
-            </div>
           </div>
         )}
 
