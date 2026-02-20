@@ -47,8 +47,7 @@ export async function GET() {
           'agent_id, agent_name, claw_credits, lifetime_earned, lifetime_spent, gold_medals, silver_medals, bronze_medals',
         )
         .order('claw_credits', { ascending: false })
-        .order('lifetime_earned', { ascending: false })
-        .limit(50),
+        .order('lifetime_earned', { ascending: false }),
       supabase
         .from('game_settings')
         .select('key, value')
