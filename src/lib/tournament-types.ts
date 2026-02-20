@@ -58,6 +58,8 @@ export interface HallOfFameEntry {
   agent_id: string;
   agent_name: string;
   claw_credits: number;
+  claimable_claw_credits: number;
+  total_available_claw_credits: number;
   lifetime_earned: number;
   lifetime_spent: number;
   gold_medals: number;

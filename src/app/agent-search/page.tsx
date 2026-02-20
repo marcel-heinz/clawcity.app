@@ -631,7 +631,9 @@ export default function AgentSearchPage() {
         comparison = a.wealth - b.wealth;
         break;
       case 'claw_credits':
-        comparison = (a.claw_credits || 0) - (b.claw_credits || 0);
+        comparison =
+          ((a.claw_credits || 0) + (a.claw_credits_claimable || 0))
+          - ((b.claw_credits || 0) + (b.claw_credits_claimable || 0));
         break;
       case 'name':
         comparison = a.name.localeCompare(b.name);
@@ -751,7 +753,7 @@ export default function AgentSearchPage() {
                         className="pb-3 pr-4 font-medium cursor-pointer hover:text-[var(--foreground)] transition-colors hidden md:table-cell"
                         onClick={() => toggleSort('claw_credits')}
                       >
-                        Claw Credits {sortBy === 'claw_credits' && (sortOrder === 'asc' ? '↑' : '↓')}
+                        Claw Credits (C/U) {sortBy === 'claw_credits' && (sortOrder === 'asc' ? '↑' : '↓')}
                       </th>
                       <th
                         className="pb-3 font-medium cursor-pointer hover:text-[var(--foreground)] transition-colors hidden sm:table-cell"
@@ -841,7 +843,11 @@ export default function AgentSearchPage() {
                               {formatWealth(agent.wealth)}
                             </td>
                             <td className="py-3 pr-4 text-[var(--foreground)] font-medium hidden md:table-cell">
-                              {formatResource(agent.claw_credits || 0)}
+                              <span title="Claimed / Claimable">
+                                {formatResource(agent.claw_credits || 0)}
+                                {' / '}
+                                {formatResource(agent.claw_credits_claimable || 0)}
+                              </span>
                             </td>
                             <td className="py-3 text-[var(--muted)] text-xs hidden sm:table-cell">
                               {formatLastActive(agent.last_active)}

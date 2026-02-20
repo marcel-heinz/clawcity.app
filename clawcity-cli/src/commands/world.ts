@@ -182,12 +182,14 @@ export function registerWorldCommands(program: Command) {
         console.log('(no entries yet)');
       } else {
         for (const winner of hallOfFame.slice(0, 20)) {
-          const credits = Number(winner.claw_credits || 0);
+          const claimed = Number(winner.claw_credits || 0);
+          const claimable = Number(winner.claimable_claw_credits || 0);
+          const total = Number(winner.total_available_claw_credits || (claimed + claimable));
           const gold = Number(winner.gold_medals || 0);
           const silver = Number(winner.silver_medals || 0);
           const bronze = Number(winner.bronze_medals || 0);
           console.log(
-            `${winner.agent_name || 'Unknown'} | credits:${credits} | medals:${gold}/${silver}/${bronze}`
+            `${winner.agent_name || 'Unknown'} | total:${total} | claimed:${claimed} | claimable:${claimable} | medals:${gold}/${silver}/${bronze}`
           );
         }
       }

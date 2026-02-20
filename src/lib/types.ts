@@ -89,6 +89,7 @@ export interface AgentLeaderboard extends AgentPublic {
   claimed_by_twitter?: string | null;
   // Tournament currency (persistent across tournaments)
   claw_credits?: number;
+  claw_credits_claimable?: number;
   claw_credits_lifetime_earned?: number;
   claw_credits_lifetime_spent?: number;
 }

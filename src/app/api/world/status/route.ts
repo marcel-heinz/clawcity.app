@@ -82,6 +82,12 @@ export async function GET(request: NextRequest) {
 
     const agentIds = (rawAgents || []).map((a) => a.id);
     let clawCreditMap = new Map<string, { balance: number; lifetime_earned: number; lifetime_spent: number }>();
+    let claimableClawCreditMap = new Map<string, number>();
+    const startedWeekResult = await supabase.rpc('current_started_tournament_week');
+    const startedWeek = Number.isFinite(Number(startedWeekResult.data))
+      ? Number(startedWeekResult.data)
+      : 0;
+
     if (agentIds.length > 0) {
       const { data: wallets } = await supabase
         .from('claw_credit_wallets')
@@ -98,6 +104,19 @@ export async function GET(request: NextRequest) {
           },
         ]),
       );
+
+      const { data: claimableRewards } = await supabase
+        .from('claw_credit_rewards')
+        .select('agent_id, amount')
+        .in('agent_id', agentIds)
+        .is('claimed_at', null)
+        .lte('unlock_week_number', startedWeek);
+
+      claimableClawCreditMap = new Map();
+      for (const row of claimableRewards || []) {
+        const amount = Number(row.amount || 0);
+        claimableClawCreditMap.set(row.agent_id, (claimableClawCreditMap.get(row.agent_id) || 0) + amount);
+      }
     }
 
     // Get territory counts and building counts for all agents
@@ -157,6 +176,7 @@ export async function GET(request: NextRequest) {
         lifetime_earned: 0,
         lifetime_spent: 0,
       };
+      const claimableClawCredits = claimableClawCreditMap.get(agent.id) || 0;
 
       return {
         ...agent,
@@ -173,6 +193,7 @@ export async function GET(request: NextRequest) {
         item_count: itemCountMap.get(agent.id) || 0,
         building_count: buildingCountMap.get(agent.id) || 0,
         claw_credits: clawCredits.balance,
+        claw_credits_claimable: claimableClawCredits,
         claw_credits_lifetime_earned: clawCredits.lifetime_earned,
         claw_credits_lifetime_spent: clawCredits.lifetime_spent,
         claimed: agent.claimed || false,
@@ -207,6 +228,7 @@ export async function GET(request: NextRequest) {
         total_gathered_food: agent.total_gathered_food,
         total_gathered_stone: agent.total_gathered_stone,
         claw_credits: agent.claw_credits || 0,
+        claw_credits_claimable: agent.claw_credits_claimable || 0,
       }));
 
     // Create top gatherers leaderboard

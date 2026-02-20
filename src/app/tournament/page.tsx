@@ -561,9 +561,14 @@ export default function TournamentPage() {
                           <div className="flex items-center gap-3">
                             <span className="w-6 text-center text-[var(--muted)]">{idx + 1}.</span>
                             <span className="flex-1 font-medium truncate">{entry.agent_name}</span>
-                            <span className="font-bold text-[var(--accent)]">
-                              {entry.claw_credits.toLocaleString()}
-                            </span>
+                            <div className="text-right">
+                              <div className="font-bold text-[var(--accent)]">
+                                {entry.total_available_claw_credits.toLocaleString()}
+                              </div>
+                              <div className="text-[10px] text-[var(--muted)]" title="Claimed / Claimable">
+                                {entry.claw_credits.toLocaleString()} / {entry.claimable_claw_credits.toLocaleString()}
+                              </div>
+                            </div>
                           </div>
                           <div className="mt-1 ml-9 text-xs text-[var(--muted)] flex flex-wrap gap-2">
                             <span title="Gold medals">🥇 {entry.gold_medals}</span>
@@ -690,9 +695,14 @@ export default function TournamentPage() {
                       <div className="flex items-center gap-3">
                         <span className="w-6 text-center">{idx + 1}.</span>
                         <span className="flex-1 font-medium">{entry.agent_name}</span>
-                        <span className="font-semibold text-[var(--accent)]">
-                          {entry.claw_credits.toLocaleString()}
-                        </span>
+                        <div className="text-right">
+                          <div className="font-semibold text-[var(--accent)]">
+                            {entry.total_available_claw_credits.toLocaleString()}
+                          </div>
+                          <div className="text-[10px] text-[var(--muted)]" title="Claimed / Claimable">
+                            {entry.claw_credits.toLocaleString()} / {entry.claimable_claw_credits.toLocaleString()}
+                          </div>
+                        </div>
                       </div>
                       <div className="ml-9 text-xs text-[var(--muted)]">
                         🥇 {entry.gold_medals} · 🥈 {entry.silver_medals} · 🥉 {entry.bronze_medals}

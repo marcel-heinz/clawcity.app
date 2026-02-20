@@ -40,7 +40,7 @@ export async function GET() {
   try {
     const supabase = createServerClient();
 
-    const [hallOfFameResult, settingsResult, latestEndedTournamentResult] = await Promise.all([
+    const [hallOfFameResult, settingsResult, latestEndedTournamentResult, startedWeekResult] = await Promise.all([
       supabase
         .from('claw_credit_leaderboard')
         .select(
@@ -60,6 +60,7 @@ export async function GET() {
         .order('ends_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase.rpc('current_started_tournament_week'),
     ]);
 
     if (hallOfFameResult.error) {
@@ -74,7 +75,9 @@ export async function GET() {
       console.error('Error fetching latest ended tournament:', latestEndedTournamentResult.error);
     }
 
-    const hallOfFame = (hallOfFameResult.data || [])
+    const startedWeek = toInt(startedWeekResult.data, 0);
+
+    const hallOfFameBase = (hallOfFameResult.data || [])
       .map((entry) => {
         const gold = toInt(entry.gold_medals, 0);
         const silver = toInt(entry.silver_medals, 0);
@@ -89,9 +92,54 @@ export async function GET() {
           silver_medals: silver,
           bronze_medals: bronze,
           total_podiums: gold + silver + bronze,
+        };
+      });
+
+    let claimableMap = new Map<string, number>();
+    const hallOfFameAgentIds = [...new Set(hallOfFameBase.map((entry) => entry.agent_id))];
+    if (hallOfFameAgentIds.length > 0) {
+      const { data: claimableRows, error: claimableError } = await supabase
+        .from('claw_credit_rewards')
+        .select('agent_id, amount')
+        .in('agent_id', hallOfFameAgentIds)
+        .is('claimed_at', null)
+        .lte('unlock_week_number', startedWeek);
+
+      if (claimableError) {
+        console.error('Error fetching claimable hall-of-fame rewards:', claimableError);
+      } else {
+        claimableMap = new Map<string, number>();
+        for (const row of claimableRows || []) {
+          const amount = toInt(row.amount, 0);
+          claimableMap.set(row.agent_id, (claimableMap.get(row.agent_id) || 0) + amount);
+        }
+      }
+    }
+
+    const hallOfFame = hallOfFameBase
+      .map((entry) => {
+        const claimable = claimableMap.get(entry.agent_id) || 0;
+        return {
+          ...entry,
+          claimable_claw_credits: claimable,
+          total_available_claw_credits: entry.claw_credits + claimable,
         } satisfies HallOfFameEntry;
       })
-      .filter((entry) => entry.claw_credits > 0 || entry.total_podiums > 0);
+      .filter(
+        (entry) =>
+          entry.claw_credits > 0 ||
+          entry.claimable_claw_credits > 0 ||
+          entry.total_podiums > 0,
+      )
+      .sort(
+        (a, b) =>
+          b.total_available_claw_credits - a.total_available_claw_credits ||
+          b.claw_credits - a.claw_credits ||
+          b.gold_medals - a.gold_medals ||
+          b.silver_medals - a.silver_medals ||
+          b.bronze_medals - a.bronze_medals ||
+          a.agent_name.localeCompare(b.agent_name),
+      );
 
     const settingMap = new Map<ParticipationSettingKey, number>();
     for (const row of settingsResult.data || []) {
