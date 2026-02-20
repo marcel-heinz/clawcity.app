@@ -49,6 +49,32 @@ interface InfrastructureStatus {
   upstash_redis: boolean;
 }
 
+interface PerkSpendSummary {
+  purchases: number;
+  units: number;
+  credits_spent: number;
+}
+
+interface ClawCreditsOverview {
+  wallet_balance_total: number;
+  lifetime_claimed_total: number;
+  lifetime_spent_total: number;
+  unclaimed_total: number;
+  claimable_total: number;
+  locked_total: number;
+  unclaimed_rewards_count: number;
+  claimed_rewards_count: number;
+  total_rewards_count: number;
+  started_week_number: number;
+  perk_spend_total: number;
+  perk_purchases_count: number;
+  perk_units_total: number;
+  by_perk: {
+    instant_storage: PerkSpendSummary;
+    durable_axe: PerkSpendSummary;
+  };
+}
+
 interface AdminData {
   stats: {
     total_agents: number;
@@ -61,6 +87,7 @@ interface AdminData {
   cooldowns: CooldownSettings;
   infrastructure?: InfrastructureStatus;
   forum: ForumStats;
+  claw_credits?: ClawCreditsOverview;
   agents: Agent[];
   recent_events: GameEvent[];
 }
@@ -382,6 +409,8 @@ export default function AdminDashboard() {
     return `${(ms / 1000).toFixed(1)}s`;
   };
 
+  const formatNumber = (value: number | undefined) => (value ?? 0).toLocaleString();
+
   // Loading auth state
   if (isAuthenticated === null) {
     return (
@@ -585,6 +614,102 @@ export default function AdminDashboard() {
             )}
           </div>
         </div>
+
+        {/* Claw Credits Overview */}
+        <section className="mb-6 bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <span>🦞</span> Claw Credits Overview
+          </h2>
+
+          <div className="grid md:grid-cols-3 gap-3 mb-3">
+            <div className="bg-[var(--background)] rounded p-3 border border-[var(--border)]/50">
+              <div className="text-2xl font-bold text-amber-400">
+                {formatNumber(adminData?.claw_credits?.unclaimed_total)}
+              </div>
+              <div className="text-xs text-[var(--muted)] uppercase tracking-wider">
+                Unclaimed Credits
+              </div>
+            </div>
+            <div className="bg-[var(--background)] rounded p-3 border border-[var(--border)]/50">
+              <div className="text-2xl font-bold text-green-400">
+                {formatNumber(adminData?.claw_credits?.lifetime_claimed_total)}
+              </div>
+              <div className="text-xs text-[var(--muted)] uppercase tracking-wider">
+                Claimed (Lifetime)
+              </div>
+            </div>
+            <div className="bg-[var(--background)] rounded p-3 border border-[var(--border)]/50">
+              <div className="text-2xl font-bold text-red-400">
+                {formatNumber(adminData?.claw_credits?.perk_spend_total)}
+              </div>
+              <div className="text-xs text-[var(--muted)] uppercase tracking-wider">
+                Used On Perks
+              </div>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-4 gap-3 mb-3">
+            <div className="bg-[var(--background)] rounded p-3 border border-[var(--border)]/50">
+              <div className="text-lg font-semibold text-cyan-400">
+                {formatNumber(adminData?.claw_credits?.claimable_total)}
+              </div>
+              <div className="text-xs text-[var(--muted)] uppercase tracking-wider">Claimable Now</div>
+            </div>
+            <div className="bg-[var(--background)] rounded p-3 border border-[var(--border)]/50">
+              <div className="text-lg font-semibold text-purple-400">
+                {formatNumber(adminData?.claw_credits?.locked_total)}
+              </div>
+              <div className="text-xs text-[var(--muted)] uppercase tracking-wider">Locked (Next Weeks)</div>
+            </div>
+            <div className="bg-[var(--background)] rounded p-3 border border-[var(--border)]/50">
+              <div className="text-lg font-semibold text-[var(--accent)]">
+                {formatNumber(adminData?.claw_credits?.wallet_balance_total)}
+              </div>
+              <div className="text-xs text-[var(--muted)] uppercase tracking-wider">Current Wallet Balance</div>
+            </div>
+            <div className="bg-[var(--background)] rounded p-3 border border-[var(--border)]/50">
+              <div className="text-lg font-semibold text-orange-400">
+                {formatNumber(adminData?.claw_credits?.lifetime_spent_total)}
+              </div>
+              <div className="text-xs text-[var(--muted)] uppercase tracking-wider">Spent (Lifetime)</div>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-3 mb-3">
+            <div className="bg-[var(--background)] rounded p-3 border border-[var(--border)]/50">
+              <div className="text-sm text-[var(--muted)] mb-1">Instant Storage</div>
+              <div className="text-sm text-[var(--foreground)]">
+                Purchases: <span className="text-amber-400">{formatNumber(adminData?.claw_credits?.by_perk.instant_storage.purchases)}</span>
+              </div>
+              <div className="text-sm text-[var(--foreground)]">
+                Units: <span className="text-amber-400">{formatNumber(adminData?.claw_credits?.by_perk.instant_storage.units)}</span>
+              </div>
+              <div className="text-sm text-[var(--foreground)]">
+                Credits Spent: <span className="text-amber-400">{formatNumber(adminData?.claw_credits?.by_perk.instant_storage.credits_spent)}</span>
+              </div>
+            </div>
+            <div className="bg-[var(--background)] rounded p-3 border border-[var(--border)]/50">
+              <div className="text-sm text-[var(--muted)] mb-1">Durable Axe</div>
+              <div className="text-sm text-[var(--foreground)]">
+                Purchases: <span className="text-cyan-400">{formatNumber(adminData?.claw_credits?.by_perk.durable_axe.purchases)}</span>
+              </div>
+              <div className="text-sm text-[var(--foreground)]">
+                Units: <span className="text-cyan-400">{formatNumber(adminData?.claw_credits?.by_perk.durable_axe.units)}</span>
+              </div>
+              <div className="text-sm text-[var(--foreground)]">
+                Credits Spent: <span className="text-cyan-400">{formatNumber(adminData?.claw_credits?.by_perk.durable_axe.credits_spent)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-xs text-[var(--muted)]">
+            Rewards: {formatNumber(adminData?.claw_credits?.claimed_rewards_count)} claimed / {formatNumber(adminData?.claw_credits?.unclaimed_rewards_count)} unclaimed / {formatNumber(adminData?.claw_credits?.total_rewards_count)} total
+            {' · '}
+            Started week: {formatNumber(adminData?.claw_credits?.started_week_number)}
+            {' · '}
+            Perk purchases: {formatNumber(adminData?.claw_credits?.perk_purchases_count)} transactions ({formatNumber(adminData?.claw_credits?.perk_units_total)} units)
+          </div>
+        </section>
 
         <div className="grid lg:grid-cols-[1fr_350px] gap-6">
           {/* Agents List */}

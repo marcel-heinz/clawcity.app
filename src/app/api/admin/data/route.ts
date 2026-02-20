@@ -4,6 +4,210 @@ import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { getAllCooldowns } from '@/lib/game-settings';
 import { isRateLimitRedisEnabled } from '@/lib/rate-limit';
 
+interface PerkSpendSummary {
+  purchases: number;
+  units: number;
+  credits_spent: number;
+}
+
+interface ClawCreditOverview {
+  wallet_balance_total: number;
+  lifetime_claimed_total: number;
+  lifetime_spent_total: number;
+  unclaimed_total: number;
+  claimable_total: number;
+  locked_total: number;
+  unclaimed_rewards_count: number;
+  claimed_rewards_count: number;
+  total_rewards_count: number;
+  started_week_number: number;
+  perk_spend_total: number;
+  perk_purchases_count: number;
+  perk_units_total: number;
+  by_perk: {
+    instant_storage: PerkSpendSummary;
+    durable_axe: PerkSpendSummary;
+  };
+}
+
+const PAGE_SIZE = 1000;
+
+function toInt(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function createEmptyClawCreditOverview(): ClawCreditOverview {
+  return {
+    wallet_balance_total: 0,
+    lifetime_claimed_total: 0,
+    lifetime_spent_total: 0,
+    unclaimed_total: 0,
+    claimable_total: 0,
+    locked_total: 0,
+    unclaimed_rewards_count: 0,
+    claimed_rewards_count: 0,
+    total_rewards_count: 0,
+    started_week_number: 0,
+    perk_spend_total: 0,
+    perk_purchases_count: 0,
+    perk_units_total: 0,
+    by_perk: {
+      instant_storage: {
+        purchases: 0,
+        units: 0,
+        credits_spent: 0,
+      },
+      durable_axe: {
+        purchases: 0,
+        units: 0,
+        credits_spent: 0,
+      },
+    },
+  };
+}
+
+async function getClawCreditOverview(
+  supabase: ReturnType<typeof createServerClient>,
+): Promise<ClawCreditOverview> {
+  const overview = createEmptyClawCreditOverview();
+
+  try {
+    const startedWeekResult = await supabase.rpc('current_started_tournament_week');
+    overview.started_week_number = toInt(startedWeekResult.data);
+
+    // Aggregate wallet balances and lifetime claimed/spent.
+    for (let offset = 0; ; offset += PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from('claw_credit_wallets')
+        .select('agent_id, balance, lifetime_earned, lifetime_spent')
+        .order('agent_id', { ascending: true })
+        .range(offset, offset + PAGE_SIZE - 1);
+
+      if (error) {
+        throw new Error(`Failed to fetch claw_credit_wallets: ${error.message}`);
+      }
+
+      if (!data || data.length === 0) {
+        break;
+      }
+
+      for (const row of data) {
+        overview.wallet_balance_total += toInt(row.balance);
+        overview.lifetime_claimed_total += toInt(row.lifetime_earned);
+        overview.lifetime_spent_total += toInt(row.lifetime_spent);
+      }
+
+      if (data.length < PAGE_SIZE) {
+        break;
+      }
+    }
+
+    // Aggregate unclaimed rewards and split by claimability.
+    for (let offset = 0; ; offset += PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from('claw_credit_rewards')
+        .select('id, amount, unlock_week_number')
+        .is('claimed_at', null)
+        .order('id', { ascending: true })
+        .range(offset, offset + PAGE_SIZE - 1);
+
+      if (error) {
+        throw new Error(`Failed to fetch unclaimed claw_credit_rewards: ${error.message}`);
+      }
+
+      if (!data || data.length === 0) {
+        break;
+      }
+
+      overview.unclaimed_rewards_count += data.length;
+      for (const row of data) {
+        const amount = Math.max(0, toInt(row.amount));
+        const unlockWeek = toInt(row.unlock_week_number);
+        overview.unclaimed_total += amount;
+        if (unlockWeek <= overview.started_week_number) {
+          overview.claimable_total += amount;
+        } else {
+          overview.locked_total += amount;
+        }
+      }
+
+      if (data.length < PAGE_SIZE) {
+        break;
+      }
+    }
+
+    // Aggregate perk purchases and spend breakdown.
+    for (let offset = 0; ; offset += PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from('tournament_perk_purchases')
+        .select('id, perk_id, quantity, claw_credit_cost')
+        .order('created_at', { ascending: true })
+        .range(offset, offset + PAGE_SIZE - 1);
+
+      if (error) {
+        throw new Error(`Failed to fetch tournament_perk_purchases: ${error.message}`);
+      }
+
+      if (!data || data.length === 0) {
+        break;
+      }
+
+      overview.perk_purchases_count += data.length;
+      for (const row of data) {
+        const quantity = Math.max(0, toInt(row.quantity));
+        const cost = Math.max(0, toInt(row.claw_credit_cost));
+        overview.perk_spend_total += cost;
+        overview.perk_units_total += quantity;
+
+        if (row.perk_id === 'instant_storage' || row.perk_id === 'durable_axe') {
+          overview.by_perk[row.perk_id].purchases += 1;
+          overview.by_perk[row.perk_id].units += quantity;
+          overview.by_perk[row.perk_id].credits_spent += cost;
+        }
+      }
+
+      if (data.length < PAGE_SIZE) {
+        break;
+      }
+    }
+
+    // Counts for quick sanity checks and reward lifecycle overview.
+    const [{ count: totalRewardsCount, error: totalRewardsError }, { count: claimedRewardsCount, error: claimedRewardsError }] = await Promise.all([
+      supabase
+        .from('claw_credit_rewards')
+        .select('*', { count: 'exact', head: true }),
+      supabase
+        .from('claw_credit_rewards')
+        .select('*', { count: 'exact', head: true })
+        .not('claimed_at', 'is', null),
+    ]);
+
+    if (totalRewardsError) {
+      console.error('Error counting total claw credit rewards:', totalRewardsError);
+    } else {
+      overview.total_rewards_count = toInt(totalRewardsCount);
+    }
+
+    if (claimedRewardsError) {
+      console.error('Error counting claimed claw credit rewards:', claimedRewardsError);
+    } else {
+      overview.claimed_rewards_count = toInt(claimedRewardsCount);
+    }
+
+    if (overview.total_rewards_count > 0 || overview.claimed_rewards_count > 0) {
+      overview.unclaimed_rewards_count = Math.max(
+        0,
+        overview.total_rewards_count - overview.claimed_rewards_count,
+      );
+    }
+  } catch (error) {
+    console.error('Error aggregating claw credit admin overview:', error);
+  }
+
+  return overview;
+}
+
 // GET - Fetch admin dashboard data
 export async function GET(request: NextRequest) {
   if (!isAdminConfigured()) {
@@ -47,6 +251,7 @@ export async function GET(request: NextRequest) {
           active_authors: 0,
           hot_category: null,
         },
+        claw_credits: createEmptyClawCreditOverview(),
         agents: [],
         recent_events: [],
       },
@@ -201,6 +406,8 @@ export async function GET(request: NextRequest) {
         null;
     }
 
+    const clawCredits = await getClawCreditOverview(supabase);
+
     return NextResponse.json({
       success: true,
       data: {
@@ -224,6 +431,7 @@ export async function GET(request: NextRequest) {
           active_authors: uniqueAuthors.size,
           hot_category: hotCategory,
         },
+        claw_credits: clawCredits,
         agents: agents || [],
         recent_events: enrichedEvents,
       },
