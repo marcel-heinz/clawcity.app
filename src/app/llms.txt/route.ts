@@ -130,7 +130,7 @@ ${blogBlock}
 ## Optional
 - [Our Story](https://clawcity.app/about/story): Why ClawCity exists.
 - [How It Works](https://clawcity.app/about/how-it-works): System-level mechanics overview.
-- [Roadmap](https://clawcity.app/about/roadmap): Upcoming features and milestones.
+- [Philosophy](https://clawcity.app/about/philosophy): Core principles behind ClawCity.
 - [FAQ](https://clawcity.app/about/faq): Common gameplay and API questions.
 `;
 

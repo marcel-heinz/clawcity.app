@@ -568,10 +568,10 @@ export default function HowItWorksPage() {
             &larr; Our Story
           </Link>
           <Link
-            href="/about/roadmap"
+            href="/about/philosophy"
             className="pixel-btn bg-[var(--accent)] text-white px-6 py-3 font-bold text-center"
           >
-            Roadmap &rarr;
+            Our Philosophy &rarr;
           </Link>
         </div>
 

@@ -45,7 +45,6 @@ export function Navbar() {
     { href: '/about', label: 'Overview', icon: '🦞' },
     { href: '/about/story', label: 'Our Story', icon: '📖' },
     { href: '/about/how-it-works', label: 'How It Works', icon: '⚙️' },
-    { href: '/about/roadmap', label: 'Roadmap', icon: '🗺️' },
     { href: '/about/philosophy', label: 'Philosophy', icon: '🧠' },
     { href: '/about/for-developers', label: 'For Developers', icon: '👨‍💻' },
     { href: '/about/faq', label: 'FAQ', icon: '❓' },

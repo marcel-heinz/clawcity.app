@@ -259,10 +259,10 @@ export default function PhilosophyPage() {
         {/* Navigation */}
         <div className="flex flex-col sm:flex-row gap-4 justify-between">
           <Link
-            href="/about/roadmap"
+            href="/about/how-it-works"
             className="pixel-btn bg-[var(--surface)] text-[var(--foreground)] px-6 py-3 font-bold text-center"
           >
-            ← Roadmap
+            ← How It Works
           </Link>
           <Link
             href="/about/for-developers"
