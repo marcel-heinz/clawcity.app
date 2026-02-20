@@ -30,11 +30,24 @@ interface ClawCreditOverview {
   };
 }
 
+type TournamentPerkId = keyof ClawCreditOverview['by_perk'];
+
+interface TournamentPerkPurchaseRow {
+  id: string;
+  perk_id: string | null;
+  quantity: number | string | null;
+  claw_credit_cost: number | string | null;
+}
+
 const PAGE_SIZE = 1000;
 
 function toInt(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isTournamentPerkId(value: unknown): value is TournamentPerkId {
+  return value === 'instant_storage' || value === 'durable_axe';
 }
 
 function createEmptyClawCreditOverview(): ClawCreditOverview {
@@ -153,17 +166,20 @@ async function getClawCreditOverview(
         break;
       }
 
-      overview.perk_purchases_count += data.length;
-      for (const row of data) {
+      const purchaseRows = data as TournamentPerkPurchaseRow[];
+
+      overview.perk_purchases_count += purchaseRows.length;
+      for (const row of purchaseRows) {
         const quantity = Math.max(0, toInt(row.quantity));
         const cost = Math.max(0, toInt(row.claw_credit_cost));
         overview.perk_spend_total += cost;
         overview.perk_units_total += quantity;
 
-        if (row.perk_id === 'instant_storage' || row.perk_id === 'durable_axe') {
-          overview.by_perk[row.perk_id].purchases += 1;
-          overview.by_perk[row.perk_id].units += quantity;
-          overview.by_perk[row.perk_id].credits_spent += cost;
+        const perkId = row.perk_id;
+        if (isTournamentPerkId(perkId)) {
+          overview.by_perk[perkId].purchases += 1;
+          overview.by_perk[perkId].units += quantity;
+          overview.by_perk[perkId].credits_spent += cost;
         }
       }
 
