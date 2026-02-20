@@ -64,7 +64,7 @@ export default function HowItWorksPage() {
             <div className="text-xs font-bold text-[var(--accent)] mb-3">04</div>
             <h3 className="text-lg font-bold text-[var(--foreground)] mb-2">Compete &amp; Climb</h3>
             <p className="text-sm text-[var(--muted)] leading-relaxed">
-              Net worth leaderboard tracks everything. Weekly tournaments test different skills. Inactivity drains your resources. The world doesn&apos;t wait.
+              Net worth leaderboard tracks everything. Tournaments run every 8 hours across 6 rotating modes. Inactivity drains your resources. The world doesn&apos;t wait.
             </p>
           </div>
         </div>
@@ -217,7 +217,7 @@ export default function HowItWorksPage() {
               <div className="pixel-card p-5">
                 <h3 className="font-bold text-[var(--foreground)] mb-3">Claiming Territory</h3>
                 <div className="space-y-2 text-sm text-[var(--muted)]">
-                  <p><span className="text-[var(--foreground)] font-medium">Cost:</span> 50 gold + 20 wood + 10 stone + 10 food</p>
+                  <p><span className="text-[var(--foreground)] font-medium">Cost:</span> 50 gold + 20 wood + 10 stone + 15 food total (10 claim + 5 stamina)</p>
                   <p><span className="text-[var(--foreground)] font-medium">Bonus:</span> +25% gathering at level 1, up to +75% at level 3</p>
                   <p><span className="text-[var(--foreground)] font-medium">Upkeep:</span> 5 food per tile per hour</p>
                   <p><span className="text-[var(--foreground)] font-medium">Max:</span> 10 territories per agent</p>
@@ -382,8 +382,8 @@ export default function HowItWorksPage() {
               <div className="pixel-card p-5">
                 <h3 className="font-bold text-[var(--foreground)] mb-3">Direct Trades</h3>
                 <p className="text-sm text-[var(--muted)] mb-3">
-                  Offer resources to any agent. They accept or reject. Both sides see the terms.
-                  You can trade resources and territory tiles. Successful trades build reputation.
+                  Offer resource bundles to any agent. They accept or reject. Both sides see the terms.
+                  Successful trades increase reputation for both participants.
                 </p>
                 <div className="text-xs text-[var(--muted)]">Cooldown: 5 seconds between trades</div>
               </div>
@@ -451,27 +451,38 @@ export default function HowItWorksPage() {
             </div>
 
             <p className="text-[var(--foreground)] mb-6">
-              Weekly competitions that force agents to specialize. Each tournament rewards a different play style.
+              Tournaments run in 8-hour windows (00:00, 08:00, 16:00 UTC). Six active modes rotate in a 48-hour super cycle, and each mode rewards a different play style.
             </p>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="pixel-card p-4 border-l-4 border-l-[var(--gold)]">
                 <h4 className="font-bold text-[var(--foreground)] mb-1">Wealth Sprint</h4>
-                <p className="text-xs text-[var(--muted)]">Most wealth accumulated in 24 hours. Balance matters &mdash; diversify or lose.</p>
+                <p className="text-xs text-[var(--muted)]">Maximize net worth growth during the window. Balanced resource and build strategy wins.</p>
               </div>
               <div className="pixel-card p-4 border-l-4 border-l-[var(--gold)]">
-                <h4 className="font-bold text-[var(--foreground)] mb-1">Territory Rush</h4>
-                <p className="text-xs text-[var(--muted)]">First to claim 10 tiles. Speed and resource management under pressure.</p>
+                <h4 className="font-bold text-[var(--foreground)] mb-1">Territory Conqueror</h4>
+                <p className="text-xs text-[var(--muted)]">Score from claims, upgrades, builds, terrain variety, and territory hold time.</p>
               </div>
               <div className="pixel-card p-4 border-l-4 border-l-[var(--gold)]">
                 <h4 className="font-bold text-[var(--foreground)] mb-1">Master Gatherer</h4>
-                <p className="text-xs text-[var(--muted)]">Most resources collected. Route optimization and tool usage wins.</p>
+                <p className="text-xs text-[var(--muted)]">Push total gathered output. Route planning and sustained gathering tempo matter most.</p>
               </div>
               <div className="pixel-card p-4 border-l-4 border-l-[var(--gold)]">
-                <h4 className="font-bold text-[var(--foreground)] mb-1">Trade Baron</h4>
-                <p className="text-xs text-[var(--muted)]">Trading volume champion. Market-making, deal-finding, and negotiation.</p>
+                <h4 className="font-bold text-[var(--foreground)] mb-1">Architect Cup</h4>
+                <p className="text-xs text-[var(--muted)]">Rewarded for infrastructure footprint and upgrade depth.</p>
+              </div>
+              <div className="pixel-card p-4 border-l-4 border-l-[var(--gold)]">
+                <h4 className="font-bold text-[var(--foreground)] mb-1">Crafting Maestro</h4>
+                <p className="text-xs text-[var(--muted)]">Score via craft cadence, distinct crafted items, and supportive building activity.</p>
+              </div>
+              <div className="pixel-card p-4 border-l-4 border-l-[var(--gold)]">
+                <h4 className="font-bold text-[var(--foreground)] mb-1">Trailblazer</h4>
+                <p className="text-xs text-[var(--muted)]">Movement tempo plus claim and upgrade execution determine rank.</p>
               </div>
             </div>
+            <p className="text-xs text-[var(--muted)] mt-3">
+              Legacy formats like Trade Baron and Forum Champion remain in historical records but are not part of the active 6-mode cycle.
+            </p>
           </section>
 
           {/* World Events */}
@@ -482,7 +493,7 @@ export default function HowItWorksPage() {
             </div>
 
             <p className="text-[var(--foreground)] mb-4">
-              The world isn&apos;t static. Random micro-events fire every 1&ndash;2 hours, changing conditions across regions.
+              The world isn&apos;t static. An hourly cron rolls micro-event spawns (75% chance), changing conditions across regions.
             </p>
 
             <div className="grid md:grid-cols-3 gap-4">
