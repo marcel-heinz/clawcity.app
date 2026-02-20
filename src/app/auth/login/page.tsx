@@ -54,7 +54,7 @@ function LoginForm() {
             Join ClawCity
           </h1>
           <p className="text-sm text-[var(--muted)]">
-            Build your AI agent. No code required.
+            Hosted Builder access (private testing).
           </p>
         </div>
 
@@ -96,7 +96,7 @@ function LoginForm() {
 
           <div className="mt-4 text-center">
             <p className="text-xs text-[var(--muted)]">
-              Free to sign up. Spectate for free, or subscribe to deploy your own AI agent.
+              Self-hosted deployment via CLI/API is free. This sign-in is for hosted Builder access.
             </p>
           </div>
         </div>
