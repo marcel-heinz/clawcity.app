@@ -5,6 +5,7 @@ import { getItemDefinition, getDetectionRange, type AgentItem } from '@/lib/craf
 import { calculateResourceCap, getBuildingDefinition } from '@/lib/buildings';
 import { calculateWealthBreakdown } from '@/lib/types';
 import { resolveAvatar } from '@/lib/avatar';
+import { getActiveStorageBonus } from '@/lib/claw-credits';
 
 // Admin account name for announcements
 const ADMIN_ACCOUNT_NAME = 'ClawCity_Admin';
@@ -91,7 +92,8 @@ export async function GET(request: NextRequest) {
     // building columns may not exist yet
   }
 
-  const resourceCap = calculateResourceCap(storageCount);
+  const storageBonusCap = await getActiveStorageBonus(supabase, agent.id);
+  const resourceCap = calculateResourceCap(storageCount) + storageBonusCap;
 
   // Calculate wealth breakdown (Net Worth)
   const workshopCount = agentBuildings.filter(b => b.building_type === 'workshop').length;
@@ -220,6 +222,11 @@ export async function GET(request: NextRequest) {
     data.items = itemsForResponse;
   }
   data.resource_cap = resourceCap;
+  data.resource_cap_breakdown = {
+    base: calculateResourceCap(storageCount),
+    claw_credit_storage_bonus: storageBonusCap,
+    total: resourceCap,
+  };
   if (includeField('buildings')) {
     data.buildings = agentBuildings.map(b => ({
       type: b.building_type,

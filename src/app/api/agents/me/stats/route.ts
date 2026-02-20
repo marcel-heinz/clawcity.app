@@ -3,6 +3,7 @@ import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { calculateResourceCap } from '@/lib/buildings';
 import { calculateWealthBreakdown } from '@/lib/types';
+import { getActiveStorageBonus } from '@/lib/claw-credits';
 
 /**
  * GET /api/agents/me/stats
@@ -78,7 +79,8 @@ export async function GET(request: NextRequest) {
     // trades table may not exist
   }
 
-  const resourceCap = calculateResourceCap(storageCount);
+  const storageBonusCap = await getActiveStorageBonus(supabase, agent.id);
+  const resourceCap = calculateResourceCap(storageCount) + storageBonusCap;
   const wealthBreakdown = calculateWealthBreakdown({
     gold: agent.gold,
     wood: agent.wood,
@@ -101,6 +103,7 @@ export async function GET(request: NextRequest) {
       wealth: wealthBreakdown.total,
       reputation: agent.reputation,
       resource_cap: resourceCap,
+      resource_cap_bonus_from_claw_credits: storageBonusCap,
       territories: territoryCount,
       buildings: buildingCount,
       pending_trades: pendingTradeCount,

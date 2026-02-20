@@ -336,7 +336,7 @@ export async function POST(request: NextRequest) {
             tournament: tournamentContext,
             medals: {
               now: 'Gold, silver, and bronze medals are awarded to podium winners.',
-              future: 'Medals are planned to convert into credits for stronger starts in future tournaments.',
+              future: 'Claw Credits are claimable from medals in later rounds and can be spent on jump-start perks.',
             },
             quickstart: onboardingSteps,
             starter_prompt: starterPrompt,

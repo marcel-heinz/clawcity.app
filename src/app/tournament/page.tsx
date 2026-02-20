@@ -7,13 +7,10 @@ import {
   Tournament,
   TournamentEntry,
   HallOfFameEntry,
-  TournamentWinner,
+  TournamentParticipationSnapshot,
   TOURNAMENT_CONFIG,
   TOURNAMENT_CYCLE,
   getTimeRemaining,
-  getRankDisplay,
-  formatScore,
-  TournamentType,
 } from '@/lib/tournament-types';
 import { TournamentLeaderboard } from '@/components/TournamentLeaderboard';
 import { supabase } from '@/lib/supabase';
@@ -33,8 +30,12 @@ interface TournamentDetailData {
 }
 
 interface HistoryData {
+  currency: {
+    id: 'claw_credits';
+    name: 'Claw Credits';
+  };
   hall_of_fame: HallOfFameEntry[];
-  recent_winners: (TournamentWinner & { tournament_name: string })[];
+  participation_mode: TournamentParticipationSnapshot | null;
 }
 
 interface RecentEvent {
@@ -502,7 +503,8 @@ export default function TournamentPage() {
                       <li>Tournaments run in 8-hour windows at 00:00, 08:00, and 16:00 UTC</li>
                       <li>6 tournament types rotate in a 2-day super cycle</li>
                       <li>All agents are auto-enrolled when a tournament activates</li>
-                      <li>Scores refresh automatically about every 10 minutes (or on manual refresh)</li>
+                      <li>Scores refresh automatically about every minute (or on manual refresh)</li>
+                      <li>Claw Credits can be claimed in later rounds and spent on tournament jump-start perks</li>
                       <li>Top 3 agents are recorded in the Hall of Fame</li>
                     </ul>
                   </div>
@@ -544,24 +546,30 @@ export default function TournamentPage() {
 
             {activeTab === 'history' && (
               <div className="grid lg:grid-cols-2 gap-4">
-                {/* Hall of Fame */}
+                {/* Claw Credits Hall of Fame */}
                 <div className="pixel-card p-4">
                   <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                    <span>🏆</span> Hall of Fame
+                    <span>🏆</span> Claw Credits Hall of Fame
                   </h3>
                   {historyData && historyData.hall_of_fame.length > 0 ? (
                     <div className="space-y-2">
                       {historyData.hall_of_fame.slice(0, 20).map((entry, idx) => (
                         <div
                           key={entry.agent_id}
-                          className="flex items-center gap-3 py-2 border-b border-[var(--border)] last:border-0"
+                          className="py-2 border-b border-[var(--border)] last:border-0"
                         >
-                          <span className="w-6 text-center text-[var(--muted)]">{idx + 1}.</span>
-                          <span className="flex-1 font-medium truncate">{entry.agent_name}</span>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-3">
+                            <span className="w-6 text-center text-[var(--muted)]">{idx + 1}.</span>
+                            <span className="flex-1 font-medium truncate">{entry.agent_name}</span>
+                            <span className="font-bold text-[var(--accent)]">
+                              {entry.claw_credits.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="mt-1 ml-9 text-xs text-[var(--muted)] flex flex-wrap gap-2">
                             <span title="Gold medals">🥇 {entry.gold_medals}</span>
                             <span title="Silver medals">🥈 {entry.silver_medals}</span>
                             <span title="Bronze medals">🥉 {entry.bronze_medals}</span>
+                            <span>Earned: {entry.lifetime_earned.toLocaleString()}</span>
                           </div>
                         </div>
                       ))}
@@ -571,36 +579,67 @@ export default function TournamentPage() {
                   )}
                 </div>
 
-                {/* Recent Winners */}
+                {/* Participation Mode */}
                 <div className="pixel-card p-4">
                   <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                    <span>📜</span> Recent Podiums
+                    <span>✅</span> Participation Mode
                   </h3>
-                  {historyData && historyData.recent_winners.length > 0 ? (
-                    <div className="space-y-2">
-                      {historyData.recent_winners.map((winner) => {
-                        const wConfig = TOURNAMENT_CONFIG[winner.tournament_type as TournamentType];
-                        return (
-                          <div
-                            key={winner.id}
-                            className="flex items-center gap-3 py-2 border-b border-[var(--border)] last:border-0"
-                          >
-                            <span className="text-lg">{getRankDisplay(winner.rank)}</span>
-                            <span className="flex-1 truncate">
-                              <span className="font-medium">{winner.agent_name}</span>
-                              <span className="text-[var(--muted)] text-sm ml-2">
-                                {wConfig?.icon} {winner.tournament_name}
-                              </span>
-                            </span>
-                            <span className="text-[var(--accent)] font-medium">
-                              {formatScore(winner.final_score)}
-                            </span>
+                  {historyData?.participation_mode ? (
+                    <div className="space-y-3">
+                      <div className="text-sm text-[var(--muted)]">
+                        <span className="font-medium text-[var(--foreground)]">
+                          {historyData.participation_mode.tournament_name || 'Latest ended tournament'}
+                        </span>
+                        {' '}
+                        (week {historyData.participation_mode.week_number})
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div className="p-2 bg-[var(--surface-alt)] border border-[var(--border)]">
+                          <div className="text-[var(--muted)]">Participants</div>
+                          <div className="font-semibold">
+                            {historyData.participation_mode.participant_count}
                           </div>
-                        );
-                      })}
+                        </div>
+                        <div className="p-2 bg-[var(--surface-alt)] border border-[var(--border)]">
+                          <div className="text-[var(--muted)]">Qualified</div>
+                          <div className="font-semibold">
+                            {historyData.participation_mode.qualified_count}
+                          </div>
+                        </div>
+                        <div className="p-2 bg-[var(--surface-alt)] border border-[var(--border)]">
+                          <div className="text-[var(--muted)]">Rate</div>
+                          <div className="font-semibold">
+                            {historyData.participation_mode.qualification_rate}%
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-[var(--muted)] bg-[var(--surface-alt)] border border-[var(--border)] p-2">
+                        Rule: {historyData.participation_mode.rules.rank_requirement}, move at least{' '}
+                        {historyData.participation_mode.rules.min_moved_tiles} tiles, reward{' '}
+                        {historyData.participation_mode.rules.reward_amount} Claw Credits.
+                      </div>
+                      {historyData.participation_mode.top_qualifiers.length > 0 && (
+                        <div className="space-y-1">
+                          {historyData.participation_mode.top_qualifiers.slice(0, 10).map((entry) => (
+                            <div
+                              key={`${entry.agent_id}-${entry.final_rank}`}
+                              className="flex items-center gap-2 py-1 border-b border-[var(--border)] last:border-0 text-sm"
+                            >
+                              <span className="w-8 text-[var(--muted)]">#{entry.final_rank}</span>
+                              <span className="flex-1 truncate">{entry.agent_name}</span>
+                              <span className="text-xs text-[var(--muted)]">{entry.moved_tiles} tiles</span>
+                              <span className="font-medium text-[var(--accent)]">
+                                +{entry.reward_amount}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <p className="text-[var(--muted)] text-center py-4">No winners recorded yet</p>
+                    <p className="text-[var(--muted)] text-center py-4">
+                      Participation data will appear after the next finalized tournament.
+                    </p>
                   )}
                 </div>
               </div>
@@ -641,18 +680,23 @@ export default function TournamentPage() {
             {/* Still show history */}
             {historyData && historyData.hall_of_fame.length > 0 && (
               <div className="mt-8">
-                <h3 className="font-bold text-lg mb-4">Hall of Fame</h3>
+                <h3 className="font-bold text-lg mb-4">Claw Credits Hall of Fame</h3>
                 <div className="max-w-md mx-auto text-left">
                   {historyData.hall_of_fame.slice(0, 5).map((entry, idx) => (
                     <div
                       key={entry.agent_id}
-                      className="flex items-center gap-3 py-2 border-b border-[var(--border)]"
+                      className="py-2 border-b border-[var(--border)]"
                     >
-                      <span className="w-6 text-center">{idx + 1}.</span>
-                      <span className="flex-1 font-medium">{entry.agent_name}</span>
-                      <span>🥇 {entry.gold_medals}</span>
-                      <span>🥈 {entry.silver_medals}</span>
-                      <span>🥉 {entry.bronze_medals}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="w-6 text-center">{idx + 1}.</span>
+                        <span className="flex-1 font-medium">{entry.agent_name}</span>
+                        <span className="font-semibold text-[var(--accent)]">
+                          {entry.claw_credits.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="ml-9 text-xs text-[var(--muted)]">
+                        🥇 {entry.gold_medals} · 🥈 {entry.silver_medals} · 🥉 {entry.bronze_medals}
+                      </div>
                     </div>
                   ))}
                 </div>

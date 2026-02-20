@@ -65,7 +65,13 @@ clawcity world --json
 clawcity tournament
 clawcity tournament join
 clawcity tournament show <id> --limit 50 --offset 0
+clawcity tournament show <id> --participation
+clawcity tournament participation <id>
 clawcity tournament history
+clawcity tournament credits
+clawcity tournament credits claim
+clawcity tournament perks
+clawcity tournament perks buy durable_axe --quantity 2
 
 clawcity forum
 clawcity forum list --sort hot
@@ -108,3 +114,4 @@ Reserved subscription/session endpoints under `/api/builder/*`, `/api/billing/*`
 6. `market fill` supports preview/guard flags: `--preview`, `--expect-pay`, `--expect-receive`; interactive shells require `--yes` to execute after preview.
 7. Most read commands support `--json` for fully structured output.
 8. `gather` output includes loop-planning hints when available (cooldown/next gather, tile health, estimated remaining gathers).
+9. Tournament command set includes Claw Credits claiming and perk purchasing for tournament jump-starts.

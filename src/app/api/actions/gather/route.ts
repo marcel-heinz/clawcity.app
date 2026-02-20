@@ -25,6 +25,7 @@ import {
 import { calculateResourceCap } from '@/lib/buildings';
 import { isTileHarvestable } from '@/lib/tile-state';
 import { buildGatherCooldownMeta, buildGatherTileIntel } from '@/lib/gather-intel';
+import { consumeDurableAxeUse, getActiveStorageBonus } from '@/lib/claw-credits';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -443,6 +444,25 @@ export async function POST(request: NextRequest) {
       };
     }
 
+    // Durable Axe perk: same gather class as lumber axe (+30% on forest), but
+    // tracked as tournament perk uses instead of inventory item uses.
+    let durableAxeApplied = false;
+    let durableAxeUsesRemaining = 0;
+    const durableAxeMultiplier = 1.3;
+    if (terrain === 'forest') {
+      const durableAxeResult = await consumeDurableAxeUse(supabase, agent.id);
+      if (durableAxeResult.applied) {
+        durableAxeApplied = true;
+        durableAxeUsesRemaining = durableAxeResult.usesRemaining;
+        gathered = {
+          gold: Math.floor(gathered.gold * durableAxeMultiplier),
+          wood: Math.floor(gathered.wood * durableAxeMultiplier),
+          food: Math.floor(gathered.food * durableAxeMultiplier),
+          stone: Math.floor(gathered.stone * durableAxeMultiplier),
+        };
+      }
+    }
+
     // Decrement tool uses for items that applied bonuses
     const gatherItemsUsed = getGatherItemsToUse(agentItems, terrain);
     for (const item of agentItems) {
@@ -505,7 +525,8 @@ export async function POST(request: NextRequest) {
     } catch {
       // If building columns don't exist yet, continue without cap
     }
-    const resourceCap = calculateResourceCap(storageCount);
+    const storageBonusCap = await getActiveStorageBonus(supabase, agent.id);
+    const resourceCap = calculateResourceCap(storageCount) + storageBonusCap;
 
     // Apply resource cap: can't gather above cap (excess is lost)
     gathered = {
@@ -581,6 +602,10 @@ export async function POST(request: NextRequest) {
           multiplier: itemBonusMultiplier,
           items_used: gatherItemsUsed.map(i => i.itemName),
         } : null,
+        durable_axe_bonus: durableAxeApplied ? {
+          multiplier: durableAxeMultiplier,
+          uses_remaining: durableAxeUsesRemaining,
+        } : null,
       },
       location: { x: agent.x, y: agent.y },
     });
@@ -609,6 +634,9 @@ export async function POST(request: NextRequest) {
     const itemText = gatherItemsUsed.length > 0
       ? ` [ITEMS: ${gatherItemsUsed.map(i => i.itemName).join(', ')} +${itemBonusPercent}%]`
       : '';
+    const durableAxeText = durableAxeApplied
+      ? ` [PERK: Durable Axe +30% (${durableAxeUsesRemaining} uses left)]`
+      : '';
 
     // Build penalty/efficiency text
     const efficiencyParts: string[] = [];
@@ -625,8 +653,8 @@ export async function POST(request: NextRequest) {
     const staminaText = ` Stamina cost: ${staminaCost} food.`;
 
     const message = gatheredItems
-      ? `You gathered ${gatheredItems} from the ${terrain}${bonusText}${eventText}${itemText}${penaltyText}.${staminaText}${depletionText}`
-      : `You searched the ${terrain} but found nothing this time.${eventText}${itemText}${penaltyText}${staminaText}${depletionText}`;
+      ? `You gathered ${gatheredItems} from the ${terrain}${bonusText}${eventText}${itemText}${durableAxeText}${penaltyText}.${staminaText}${depletionText}`
+      : `You searched the ${terrain} but found nothing this time.${eventText}${itemText}${durableAxeText}${penaltyText}${staminaText}${depletionText}`;
 
     // Include any new announcements in the response
     const responseData = await withAnnouncements(agent, {
@@ -662,6 +690,16 @@ export async function POST(request: NextRequest) {
         bonus_percent: itemBonusPercent,
         items_used: gatherItemsUsed.map(i => ({ id: i.itemId, name: i.itemName })),
       } : null,
+      durable_axe_bonus: durableAxeApplied ? {
+        multiplier: durableAxeMultiplier,
+        bonus_percent: 30,
+        uses_remaining: durableAxeUsesRemaining,
+      } : null,
+      resource_cap_breakdown: {
+        base: calculateResourceCap(storageCount),
+        claw_credit_storage_bonus: storageBonusCap,
+        total: resourceCap,
+      },
       inventory: {
         gold: newGold,
         wood: newWood,

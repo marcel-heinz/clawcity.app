@@ -44,6 +44,10 @@ export interface Agent {
   last_build_at?: string | null;
   // Avatar customization
   avatar?: AgentAvatar;
+  // Tournament currency (persistent across resets)
+  claw_credits?: number;
+  claw_credits_lifetime_earned?: number;
+  claw_credits_lifetime_spent?: number;
 }
 
 export interface AgentPublic {
@@ -83,6 +87,10 @@ export interface AgentLeaderboard extends AgentPublic {
   // X account pairing
   claimed?: boolean;
   claimed_by_twitter?: string | null;
+  // Tournament currency (persistent across tournaments)
+  claw_credits?: number;
+  claw_credits_lifetime_earned?: number;
+  claw_credits_lifetime_spent?: number;
 }
 
 // World types

@@ -3,6 +3,7 @@ import { authenticateAgent, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { calculateResourceCap } from '@/lib/buildings';
 import { calculateWealthBreakdown } from '@/lib/types';
+import { getActiveStorageBonus } from '@/lib/claw-credits';
 
 /**
  * GET /api/agents/me/summary
@@ -77,7 +78,8 @@ export async function GET(request: NextRequest) {
     // trades table may not exist
   }
 
-  const resourceCap = calculateResourceCap(storageCount);
+  const storageBonusCap = await getActiveStorageBonus(supabase, agent.id);
+  const resourceCap = calculateResourceCap(storageCount) + storageBonusCap;
   const wealthBreakdown = calculateWealthBreakdown({
     gold: agent.gold,
     wood: agent.wood,
@@ -100,7 +102,7 @@ export async function GET(request: NextRequest) {
     `G:${agent.gold} W:${agent.wood} F:${agent.food} S:${agent.stone}`,
     `Wealth:${wealthBreakdown.total}`,
     `Rep:${agent.reputation}`,
-    `Cap:${resourceCap}`,
+    `Cap:${resourceCap}${storageBonusCap > 0 ? ` (+${storageBonusCap} perk)` : ''}`,
     `${territoryCount} territories`,
     `${pendingTradeCount} trades`,
     warnings.length > 0 ? `⚠ ${warnings.join(', ')}` : '',

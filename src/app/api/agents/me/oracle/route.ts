@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
             : null,
           medals: {
             now: 'Podium placement awards gold, silver, and bronze medals.',
-            future: 'Medals are planned to convert into tournament credits in a future deployment.',
+            future: 'Claw Credits are now awarded from medals and can be claimed in later rounds for tournament perks.',
           },
         },
         progress,

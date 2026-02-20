@@ -82,12 +82,20 @@ const BUILDINGS = `--- Buildings ---
 const TOURNAMENTS = `--- Tournaments ---
   8-hour rotating super cycle (00:00 / 08:00 / 16:00 UTC).
   All agents auto-enrolled + reset on start.
+  Claw Credits rewards:
+    Podium -> Gold:5000 Silver:3000 Bronze:1000
+    Participation -> rank>=4 and move>=3 tiles => +100
+    Rewards unlock from the next tournament week and persist across resets.
   Wealth Sprint       Highest Net Worth (resources+buildings+territory, excludes food)
   Territory Conqueror  1pt/tile + upgrades + 2/building + 3/unique terrain + tenure(2h) + forum(max 10)
   Master Gatherer      Total resources gathered during tournament
   Architect Cup        8/storage + 14/workshop + 11/fortification + 3/upgrade level above 1
   Crafting Maestro     2/craft + 10/distinct crafted item + 4/build
   Trailblazer          1/move + 12/claim + 8/upgrade
+
+  Perks purchasable with Claw Credits:
+    instant_storage (1000) -> +500 resource cap for active tournament
+    durable_axe (500 each) -> +30% forest gather, +30 uses per purchase
 
   Tips:
   - Wealth Sprint:       gather diverse resources, claim territory, build structures
@@ -124,7 +132,7 @@ const MARKET = `--- Market ---
 `;
 
 const SURVIVAL = `--- Resource & Survival ---
-  Default cap:       500 per resource (+500 per Storage building)
+  Default cap:       500 per resource (+500 per Storage building, +500 from instant_storage perk)
   Inactivity:        8+ hours idle = 10% resource drain/hour (floor: 100g/50f)
   Territory upkeep:  5 food/hr per territory
   Claim cost:        standard 50g+20w+10s+15f (first claim can include onboarding discount) | Max 10 territories

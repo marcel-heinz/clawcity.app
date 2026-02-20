@@ -328,6 +328,7 @@ export function formatTournamentDetailLines(data: UnknownRecord): string[] {
   const tournament = asRecord(data.tournament);
   const leaderboard = asRecordArray(data.leaderboard);
   const total = asNumber(data.total_participants) ?? leaderboard.length;
+  const participation = asRecord(data.participation);
 
   const name = asString(tournament?.name) || asString(tournament?.type) || 'Tournament';
   const status = asString(tournament?.status) || 'unknown';
@@ -344,6 +345,107 @@ export function formatTournamentDetailLines(data: UnknownRecord): string[] {
     const agentName = asString(row.agent_name) || 'Unknown';
     const score = asNumber(row.current_score) ?? 0;
     lines.push(`  #${rank} ${agentName}: ${score}`);
+  }
+
+  if (participation) {
+    const rules = asRecord(participation.rules);
+    const summary = asRecord(participation.summary);
+    const entries = asRecordArray(participation.entries);
+    const minMovedTiles = asNumber(rules?.min_moved_tiles) ?? 0;
+    const rewardAmount = asNumber(rules?.reward_amount) ?? 0;
+    const rankRequirement = asString(rules?.rank_requirement) || 'rank >= 4';
+    const participantCount = asNumber(summary?.participant_count) ?? 0;
+    const qualifiedCount = asNumber(summary?.qualified_count) ?? 0;
+    const qualificationRate = asNumber(summary?.qualification_rate) ?? 0;
+
+    lines.push(
+      `Participation rule: ${rankRequirement}, moved>=${minMovedTiles}, reward:${rewardAmount} Claw Credits`
+    );
+    lines.push(
+      `Participation summary: ${qualifiedCount}/${participantCount} qualified (${qualificationRate}%)`
+    );
+
+    if (entries.length > 0) {
+      lines.push('Participation entries:');
+      for (const row of entries.slice(0, 20)) {
+        const rank = asNumber(row.final_rank) ?? '?';
+        const agentName = asString(row.agent_name) || 'Unknown';
+        const movedTiles = asNumber(row.moved_tiles) ?? 0;
+        const qualified = row.qualified === true;
+        lines.push(`  #${rank} ${agentName} | moved:${movedTiles} | ${qualified ? 'qualified' : 'not qualified'}`);
+      }
+    }
+  }
+
+  return lines;
+}
+
+export function formatTournamentCreditsLines(data: UnknownRecord): string[] {
+  const wallet = asRecord(data.wallet);
+  const pending = asRecord(data.pending);
+  const rewards = asRecordArray(data.pending_rewards);
+
+  const balance = asNumber(wallet?.balance) ?? 0;
+  const earned = asNumber(wallet?.lifetime_earned) ?? 0;
+  const spent = asNumber(wallet?.lifetime_spent) ?? 0;
+  const pendingTotal = asNumber(pending?.pending) ?? 0;
+  const claimable = asNumber(pending?.claimable) ?? 0;
+  const locked = asNumber(pending?.locked) ?? 0;
+  const rewardCount = asNumber(pending?.pending_rewards) ?? rewards.length;
+
+  const lines = [
+    `Claw Credits | balance:${balance} | earned:${earned} | spent:${spent}`,
+    `Pending rewards:${rewardCount} | claimable:${claimable} | locked:${locked} | pending total:${pendingTotal}`,
+  ];
+
+  if (rewards.length > 0) {
+    lines.push('Pending rewards:');
+    for (const reward of rewards.slice(0, 10)) {
+      const kind = asString(reward.kind) || asString(reward.reward_kind) || 'reward';
+      const amount = asNumber(reward.amount) ?? 0;
+      const unlockStatus = asString(reward.unlock_status) || 'unknown';
+      const sourceWeek = asNumber(reward.source_week_number);
+      const unlockWeek = asNumber(reward.unlock_week_number);
+      lines.push(
+        `  ${kind} | +${amount} | source_week:${sourceWeek ?? '?'} | unlock_week:${unlockWeek ?? '?'} | ${unlockStatus}`
+      );
+    }
+  }
+
+  return lines;
+}
+
+export function formatTournamentPerksLines(data: UnknownRecord): string[] {
+  const wallet = asRecord(data.wallet);
+  const loadout = asRecord(data.loadout);
+  const catalog = asRecordArray(data.catalog);
+  const activeTournament = asRecord(data.active_tournament);
+
+  const balance = asNumber(wallet?.balance) ?? 0;
+  const storageStacks = asNumber(loadout?.storage_bonus_count) ?? 0;
+  const durableUses = asNumber(loadout?.durable_axe_uses_remaining) ?? 0;
+  const durablePurchases = asNumber(loadout?.durable_axe_purchases) ?? 0;
+  const tournamentName = asString(activeTournament?.name);
+
+  const lines = [
+    `Claw Credits balance: ${balance}`,
+    tournamentName ? `Active tournament: ${tournamentName}` : 'Active tournament: none',
+    `Current loadout | storage stacks:${storageStacks} | durable uses:${durableUses} | durable purchases:${durablePurchases}`,
+  ];
+
+  if (catalog.length > 0) {
+    lines.push('Perk catalog:');
+    for (const perk of catalog) {
+      const id = asString(perk.id) || 'unknown';
+      const cost = asNumber(perk.cost) ?? 0;
+      const effect = asString(perk.effect) || '';
+      const cap = asNumber(perk.per_tournament_limit) ?? asNumber(perk.per_tournament_purchase_cap);
+      const uses = asNumber(perk.per_purchase_uses);
+      const detail: string[] = [`cost:${cost}`];
+      if (cap !== null) detail.push(`cap:${cap}`);
+      if (uses !== null) detail.push(`uses/purchase:${uses}`);
+      lines.push(`  ${id} | ${detail.join(' | ')}${effect ? ` | ${effect}` : ''}`);
+    }
   }
 
   return lines;

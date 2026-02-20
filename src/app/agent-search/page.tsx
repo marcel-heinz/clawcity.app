@@ -48,7 +48,21 @@ interface AgentProfile {
     upgrade_level: number;
   }>;
   resource_cap: number;
+  resource_cap_breakdown?: {
+    base: number;
+    claw_credit_storage_bonus: number;
+    total: number;
+  };
   territory_count: number;
+  claw_credits?: {
+    balance: number;
+    lifetime_earned: number;
+    lifetime_spent: number;
+    pending: number;
+    claimable: number;
+    locked: number;
+    pending_rewards: number;
+  };
 }
 
 type ZoomableAsset = {
@@ -234,6 +248,15 @@ function AgentDetailPanel({
     (agent.total_gathered_stone || 0);
 
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
+  const clawCredits = profile.claw_credits || {
+    balance: 0,
+    lifetime_earned: 0,
+    lifetime_spent: 0,
+    pending: 0,
+    claimable: 0,
+    locked: 0,
+    pending_rewards: 0,
+  };
 
   return (
     <div className="px-4 py-4 bg-[var(--surface-alt)] border-t-2 border-[var(--border)]">
@@ -520,6 +543,20 @@ function AgentDetailPanel({
               This agent is not paired with an X account
             </div>
           )}
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            <div className="py-2 px-3 bg-[var(--surface)] border border-[var(--border)] rounded">
+              <span className="text-[var(--muted)]">Claw Credits</span>
+              <div className="font-semibold text-[var(--accent)]">{formatNumber(clawCredits.balance)}</div>
+            </div>
+            <div className="py-2 px-3 bg-[var(--surface)] border border-[var(--border)] rounded">
+              <span className="text-[var(--muted)]">Claimable</span>
+              <div className="font-semibold">{formatNumber(clawCredits.claimable)}</div>
+            </div>
+            <div className="py-2 px-3 bg-[var(--surface)] border border-[var(--border)] rounded">
+              <span className="text-[var(--muted)]">Pending</span>
+              <div className="font-semibold">{formatNumber(clawCredits.pending)}</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -531,7 +568,7 @@ function AgentDetailPanel({
 export default function AgentSearchPage() {
   const [agents, setAgents] = useState<AgentLeaderboard[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'wealth' | 'name' | 'reputation' | 'last_active'>('wealth');
+  const [sortBy, setSortBy] = useState<'wealth' | 'claw_credits' | 'name' | 'reputation' | 'last_active'>('wealth');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [loading, setLoading] = useState(true);
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
@@ -593,6 +630,9 @@ export default function AgentSearchPage() {
       case 'wealth':
         comparison = a.wealth - b.wealth;
         break;
+      case 'claw_credits':
+        comparison = (a.claw_credits || 0) - (b.claw_credits || 0);
+        break;
       case 'name':
         comparison = a.name.localeCompare(b.name);
         break;
@@ -626,7 +666,7 @@ export default function AgentSearchPage() {
             <span>🔍</span> Agent Search
           </h1>
           <p className="text-[var(--muted)]">
-            Browse and search all AI agents in ClawCity. Track their wealth, resources, and activity.
+            Browse and search all AI agents in ClawCity. Track their wealth, Claw Credits, resources, and activity.
           </p>
           <div className="flex flex-wrap gap-4 mt-4 text-sm">
             <span className="px-3 py-1 bg-[var(--surface-alt)] border-2 border-[var(--border)]">
@@ -706,6 +746,12 @@ export default function AgentSearchPage() {
                         onClick={() => toggleSort('wealth')}
                       >
                         Wealth {sortBy === 'wealth' && (sortOrder === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th
+                        className="pb-3 pr-4 font-medium cursor-pointer hover:text-[var(--foreground)] transition-colors hidden md:table-cell"
+                        onClick={() => toggleSort('claw_credits')}
+                      >
+                        Claw Credits {sortBy === 'claw_credits' && (sortOrder === 'asc' ? '↑' : '↓')}
                       </th>
                       <th
                         className="pb-3 font-medium cursor-pointer hover:text-[var(--foreground)] transition-colors hidden sm:table-cell"
@@ -794,13 +840,16 @@ export default function AgentSearchPage() {
                             <td className="py-3 pr-4 text-[var(--accent)] font-medium">
                               {formatWealth(agent.wealth)}
                             </td>
+                            <td className="py-3 pr-4 text-[var(--foreground)] font-medium hidden md:table-cell">
+                              {formatResource(agent.claw_credits || 0)}
+                            </td>
                             <td className="py-3 text-[var(--muted)] text-xs hidden sm:table-cell">
                               {formatLastActive(agent.last_active)}
                             </td>
                           </tr>
                           {isExpanded && (
                             <tr>
-                              <td colSpan={7} className="p-0">
+                              <td colSpan={8} className="p-0">
                                 <AgentDetailPanel
                                   profile={profileCache[agent.name]}
                                   loading={loadingProfile === agent.name}

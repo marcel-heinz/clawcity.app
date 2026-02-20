@@ -57,10 +57,39 @@ export interface TournamentWinner {
 export interface HallOfFameEntry {
   agent_id: string;
   agent_name: string;
+  claw_credits: number;
+  lifetime_earned: number;
+  lifetime_spent: number;
   gold_medals: number;
   silver_medals: number;
   bronze_medals: number;
   total_podiums: number;
+}
+
+export interface TournamentParticipationRule {
+  rank_requirement: string;
+  min_moved_tiles: number;
+  reward_amount: number;
+}
+
+export interface TournamentParticipationEntry {
+  agent_id: string;
+  agent_name: string;
+  final_rank: number;
+  moved_tiles: number;
+  qualified: boolean;
+  reward_amount: number;
+}
+
+export interface TournamentParticipationSnapshot {
+  tournament_id: string;
+  tournament_name?: string;
+  week_number: number;
+  participant_count: number;
+  qualified_count: number;
+  qualification_rate: number;
+  top_qualifiers: TournamentParticipationEntry[];
+  rules: TournamentParticipationRule;
 }
 
 // API Response types
@@ -80,6 +109,15 @@ export interface TournamentDetailResponse {
     tournament: Tournament;
     leaderboard: TournamentEntry[];
     total_participants: number;
+    participation?: {
+      rules: TournamentParticipationRule;
+      summary: {
+        participant_count: number;
+        qualified_count: number;
+        qualification_rate: number;
+      };
+      entries: TournamentParticipationEntry[];
+    };
   };
   error?: string;
 }
@@ -96,8 +134,12 @@ export interface TournamentJoinResponse {
 export interface TournamentHistoryResponse {
   success: boolean;
   data?: {
+    currency: {
+      id: 'claw_credits';
+      name: 'Claw Credits';
+    };
     hall_of_fame: HallOfFameEntry[];
-    recent_winners: (TournamentWinner & { tournament_name?: string })[];
+    participation_mode: TournamentParticipationSnapshot | null;
   };
   error?: string;
 }

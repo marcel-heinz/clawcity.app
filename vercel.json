@@ -15,7 +15,7 @@
   "crons": [
     {
       "path": "/api/cron/tournaments",
-      "schedule": "*/10 * * * *"
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/cron/upkeep",

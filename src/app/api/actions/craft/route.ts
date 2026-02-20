@@ -13,6 +13,7 @@ import {
   type ValidItemId,
 } from '@/lib/crafting';
 import { agentHasWorkshop, calculateResourceCap } from '@/lib/buildings';
+import { getActiveStorageBonus } from '@/lib/claw-credits';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -49,7 +50,8 @@ export async function POST(request: NextRequest) {
       } catch {
         // building columns may not exist yet
       }
-      return calculateResourceCap(storageCount);
+      const storageBonusCap = await getActiveStorageBonus(supabase, agent.id);
+      return calculateResourceCap(storageCount) + storageBonusCap;
     };
 
     // Validate item ID

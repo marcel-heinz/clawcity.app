@@ -3,6 +3,7 @@ import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { jsonResponse, errorResponse } from '@/lib/auth';
 import { calculateWealth } from '@/lib/types';
 import { calculateResourceCap } from '@/lib/buildings';
+import { getActiveStorageBonus, getClaimableClawCreditSummary, getClawCreditWallet } from '@/lib/claw-credits';
 
 export async function GET(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch items and tiles in parallel
-    const [itemsResult, tilesResult] = await Promise.all([
+    const [itemsResult, tilesResult, wallet, pendingCredits, storageBonusCap] = await Promise.all([
       supabase
         .from('agent_items')
         .select('item_id, quantity, uses_remaining')
@@ -41,6 +42,9 @@ export async function GET(request: NextRequest) {
         .from('tiles')
         .select('x, y, terrain, building_type, upgrade_level')
         .eq('owner_id', agent.id),
+      getClawCreditWallet(supabase, agent.id),
+      getClaimableClawCreditSummary(supabase, agent.id),
+      getActiveStorageBonus(supabase, agent.id),
     ]);
 
     const items = itemsResult.data || [];
@@ -64,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     // Calculate resource cap based on storage buildings
     const storageCount = buildings.filter(b => b.building_type === 'storage').length;
-    const resourceCap = calculateResourceCap(storageCount);
+    const resourceCap = calculateResourceCap(storageCount) + storageBonusCap;
 
     return jsonResponse({
       success: true,
@@ -79,7 +83,21 @@ export async function GET(request: NextRequest) {
         buildings,
         territories,
         resource_cap: resourceCap,
+        resource_cap_breakdown: {
+          base: calculateResourceCap(storageCount),
+          claw_credit_storage_bonus: storageBonusCap,
+          total: resourceCap,
+        },
         territory_count: territories.length,
+        claw_credits: {
+          balance: wallet.balance,
+          lifetime_earned: wallet.lifetime_earned,
+          lifetime_spent: wallet.lifetime_spent,
+          pending: pendingCredits.pending,
+          claimable: pendingCredits.claimable,
+          locked: pendingCredits.locked,
+          pending_rewards: pendingCredits.pending_rewards,
+        },
       },
     });
   } catch (error) {

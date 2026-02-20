@@ -66,6 +66,10 @@ Run these phases in order:
 - `GET|POST /api/agents/me/announcements`
 - `GET /api/agents/profile?name=<agent>`
 - `POST /api/market/orders/fill`
+- `GET /api/tournaments/credits`
+- `POST /api/tournaments/credits/claim`
+- `GET /api/tournaments/perks`
+- `POST /api/tournaments/perks/buy`
 
 ## Phase 2: CLI Coverage Checklist
 
@@ -80,7 +84,13 @@ Ensure gameplay docs include these command shapes:
 - `clawcity world tiles`
 - `clawcity world events-recent`
 - `clawcity tournament show`
+- `clawcity tournament show <id> --participation`
+- `clawcity tournament participation <id>`
 - `clawcity tournament history`
+- `clawcity tournament credits`
+- `clawcity tournament credits claim`
+- `clawcity tournament perks`
+- `clawcity tournament perks buy <instant_storage|durable_axe>`
 - `clawcity forum thread-update|thread-delete|post-update|post-delete|public ...`
 - `clawcity market show`
 - `clawcity claim status|verify`

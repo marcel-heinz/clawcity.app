@@ -71,6 +71,12 @@ Required checks when updating:
 - text endpoints parse safely (`/api/agents/me/summary`)
 - gather formatter includes planning metadata when available (`Next`, `Health`, `Est`)
 - shop/buy behavior is explicit: `item_id` canonical, legacy `item` compatibility handled server-side
+- tournament economy commands are covered:
+  - `clawcity tournament credits`
+  - `clawcity tournament credits claim`
+  - `clawcity tournament perks`
+  - `clawcity tournament perks buy <instant_storage|durable_axe>`
+  - `clawcity tournament show <id> --participation` / `clawcity tournament participation <id>`
 
 ## Phase 4: Build + Smoke Test
 

@@ -2,9 +2,11 @@ import { Command } from 'commander';
 import { api, handleError } from '../lib/api.js';
 import {
   formatRecentWorldEventsLines,
+  formatTournamentCreditsLines,
   formatTournamentDetailLines,
   formatTournamentJoinLine,
   formatTournamentOverviewLines,
+  formatTournamentPerksLines,
   formatWorldEventsLines,
   formatWorldLeaderboardLines,
   formatWorldStatusLines,
@@ -139,14 +141,16 @@ export function registerWorldCommands(program: Command) {
     .option('-l, --limit <n>', 'Leaderboard page size', '50')
     .option('-o, --offset <n>', 'Leaderboard offset', '0')
     .option('--refresh', 'Refresh scores for active tournament')
+    .option('--participation', 'Include participation qualification snapshot')
     .option('--json', 'Print raw JSON response')
-    .action(async (id: string, opts: { limit: string; offset: string; refresh?: boolean; json?: boolean }) => {
+    .action(async (id: string, opts: { limit: string; offset: string; refresh?: boolean; participation?: boolean; json?: boolean }) => {
       const res = await api(`/api/tournaments/${id}`, {
         profile: 'none',
         query: {
           limit: parseInt(opts.limit, 10) || 50,
           offset: parseInt(opts.offset, 10) || 0,
           refresh: Boolean(opts.refresh),
+          include_participation: Boolean(opts.participation),
         },
       });
       if (!res.ok) handleError(res);
@@ -159,7 +163,7 @@ export function registerWorldCommands(program: Command) {
 
   tournament
     .command('history')
-    .description('Tournament hall of fame and recent winners')
+    .description('Claw Credits hall of fame + participation mode summary')
     .option('--json', 'Print raw JSON response')
     .action(async (opts: { json?: boolean }) => {
       const res = await api('/api/tournaments/history', { profile: 'none' });
@@ -172,15 +176,138 @@ export function registerWorldCommands(program: Command) {
       const hallOfFame = Array.isArray(d.hall_of_fame)
         ? d.hall_of_fame as Array<Record<string, unknown>>
         : [];
+
+      console.log('Claw Credits Hall of Fame:');
       if (hallOfFame.length === 0) {
-        console.log('No tournament history available');
+        console.log('(no entries yet)');
+      } else {
+        for (const winner of hallOfFame.slice(0, 20)) {
+          const credits = Number(winner.claw_credits || 0);
+          const gold = Number(winner.gold_medals || 0);
+          const silver = Number(winner.silver_medals || 0);
+          const bronze = Number(winner.bronze_medals || 0);
+          console.log(
+            `${winner.agent_name || 'Unknown'} | credits:${credits} | medals:${gold}/${silver}/${bronze}`
+          );
+        }
+      }
+
+      const participation = d.participation_mode as Record<string, unknown> | null | undefined;
+      if (participation && typeof participation === 'object') {
+        const rules = participation.rules as Record<string, unknown> | undefined;
+        const participants = Number(participation.participant_count || 0);
+        const qualified = Number(participation.qualified_count || 0);
+        const rate = Number(participation.qualification_rate || 0);
+        const tournamentName = String(participation.tournament_name || 'Latest ended tournament');
+        console.log('');
+        console.log(`Participation mode (${tournamentName}):`);
+        console.log(
+          `Rule: ${String(rules?.rank_requirement || 'rank >= 4')}, moved>=${Number(rules?.min_moved_tiles || 0)}, reward:${Number(rules?.reward_amount || 0)} Claw Credits`
+        );
+        console.log(`Qualified: ${qualified}/${participants} (${rate}%)`);
+      }
+    });
+
+  const credits = tournament
+    .command('credits')
+    .description('View Claw Credits wallet and pending rewards')
+    .option('--json', 'Print raw JSON response')
+    .action(async (opts: { json?: boolean }) => {
+      const res = await api('/api/tournaments/credits');
+      if (!res.ok) handleError(res);
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
         return;
       }
-      for (const winner of hallOfFame.slice(0, 20)) {
-        console.log(
-          `Week ${winner.week_number ?? '?'} | #${winner.rank ?? '?'} ${winner.agent_name || 'Unknown'} | ${winner.tournament_name || winner.tournament_type || 'tournament'} | score:${winner.score ?? winner.final_score ?? 0}`
-        );
+      formatTournamentCreditsLines(res.data as Record<string, unknown>).forEach((line) => console.log(line));
+    });
+
+  credits
+    .command('claim')
+    .description('Claim unlocked Claw Credits')
+    .option('--idempotency-key <key>', 'Optional idempotency key')
+    .option('--json', 'Print raw JSON response')
+    .action(async (opts: { idempotencyKey?: string; json?: boolean }) => {
+      const body: Record<string, string> = {};
+      if (opts.idempotencyKey) {
+        body.idempotency_key = opts.idempotencyKey;
       }
+      const res = await api('/api/tournaments/credits/claim', { method: 'POST', body });
+      if (!res.ok) handleError(res);
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
+        return;
+      }
+      const d = res.data as Record<string, unknown>;
+      const wallet = (d.wallet as Record<string, unknown> | undefined) || {};
+      console.log(
+        `Claimed rewards:${Number(d.claimed_rewards || 0)} | credited:${Number(d.credited_amount || 0)} | balance:${Number(wallet.balance || 0)}`
+      );
+    });
+
+  const perks = tournament
+    .command('perks')
+    .description('View tournament perk catalog and active loadout')
+    .option('--json', 'Print raw JSON response')
+    .action(async (opts: { json?: boolean }) => {
+      const res = await api('/api/tournaments/perks');
+      if (!res.ok) handleError(res);
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
+        return;
+      }
+      formatTournamentPerksLines(res.data as Record<string, unknown>).forEach((line) => console.log(line));
+    });
+
+  perks
+    .command('buy <perkId>')
+    .description('Buy tournament perk with Claw Credits (instant_storage or durable_axe)')
+    .option('-q, --quantity <n>', 'Quantity for stackable perks', '1')
+    .option('--idempotency-key <key>', 'Optional idempotency key')
+    .option('--json', 'Print raw JSON response')
+    .action(async (perkId: string, opts: { quantity: string; idempotencyKey?: string; json?: boolean }) => {
+      const body: Record<string, unknown> = {
+        perk_id: perkId,
+        quantity: parseInt(opts.quantity, 10) || 1,
+      };
+      if (opts.idempotencyKey) {
+        body.idempotency_key = opts.idempotencyKey;
+      }
+      const res = await api('/api/tournaments/perks/buy', { method: 'POST', body });
+      if (!res.ok) handleError(res);
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
+        return;
+      }
+      const d = res.data as Record<string, unknown>;
+      const purchase = (d.purchase as Record<string, unknown> | undefined) || {};
+      const wallet = (d.wallet as Record<string, unknown> | undefined) || {};
+      console.log(
+        `Purchased ${String(purchase.perk_id || perkId)} x${Number(purchase.quantity || 1)} | cost:${Number(purchase.cost || 0)} | balance:${Number(wallet.balance || 0)}`
+      );
+    });
+
+  tournament
+    .command('participation <id>')
+    .description('Show tournament participation qualification data')
+    .option('-l, --limit <n>', 'Entries page size', '50')
+    .option('-o, --offset <n>', 'Entries offset', '0')
+    .option('--json', 'Print raw JSON response')
+    .action(async (id: string, opts: { limit: string; offset: string; json?: boolean }) => {
+      const res = await api(`/api/tournaments/${id}`, {
+        profile: 'none',
+        query: {
+          limit: parseInt(opts.limit, 10) || 50,
+          offset: parseInt(opts.offset, 10) || 0,
+          include_participation: true,
+        },
+      });
+      if (!res.ok) handleError(res);
+      if (opts.json) {
+        console.log(JSON.stringify(res.data, null, 2));
+        return;
+      }
+      formatTournamentDetailLines(res.data as Record<string, unknown>).forEach((line) => console.log(line));
     });
 
   // Backwards-compatible alias.

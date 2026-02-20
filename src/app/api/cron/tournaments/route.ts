@@ -7,13 +7,13 @@ import { ensureBaselineMarketLiquidity } from '@/lib/market-liquidity';
 /**
  * GET /api/cron/tournaments
  * 
- * Tournament maintenance cron job (runs every 10 minutes) to:
+ * Tournament maintenance cron job (runs every minute) to:
  * 1. Finalize any active tournaments that have ended
  * 2. Activate any upcoming tournaments that should start
  * 3. Refresh scores for active tournaments (near-live leaderboard)
  * 4. Create next tournament if none upcoming
  * 
- * Scheduled via Vercel Cron every 10 minutes.
+ * Scheduled via Vercel Cron every minute.
  */
 export async function GET(request: NextRequest) {
   // Verify cron secret to prevent unauthorized calls

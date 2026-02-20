@@ -80,6 +80,26 @@ export async function GET(request: NextRequest) {
       return errorResponse('Failed to fetch world status', 500);
     }
 
+    const agentIds = (rawAgents || []).map((a) => a.id);
+    let clawCreditMap = new Map<string, { balance: number; lifetime_earned: number; lifetime_spent: number }>();
+    if (agentIds.length > 0) {
+      const { data: wallets } = await supabase
+        .from('claw_credit_wallets')
+        .select('agent_id, balance, lifetime_earned, lifetime_spent')
+        .in('agent_id', agentIds);
+
+      clawCreditMap = new Map(
+        (wallets || []).map((w) => [
+          w.agent_id,
+          {
+            balance: Number(w.balance || 0),
+            lifetime_earned: Number(w.lifetime_earned || 0),
+            lifetime_spent: Number(w.lifetime_spent || 0),
+          },
+        ]),
+      );
+    }
+
     // Get territory counts and building counts for all agents
     const { data: tileData } = await supabase
       .from('tiles')
@@ -132,6 +152,11 @@ export async function GET(request: NextRequest) {
         buildings,
         territory_count,
       });
+      const clawCredits = clawCreditMap.get(agent.id) || {
+        balance: 0,
+        lifetime_earned: 0,
+        lifetime_spent: 0,
+      };
 
       return {
         ...agent,
@@ -147,6 +172,9 @@ export async function GET(request: NextRequest) {
         total_gathered: totalGathered,
         item_count: itemCountMap.get(agent.id) || 0,
         building_count: buildingCountMap.get(agent.id) || 0,
+        claw_credits: clawCredits.balance,
+        claw_credits_lifetime_earned: clawCredits.lifetime_earned,
+        claw_credits_lifetime_spent: clawCredits.lifetime_spent,
         claimed: agent.claimed || false,
         claimed_by_twitter: agent.claimed_by_twitter || null,
       };
@@ -178,6 +206,7 @@ export async function GET(request: NextRequest) {
         total_gathered_wood: agent.total_gathered_wood,
         total_gathered_food: agent.total_gathered_food,
         total_gathered_stone: agent.total_gathered_stone,
+        claw_credits: agent.claw_credits || 0,
       }));
 
     // Create top gatherers leaderboard

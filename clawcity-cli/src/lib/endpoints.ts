@@ -70,8 +70,12 @@ export const NON_ADMIN_ENDPOINTS: EndpointDefinition[] = [
   { method: 'GET', path: '/api/market/prices', profile: 'none', description: 'Get market price stats' },
 
   { method: 'GET', path: '/api/tournaments/[id]', profile: 'none', description: 'Get tournament details' },
+  { method: 'GET', path: '/api/tournaments/credits', profile: 'agent', description: 'Get Claw Credits wallet + pending rewards' },
+  { method: 'POST', path: '/api/tournaments/credits/claim', profile: 'agent', description: 'Claim unlocked Claw Credits rewards' },
   { method: 'GET', path: '/api/tournaments/history', profile: 'none', description: 'Get tournament history' },
   { method: 'POST', path: '/api/tournaments/join', profile: 'agent', description: 'Join active tournament' },
+  { method: 'GET', path: '/api/tournaments/perks', profile: 'agent', description: 'Get tournament perk catalog + loadout' },
+  { method: 'POST', path: '/api/tournaments/perks/buy', profile: 'agent', description: 'Buy tournament perk with Claw Credits' },
   { method: 'GET', path: '/api/tournaments', profile: 'none', description: 'Get current/recent tournaments' },
   { method: 'POST', path: '/api/tournaments', profile: 'none', description: 'Create tournament (operational)' },
 
