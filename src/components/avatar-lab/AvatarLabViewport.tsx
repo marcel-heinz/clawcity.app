@@ -45,8 +45,8 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
     if (!container) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0d131b);
-    scene.fog = new THREE.Fog(0x0d131b, 5, 24);
+    scene.background = new THREE.Color(0xffffff);
+    scene.fog = new THREE.Fog(0xffffff, 8, 30);
 
     const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 80);
     camera.position.set(0, 1.25, 3.6);
@@ -61,10 +61,10 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     container.appendChild(renderer.domElement);
 
-    const ambient = new THREE.AmbientLight(0x88a8cf, 0.55);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.72);
     scene.add(ambient);
 
-    const key = new THREE.DirectionalLight(0xfff3d9, 1.2);
+    const key = new THREE.DirectionalLight(0xffffff, 1.1);
     key.position.set(2.8, 3.8, 3.6);
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
@@ -77,16 +77,16 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
     scene.add(key);
     scene.add(key.target);
 
-    const rim = new THREE.DirectionalLight(0x8cb8ff, 0.5);
+    const rim = new THREE.DirectionalLight(0xcfd8e6, 0.35);
     rim.position.set(-2, 1.6, -2.4);
     scene.add(rim);
 
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(4.5, 48),
       new THREE.MeshStandardMaterial({
-        color: 0x0a0f16,
-        roughness: 0.95,
-        metalness: 0.02,
+        color: 0xffffff,
+        roughness: 0.98,
+        metalness: 0.0,
       })
     );
     floor.receiveShadow = true;
@@ -275,7 +275,7 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
       <div className="mb-2 text-sm font-semibold text-[var(--foreground)]">{title}</div>
       <div
         ref={containerRef}
-        className="h-[320px] w-full overflow-hidden rounded border border-[var(--border)] bg-black/30"
+        className="h-[320px] w-full overflow-hidden rounded border border-[var(--border)] bg-white"
       />
       <div className="mt-2 text-xs text-[var(--muted)]">
         Drag to orbit • Scroll to zoom
