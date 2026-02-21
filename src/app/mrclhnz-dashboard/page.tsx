@@ -505,6 +505,12 @@ export default function AdminDashboard() {
             >
               🧪 Render Lab
             </Link>
+            <Link
+              href={`${adminPath}/avatar-lab`}
+              className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors flex items-center gap-1"
+            >
+              🦀 Avatar Lab
+            </Link>
             <button
               onClick={fetchData}
               disabled={isLoading}

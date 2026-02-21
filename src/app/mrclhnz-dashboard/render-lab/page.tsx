@@ -443,6 +443,12 @@ export default function RenderLabPage() {
             >
               🚂 Railway
             </Link>
+            <Link
+              href={`${adminPath}/avatar-lab`}
+              className="rounded border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-sm hover:border-[var(--accent)]"
+            >
+              🦀 Avatar Lab
+            </Link>
             <button
               onClick={handleLogout}
               className="rounded border border-red-500/50 bg-red-900/20 px-3 py-1.5 text-sm text-red-400 hover:bg-red-900/40"

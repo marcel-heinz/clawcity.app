@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { jsonResponse, errorResponse } from '@/lib/auth';
 import { calculateWealthBreakdown, AgentLeaderboard } from '@/lib/types';
+import { toPublicAvatarLabView } from '@/lib/avatar-lab';
 
 export async function GET(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -180,6 +181,7 @@ export async function GET(request: NextRequest) {
 
       return {
         ...agent,
+        avatar: toPublicAvatarLabView(agent.name, agent.avatar),
         wealth: wealthBreakdown.total,
         resource_wealth: wealthBreakdown.resource_wealth,
         infrastructure_wealth: wealthBreakdown.infrastructure_wealth,

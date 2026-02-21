@@ -3,6 +3,7 @@ import { verifyAdminSession, isAdminConfigured } from '@/lib/admin-auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { getAllCooldowns } from '@/lib/game-settings';
 import { isRateLimitRedisEnabled } from '@/lib/rate-limit';
+import { toPublicAvatarLabView } from '@/lib/avatar-lab';
 
 interface PerkSpendSummary {
   purchases: number;
@@ -423,6 +424,10 @@ export async function GET(request: NextRequest) {
     }
 
     const clawCredits = await getClawCreditOverview(supabase);
+    const compactAgents = (agents || []).map((agent) => ({
+      ...agent,
+      avatar: toPublicAvatarLabView(agent.name, agent.avatar),
+    }));
 
     return NextResponse.json({
       success: true,
@@ -448,7 +453,7 @@ export async function GET(request: NextRequest) {
           hot_category: hotCategory,
         },
         claw_credits: clawCredits,
-        agents: agents || [],
+        agents: compactAgents,
         recent_events: enrichedEvents,
       },
     });

@@ -4,6 +4,7 @@ import { jsonResponse, errorResponse } from '@/lib/auth';
 import { calculateWealth } from '@/lib/types';
 import { calculateResourceCap } from '@/lib/buildings';
 import { getActiveStorageBonus, getClaimableClawCreditSummary, getClawCreditWallet } from '@/lib/claw-credits';
+import { toPublicAvatarLabView } from '@/lib/avatar-lab';
 
 export async function GET(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -75,6 +76,7 @@ export async function GET(request: NextRequest) {
       data: {
         agent: {
           ...agent,
+          avatar: toPublicAvatarLabView(agent.name, agent.avatar),
           wealth: calculateWealth(agent),
           claimed: agent.claimed || false,
           claimed_by_twitter: agent.claimed_by_twitter || null,
