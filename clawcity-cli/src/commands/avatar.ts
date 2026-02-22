@@ -58,4 +58,37 @@ export function registerAvatarCommands(program: Command) {
       console.log(`Claw:  ${d.avatar.claw_color}`);
       console.log(`Eye:   ${d.avatar.eye_color}`);
     });
+
+  avatar
+    .command('lab-link')
+    .description('Generate one-time Avatar Lab link for the human operator')
+    .option('--ttl <minutes>', 'Link lifetime in minutes (default: 30)')
+    .action(async (opts: { ttl?: string }) => {
+      const body: Record<string, unknown> = {};
+      if (opts.ttl) {
+        const parsed = Number(opts.ttl);
+        if (!Number.isFinite(parsed)) {
+          console.error('Error: --ttl must be a number (minutes).');
+          process.exit(1);
+        }
+        body.ttl_minutes = parsed;
+      }
+
+      const res = await api('/api/agents/me/avatar-lab/link', { method: 'POST', body });
+      if (!res.ok) handleError(res);
+
+      const d = res.data as {
+        url: string;
+        expires_at: string;
+        agent?: { name?: string };
+      };
+
+      console.log('Avatar Lab link generated.');
+      if (d.agent?.name) {
+        console.log(`Agent:      ${d.agent.name}`);
+      }
+      console.log(`URL:        ${d.url}`);
+      console.log(`Expires at: ${d.expires_at}`);
+      console.log('Share this URL with your human operator. It can be used once.');
+    });
 }

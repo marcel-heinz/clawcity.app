@@ -153,6 +153,15 @@ export async function PATCH(request: NextRequest) {
       const rawSkin = body.avatar.skin_data_url;
       if (rawSkin === null || rawSkin === '') {
         delete nextAvatarInput.skin_data_url;
+        delete nextAvatarInput.skin_url;
+      }
+    }
+
+    if ('skin_url' in body.avatar) {
+      const rawSkin = body.avatar.skin_url;
+      if (rawSkin === null || rawSkin === '') {
+        delete nextAvatarInput.skin_data_url;
+        delete nextAvatarInput.skin_url;
       }
     }
 

@@ -25,6 +25,7 @@ export type AvatarAnimationProfile = 'idle' | 'energetic' | 'float';
 export interface AvatarLabConfig extends AgentAvatar {
   model_type?: AvatarLabModelId;
   accent_color?: string;
+  skin_url?: string;
   skin_data_url?: string;
   skin_scale?: number;
   skin_tint_strength?: number;
@@ -36,6 +37,7 @@ export interface AvatarLabConfig extends AgentAvatar {
 export interface PublicAvatarLabView extends AgentAvatar {
   model_type?: AvatarLabModelId;
   accent_color?: string;
+  skin_data_url?: string;
   skin_scale?: number;
   skin_tint_strength?: number;
   material_roughness?: number;
@@ -61,6 +63,7 @@ const HEX_REGEX = /^#[0-9a-fA-F]{6}$/;
 const DEFAULT_MODEL: AvatarLabModelId = 'crab';
 const DEFAULT_ANIMATION: AvatarAnimationProfile = 'idle';
 const MAX_SKIN_DATA_URL_LENGTH = 450_000;
+const MAX_SKIN_HTTP_URL_LENGTH = 2_048;
 
 export const AVATAR_LAB_ALLOWED_FIELDS = [
   'body_color',
@@ -68,6 +71,7 @@ export const AVATAR_LAB_ALLOWED_FIELDS = [
   'eye_color',
   'model_type',
   'accent_color',
+  'skin_url',
   'skin_data_url',
   'skin_scale',
   'skin_tint_strength',
@@ -103,18 +107,34 @@ function parseNumber(value: unknown, fallback: number, min: number, max: number)
   return clamp(value, min, max);
 }
 
+function isValidHttpSkinUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
+    return value.length <= MAX_SKIN_HTTP_URL_LENGTH;
+  } catch {
+    return false;
+  }
+}
+
 function parseSkinDataUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   if (value.length === 0) return null;
   const trimmed = value.trim();
-  if (!trimmed.startsWith('data:image/')) return null;
-  if (trimmed.length > MAX_SKIN_DATA_URL_LENGTH) return null;
-  return trimmed;
+  if (trimmed.startsWith('data:image/')) {
+    if (trimmed.length > MAX_SKIN_DATA_URL_LENGTH) return null;
+    return trimmed;
+  }
+  if (isValidHttpSkinUrl(trimmed)) {
+    return trimmed;
+  }
+  return null;
 }
 
 export function resolveAvatarLabConfig(name: string, avatar?: unknown): ResolvedAvatarLabConfig {
   const base = resolveAvatar(name, avatar as AgentAvatar | undefined);
   const source = isObject(avatar) ? avatar : {};
+  const skinSource = source.skin_url ?? source.skin_data_url;
 
   return {
     body_color: parseHexColor(source.body_color, base.body_color),
@@ -122,7 +142,7 @@ export function resolveAvatarLabConfig(name: string, avatar?: unknown): Resolved
     eye_color: parseHexColor(source.eye_color, base.eye_color),
     accent_color: parseHexColor(source.accent_color, base.claw_color),
     model_type: isAvatarLabModelId(source.model_type) ? source.model_type : DEFAULT_MODEL,
-    skin_data_url: parseSkinDataUrl(source.skin_data_url),
+    skin_data_url: parseSkinDataUrl(skinSource),
     skin_scale: parseNumber(source.skin_scale, 1, 0.2, 4),
     skin_tint_strength: parseNumber(source.skin_tint_strength, 0.65, 0, 1),
     material_roughness: parseNumber(source.material_roughness, 0.65, 0.05, 1),
@@ -161,17 +181,19 @@ export function validateAvatarLabConfigInput(input: Record<string, unknown>): st
   if ('animation_profile' in input && !isAnimationProfile(input.animation_profile)) {
     return 'animation_profile must be one of: idle, energetic, float';
   }
-  if ('skin_data_url' in input) {
-    const value = input.skin_data_url;
+  if ('skin_url' in input || 'skin_data_url' in input) {
+    const value = 'skin_url' in input ? input.skin_url : input.skin_data_url;
     if (value !== null && value !== '' && typeof value !== 'string') {
-      return 'skin_data_url must be a data URL string or null';
+      return 'skin_url/skin_data_url must be a string or null';
     }
     if (typeof value === 'string' && value.length > 0) {
-      if (!value.startsWith('data:image/')) {
-        return 'skin_data_url must start with "data:image/"';
-      }
-      if (value.length > MAX_SKIN_DATA_URL_LENGTH) {
-        return `skin_data_url exceeds max length (${MAX_SKIN_DATA_URL_LENGTH} chars)`;
+      const trimmed = value.trim();
+      if (trimmed.startsWith('data:image/')) {
+        if (trimmed.length > MAX_SKIN_DATA_URL_LENGTH) {
+          return `skin_data_url exceeds max length (${MAX_SKIN_DATA_URL_LENGTH} chars)`;
+        }
+      } else if (!isValidHttpSkinUrl(trimmed)) {
+        return 'skin_url/skin_data_url must be a data:image/* URL or an http(s) URL';
       }
     }
   }
@@ -221,7 +243,7 @@ export function sanitizeAvatarLabPatch(name: string, input: Record<string, unkno
 
 export function toPublicAvatarLabView(name: string, avatar?: unknown): PublicAvatarLabView {
   const resolved = resolveAvatarLabConfig(name, avatar);
-  return {
+  const view: PublicAvatarLabView = {
     body_color: resolved.body_color,
     claw_color: resolved.claw_color,
     eye_color: resolved.eye_color,
@@ -233,4 +255,11 @@ export function toPublicAvatarLabView(name: string, avatar?: unknown): PublicAva
     material_metalness: resolved.material_metalness,
     animation_profile: resolved.animation_profile,
   };
+
+  // Keep public payloads small: publish URL-based skins only (not embedded data URLs).
+  if (resolved.skin_data_url && !resolved.skin_data_url.startsWith('data:image/')) {
+    view.skin_data_url = resolved.skin_data_url;
+  }
+
+  return view;
 }

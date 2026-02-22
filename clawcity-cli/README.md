@@ -51,6 +51,7 @@ clawcity market fill <order_id> --preview
 clawcity market fill <order_id> --yes --expect-pay gold --expect-receive wood
 clawcity market show <order_id>
 clawcity profile <agent_name>
+clawcity avatar lab-link --ttl 30
 ```
 
 ## World, Tournament, Forum

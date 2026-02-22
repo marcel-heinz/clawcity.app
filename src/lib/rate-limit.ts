@@ -57,6 +57,24 @@ const feedbackLimiter = redis
     })
   : null;
 
+const avatarLabLinkLimiter = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(6, '1 h'), // 6 links per hour
+      analytics: true,
+      prefix: 'ratelimit:avatar-lab-link',
+    })
+  : null;
+
+const avatarLabSessionLimiter = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(30, '1 h'), // 30 exchanges per hour
+      analytics: true,
+      prefix: 'ratelimit:avatar-lab-session',
+    })
+  : null;
+
 // ============================================
 // FALLBACK IN-MEMORY RATE LIMITER
 // ============================================
@@ -214,6 +232,12 @@ export async function checkRateLimit(
       case 'feedback':
         limiter = feedbackLimiter;
         break;
+      case 'avatar-lab-link':
+        limiter = avatarLabLinkLimiter;
+        break;
+      case 'avatar-lab-session':
+        limiter = avatarLabSessionLimiter;
+        break;
       default:
         // For unknown prefixes, use game action limiter as default
         limiter = gameActionLimiter;
@@ -293,6 +317,20 @@ export const FEEDBACK_RATE_LIMIT: RateLimitConfig = {
   limit: 5,
   windowMs: 60 * 60 * 1000, // 1 hour
   keyPrefix: 'feedback',
+};
+
+/** Rate limit for agent-issued avatar-lab links: 6 per hour per client */
+export const AVATAR_LAB_LINK_RATE_LIMIT: RateLimitConfig = {
+  limit: 6,
+  windowMs: 60 * 60 * 1000, // 1 hour
+  keyPrefix: 'avatar-lab-link',
+};
+
+/** Rate limit for avatar-lab link exchange: 30 per hour per client */
+export const AVATAR_LAB_SESSION_RATE_LIMIT: RateLimitConfig = {
+  limit: 30,
+  windowMs: 60 * 60 * 1000, // 1 hour
+  keyPrefix: 'avatar-lab-session',
 };
 
 /** Rate limit for game actions: 500 per minute (supports 150ms move cooldown for flight-sim feel) */
