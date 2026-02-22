@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { ResolvedAvatarLabConfig } from '@/lib/avatar-lab';
-import { createAvatarLabMesh, disposeObject3D } from '@/lib/avatar-lab-mesh';
+import { AvatarLabMeshBuild, createAvatarLabMesh, disposeObject3D } from '@/lib/avatar-lab-mesh';
 
 export interface AvatarLabPerfMetrics {
   fps: number;
@@ -34,7 +34,15 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
   const containerRef = useRef<HTMLDivElement>(null);
   const onMetricsRef = useRef(onMetrics);
 
-  const stableConfig = useMemo(() => config, [config]);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const floorRef = useRef<THREE.Mesh | null>(null);
+  const avatarHostRef = useRef<THREE.Group | null>(null);
+  const avatarBuildRef = useRef<AvatarLabMeshBuild | null>(null);
+  const skinTextureRef = useRef<THREE.Texture | null>(null);
+  const animationProfileRef = useRef<ResolvedAvatarLabConfig['animation_profile']>('idle');
+  const skinLoadVersionRef = useRef(0);
 
   useEffect(() => {
     onMetricsRef.current = onMetrics;
@@ -47,10 +55,12 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xffffff);
     scene.fog = new THREE.Fog(0xffffff, 8, 30);
+    sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 80);
     camera.position.set(0, 1.25, 3.6);
     camera.lookAt(0, 0.25, 0);
+    cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -59,6 +69,7 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    rendererRef.current = renderer;
     container.appendChild(renderer.domElement);
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.72);
@@ -92,48 +103,12 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
     floor.receiveShadow = true;
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.001;
+    floorRef.current = floor;
     scene.add(floor);
 
-    const build = createAvatarLabMesh(stableConfig);
-    const avatarRoot = new THREE.Group();
-    avatarRoot.add(build.root);
-    scene.add(avatarRoot);
-
-    const bounds = new THREE.Box3().setFromObject(build.root);
-    const center = bounds.getCenter(new THREE.Vector3());
-    build.root.position.sub(center);
-    build.root.position.y += 0.15;
-
-    const materialsForTexture = [
-      ...build.channels.primary,
-      ...build.channels.secondary,
-      ...build.channels.accent,
-    ];
-
-    let disposed = false;
-    let skinTexture: THREE.Texture | null = null;
-    if (stableConfig.skin_data_url) {
-      const loader = new THREE.TextureLoader();
-      loader.load(stableConfig.skin_data_url, (texture) => {
-        if (disposed) {
-          texture.dispose();
-          return;
-        }
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(stableConfig.skin_scale, stableConfig.skin_scale);
-        texture.center.set(0.5, 0.5);
-        texture.rotation = Math.PI / 2;
-        skinTexture = texture;
-
-        for (const material of materialsForTexture) {
-          material.map = texture;
-          material.color.lerp(new THREE.Color(0xffffff), stableConfig.skin_tint_strength);
-          material.needsUpdate = true;
-        }
-      });
-    }
+    const avatarHost = new THREE.Group();
+    avatarHostRef.current = avatarHost;
+    scene.add(avatarHost);
 
     const orbitState = {
       yaw: 0.35,
@@ -145,6 +120,8 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
     };
 
     const updateCamera = () => {
+      const activeCamera = cameraRef.current;
+      if (!activeCamera) return;
       const polar = Math.PI / 2 - orbitState.pitch;
       const spherical = new THREE.Spherical(
         orbitState.distance,
@@ -152,17 +129,21 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
         orbitState.yaw
       );
       const offset = new THREE.Vector3().setFromSpherical(spherical);
-      camera.position.set(offset.x, 0.6 + offset.y, offset.z);
-      camera.lookAt(0, 0.22, 0);
+      activeCamera.position.set(offset.x, 0.6 + offset.y, offset.z);
+      activeCamera.lookAt(0, 0.22, 0);
     };
     updateCamera();
 
     const resize = () => {
+      const activeCamera = cameraRef.current;
+      const activeRenderer = rendererRef.current;
+      if (!activeCamera || !activeRenderer) return;
+
       const w = container.clientWidth;
       const h = container.clientHeight;
-      camera.aspect = w / Math.max(h, 1);
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h, false);
+      activeCamera.aspect = w / Math.max(h, 1);
+      activeCamera.updateProjectionMatrix();
+      activeRenderer.setSize(w, h, false);
     };
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(container);
@@ -177,24 +158,33 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
     let frameId = 0;
     let last = performance.now();
     let elapsed = 0;
-    const animSpeed = animationMultiplier(stableConfig.animation_profile);
+    let disposed = false;
 
     const animate = () => {
       if (disposed) return;
       frameId = window.requestAnimationFrame(animate);
 
+      const activeRenderer = rendererRef.current;
+      const activeScene = sceneRef.current;
+      const activeCamera = cameraRef.current;
+      const activeAvatarHost = avatarHostRef.current;
+      if (!activeRenderer || !activeScene || !activeCamera || !activeAvatarHost) return;
+
       const now = performance.now();
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
-      elapsed += dt * animSpeed;
 
-      const bob = stableConfig.animation_profile === 'float'
+      const speed = animationMultiplier(animationProfileRef.current);
+      elapsed += dt * speed;
+
+      const bob = animationProfileRef.current === 'float'
         ? Math.sin(elapsed * 2) * 0.16
         : Math.sin(elapsed * 2.6) * 0.06;
-      avatarRoot.position.y = bob;
-      avatarRoot.rotation.y += dt * (0.58 + animSpeed * 0.12);
 
-      renderer.render(scene, camera);
+      activeAvatarHost.position.y = bob;
+      activeAvatarHost.rotation.y += dt * (0.58 + speed * 0.12);
+
+      activeRenderer.render(activeScene, activeCamera);
 
       perf.frameCount += 1;
       perf.elapsedMs += dt * 1000;
@@ -204,10 +194,10 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
         onMetricsRef.current({
           fps,
           frameMs,
-          drawCalls: renderer.info.render.calls,
-          triangles: renderer.info.render.triangles,
-          geometries: renderer.info.memory.geometries,
-          textures: renderer.info.memory.textures,
+          drawCalls: activeRenderer.info.render.calls,
+          triangles: activeRenderer.info.render.triangles,
+          geometries: activeRenderer.info.memory.geometries,
+          textures: activeRenderer.info.memory.textures,
         });
         perf.frameCount = 0;
         perf.elapsedMs = 0;
@@ -220,6 +210,7 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
       orbitState.x = event.clientX;
       orbitState.y = event.clientY;
     };
+
     const handlePointerMove = (event: PointerEvent) => {
       if (!orbitState.dragging) return;
       const dx = event.clientX - orbitState.x;
@@ -230,19 +221,26 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
       orbitState.pitch = clamp(orbitState.pitch - dy * 0.008, -0.3, 0.7);
       updateCamera();
     };
+
     const handlePointerUp = () => {
       orbitState.dragging = false;
     };
+
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
       orbitState.distance = clamp(orbitState.distance + event.deltaY * 0.01, 1.8, 7);
       updateCamera();
     };
 
+    const handleContextLost = (event: Event) => {
+      event.preventDefault();
+    };
+
     renderer.domElement.addEventListener('pointerdown', handlePointerDown);
+    renderer.domElement.addEventListener('wheel', handleWheel, { passive: false });
+    renderer.domElement.addEventListener('webglcontextlost', handleContextLost);
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
-    renderer.domElement.addEventListener('wheel', handleWheel, { passive: false });
 
     animate();
 
@@ -250,25 +248,102 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
       disposed = true;
       window.cancelAnimationFrame(frameId);
       resizeObserver.disconnect();
+
       renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
+      renderer.domElement.removeEventListener('wheel', handleWheel);
+      renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
-      renderer.domElement.removeEventListener('wheel', handleWheel);
 
-      if (skinTexture) {
-        skinTexture.dispose();
+      skinLoadVersionRef.current += 1;
+      if (skinTextureRef.current) {
+        skinTextureRef.current.dispose();
+        skinTextureRef.current = null;
       }
-      floor.geometry.dispose();
-      if (floor.material instanceof THREE.Material) {
-        floor.material.dispose();
+
+      if (avatarBuildRef.current && avatarHostRef.current) {
+        avatarHostRef.current.remove(avatarBuildRef.current.root);
+        disposeObject3D(avatarBuildRef.current.root);
+        avatarBuildRef.current = null;
       }
-      disposeObject3D(avatarRoot);
+
+      if (floorRef.current) {
+        floorRef.current.geometry.dispose();
+        if (floorRef.current.material instanceof THREE.Material) {
+          floorRef.current.material.dispose();
+        }
+        floorRef.current = null;
+      }
+
       renderer.dispose();
       if (renderer.domElement.parentElement === container) {
         container.removeChild(renderer.domElement);
       }
+
+      rendererRef.current = null;
+      cameraRef.current = null;
+      sceneRef.current = null;
+      avatarHostRef.current = null;
     };
-  }, [stableConfig]);
+  }, []);
+
+  useEffect(() => {
+    const avatarHost = avatarHostRef.current;
+    if (!avatarHost) return;
+
+    animationProfileRef.current = config.animation_profile;
+    skinLoadVersionRef.current += 1;
+    const loadVersion = skinLoadVersionRef.current;
+
+    if (skinTextureRef.current) {
+      skinTextureRef.current.dispose();
+      skinTextureRef.current = null;
+    }
+
+    if (avatarBuildRef.current) {
+      avatarHost.remove(avatarBuildRef.current.root);
+      disposeObject3D(avatarBuildRef.current.root);
+      avatarBuildRef.current = null;
+    }
+
+    const build = createAvatarLabMesh(config);
+    const bounds = new THREE.Box3().setFromObject(build.root);
+    const center = bounds.getCenter(new THREE.Vector3());
+    build.root.position.sub(center);
+    build.root.position.y += 0.15;
+    avatarHost.add(build.root);
+    avatarBuildRef.current = build;
+
+    if (!config.skin_data_url) return;
+
+    const loader = new THREE.TextureLoader();
+    loader.load(config.skin_data_url, (texture) => {
+      if (loadVersion !== skinLoadVersionRef.current || !avatarBuildRef.current || avatarBuildRef.current !== build) {
+        texture.dispose();
+        return;
+      }
+
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(config.skin_scale, config.skin_scale);
+      texture.center.set(0.5, 0.5);
+      texture.rotation = Math.PI / 2;
+      skinTextureRef.current = texture;
+
+      const materials = [
+        ...build.channels.primary,
+        ...build.channels.secondary,
+        ...build.channels.accent,
+      ];
+
+      for (const material of materials) {
+        material.map = texture;
+        material.color.lerp(new THREE.Color(0xffffff), config.skin_tint_strength);
+        material.needsUpdate = true;
+      }
+    });
+  }, [config]);
 
   return (
     <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
