@@ -20,14 +20,72 @@ interface AvatarLabViewportProps {
   onMetrics?: (metrics: AvatarLabPerfMetrics) => void;
 }
 
+interface BobSettings {
+  amplitude: number;
+  frequency: number;
+  rotationSpeed: number;
+}
+
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
 
-function animationMultiplier(mode: ResolvedAvatarLabConfig['animation_profile']): number {
-  if (mode === 'energetic') return 1.8;
-  if (mode === 'float') return 0.65;
-  return 1;
+function getBobSettings(mode: ResolvedAvatarLabConfig['animation_profile']): BobSettings {
+  if (mode === 'energetic') {
+    return { amplitude: 0.052, frequency: 3.2, rotationSpeed: 0.84 };
+  }
+  if (mode === 'float') {
+    return { amplitude: 0.08, frequency: 1.35, rotationSpeed: 0.48 };
+  }
+  return { amplitude: 0.034, frequency: 2.2, rotationSpeed: 0.62 };
+}
+
+function createGrassFloorTexture(renderer: THREE.WebGLRenderer): THREE.CanvasTexture {
+  const tileSize = 96;
+  const stride = 16;
+  const canvas = document.createElement('canvas');
+  canvas.width = tileSize;
+  canvas.height = tileSize;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    const fallback = new THREE.CanvasTexture(canvas);
+    fallback.colorSpace = THREE.SRGBColorSpace;
+    return fallback;
+  }
+
+  ctx.fillStyle = '#7cb342';
+  ctx.fillRect(0, 0, tileSize, tileSize);
+
+  const dots: Array<{ x: number; y: number; r: number; c: string }> = [
+    { x: 4, y: 4, r: 2.2, c: '#8bc34a' },
+    { x: 12, y: 12, r: 2.1, c: '#689f38' },
+    { x: 8, y: 2, r: 1.4, c: '#9ccc65' },
+    { x: 3, y: 13, r: 1.4, c: '#9ccc65' },
+    { x: 14, y: 6, r: 1.2, c: '#689f38' },
+  ];
+
+  for (let y = 0; y < tileSize; y += stride) {
+    for (let x = 0; x < tileSize; x += stride) {
+      for (const dot of dots) {
+        ctx.fillStyle = dot.c;
+        ctx.beginPath();
+        ctx.arc(x + dot.x, y + dot.y, dot.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(5, 5);
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  texture.needsUpdate = true;
+  return texture;
 }
 
 export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewportProps) {
@@ -38,10 +96,12 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const floorRef = useRef<THREE.Mesh | null>(null);
+  const floorTextureRef = useRef<THREE.Texture | null>(null);
   const avatarHostRef = useRef<THREE.Group | null>(null);
   const avatarBuildRef = useRef<AvatarLabMeshBuild | null>(null);
   const skinTextureRef = useRef<THREE.Texture | null>(null);
-  const animationProfileRef = useRef<ResolvedAvatarLabConfig['animation_profile']>('idle');
+  const bobSettingsRef = useRef<BobSettings>(getBobSettings('idle'));
+  const baseLiftRef = useRef(0.2);
   const skinLoadVersionRef = useRef(0);
 
   useEffect(() => {
@@ -92,11 +152,15 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
     rim.position.set(-2, 1.6, -2.4);
     scene.add(rim);
 
+    const floorTexture = createGrassFloorTexture(renderer);
+    floorTextureRef.current = floorTexture;
+
     const floor = new THREE.Mesh(
-      new THREE.CircleGeometry(4.5, 48),
+      new THREE.CircleGeometry(4.5, 72),
       new THREE.MeshStandardMaterial({
         color: 0xffffff,
-        roughness: 0.98,
+        map: floorTexture,
+        roughness: 0.96,
         metalness: 0.0,
       })
     );
@@ -174,15 +238,13 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
 
-      const speed = animationMultiplier(animationProfileRef.current);
-      elapsed += dt * speed;
+      const settings = bobSettingsRef.current;
+      elapsed += dt;
 
-      const bob = animationProfileRef.current === 'float'
-        ? Math.sin(elapsed * 2) * 0.16
-        : Math.sin(elapsed * 2.6) * 0.06;
+      const bob = Math.sin(elapsed * settings.frequency) * settings.amplitude;
 
-      activeAvatarHost.position.y = bob;
-      activeAvatarHost.rotation.y += dt * (0.58 + speed * 0.12);
+      activeAvatarHost.position.y = baseLiftRef.current + bob;
+      activeAvatarHost.rotation.y += dt * settings.rotationSpeed;
 
       activeRenderer.render(activeScene, activeCamera);
 
@@ -274,6 +336,10 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
         }
         floorRef.current = null;
       }
+      if (floorTextureRef.current) {
+        floorTextureRef.current.dispose();
+        floorTextureRef.current = null;
+      }
 
       renderer.dispose();
       if (renderer.domElement.parentElement === container) {
@@ -291,7 +357,8 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
     const avatarHost = avatarHostRef.current;
     if (!avatarHost) return;
 
-    animationProfileRef.current = config.animation_profile;
+    const bobSettings = getBobSettings(config.animation_profile);
+    bobSettingsRef.current = bobSettings;
     skinLoadVersionRef.current += 1;
     const loadVersion = skinLoadVersionRef.current;
 
@@ -309,8 +376,16 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
     const build = createAvatarLabMesh(config);
     const bounds = new THREE.Box3().setFromObject(build.root);
     const center = bounds.getCenter(new THREE.Vector3());
+    const centeredMinY = bounds.min.y - center.y;
+
+    const minimumClearance = 0.06;
+    const bobDownwardAllowance = bobSettings.amplitude;
+    const safetyPadding = 0.014;
+    const baseLift = minimumClearance - centeredMinY + bobDownwardAllowance + safetyPadding;
+
     build.root.position.sub(center);
-    build.root.position.y += 0.15;
+    baseLiftRef.current = baseLift;
+    avatarHost.position.y = baseLift;
     avatarHost.add(build.root);
     avatarBuildRef.current = build;
 
