@@ -252,6 +252,8 @@ export async function GET(request: NextRequest) {
           total_events: 0,
           total_territories: 0,
           agent_limit: 1000,
+          avatar_lab_links_today: 0,
+          avatar_lab_links_30d: 0,
         },
         cooldowns: {
           move: 2000,
@@ -342,6 +344,37 @@ export async function GET(request: NextRequest) {
 
     // Fetch cooldown settings
     const cooldowns = await getAllCooldowns();
+
+    // Avatar Lab operator link issuance metrics (requested links)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    let avatarLabLinksToday = 0;
+    let avatarLabLinks30d = 0;
+
+    const [avatarTodayResult, avatar30dResult] = await Promise.all([
+      supabase
+        .from('agent_avatar_lab_links')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', todayStart.toISOString()),
+      supabase
+        .from('agent_avatar_lab_links')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', thirtyDaysAgo.toISOString()),
+    ]);
+
+    if (avatarTodayResult.error) {
+      console.error('Error counting avatar lab links today:', avatarTodayResult.error);
+    } else {
+      avatarLabLinksToday = avatarTodayResult.count || 0;
+    }
+
+    if (avatar30dResult.error) {
+      console.error('Error counting avatar lab links in last 30 days:', avatar30dResult.error);
+    } else {
+      avatarLabLinks30d = avatar30dResult.count || 0;
+    }
 
     // Fetch recent events
     const { data: recentEvents, error: eventsDataError } = await supabase
@@ -439,6 +472,8 @@ export async function GET(request: NextRequest) {
           total_events: eventsCount || 0,
           total_territories: territoriesCount || 0,
           agent_limit: agentLimit,
+          avatar_lab_links_today: avatarLabLinksToday,
+          avatar_lab_links_30d: avatarLabLinks30d,
         },
         cooldowns,
         infrastructure: {

@@ -83,6 +83,8 @@ interface AdminData {
     total_events: number;
     total_territories: number;
     agent_limit: number;
+    avatar_lab_links_today: number;
+    avatar_lab_links_30d: number;
   };
   cooldowns: CooldownSettings;
   infrastructure?: InfrastructureStatus;
@@ -596,6 +598,17 @@ export default function AdminDashboard() {
             </div>
             <div className="text-xs text-[var(--muted)] uppercase tracking-wider mt-1">
               Territories
+            </div>
+          </div>
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-4">
+            <div className="text-3xl font-bold text-pink-400">
+              {adminData?.stats.avatar_lab_links_today ?? 0}
+            </div>
+            <div className="text-xs text-[var(--muted)] uppercase tracking-wider mt-1">
+              Avatar Links Today
+            </div>
+            <div className="text-xs text-[var(--muted)] mt-2">
+              Last 30d: {adminData?.stats.avatar_lab_links_30d ?? 0}
             </div>
           </div>
           {/* Infrastructure Status */}
