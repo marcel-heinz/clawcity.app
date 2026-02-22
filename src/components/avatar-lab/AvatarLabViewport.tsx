@@ -129,6 +129,9 @@ export function AvatarLabViewport({ title, config, onMetrics }: AvatarLabViewpor
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+    renderer.domElement.style.display = 'block';
     rendererRef.current = renderer;
     container.appendChild(renderer.domElement);
 
