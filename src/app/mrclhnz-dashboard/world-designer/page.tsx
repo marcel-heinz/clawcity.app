@@ -9,7 +9,6 @@ import {
   deserializeWorldFromBase64,
   extractTileWindow,
   generateSeededWorld,
-  getSymmetryPoints,
   indexToTerrain,
   serializeWorldToBase64,
   terrainToIndex,
@@ -17,11 +16,10 @@ import {
   WORLD_DESIGNER_TERRAINS,
   WORLD_DESIGNER_TERRAIN_COLORS as TERRAIN_COLORS,
   WORLD_TILE_COUNT,
-  WorldDesignerSymmetryMode,
 } from '@/lib/world-designer';
 import { WorldDesigner3DPreview } from '@/components/world-designer/WorldDesigner3DPreview';
 
-type EditorTool = 'brush' | 'replace' | 'rectangle' | 'bucket' | 'eyedropper';
+type EditorTool = 'brush' | 'rectangle' | 'bucket';
 
 interface ViewState {
   x: number;
@@ -92,10 +90,8 @@ const adminPath = rawAdminPath.startsWith('/') ? rawAdminPath : `/${rawAdminPath
 
 const TOOL_OPTIONS: Array<{ id: EditorTool; label: string; help: string }> = [
   { id: 'brush', label: 'Brush', help: 'Paint selected terrain on drag.' },
-  { id: 'replace', label: 'Replace', help: 'Only repaint the terrain under first click.' },
   { id: 'rectangle', label: 'Rectangle', help: 'Drag to fill a rectangle area.' },
   { id: 'bucket', label: 'Bucket', help: 'Flood-fill connected region.' },
-  { id: 'eyedropper', label: 'Eyedropper', help: 'Pick terrain from tile.' },
 ];
 
 function randomSeed(): number {
@@ -159,7 +155,6 @@ export default function WorldDesignerPage() {
   const [tool, setTool] = useState<EditorTool>('brush');
   const [selectedTerrainIndex, setSelectedTerrainIndex] = useState(terrainToIndex('plains'));
   const [brushSize, setBrushSize] = useState<(typeof BRUSH_SIZES)[number]>(3);
-  const [symmetry, setSymmetry] = useState<WorldDesignerSymmetryMode>('off');
   const [showGrid, setShowGrid] = useState(true);
 
   const [viewState, setViewState] = useState<ViewState>({
@@ -215,7 +210,6 @@ export default function WorldDesignerPage() {
   });
 
   const activeOperationRef = useRef<MutableOperation | null>(null);
-  const replaceTargetRef = useRef<number | null>(null);
   const rectStartRef = useRef<{ x: number; y: number } | null>(null);
   const rectCurrentRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -541,7 +535,6 @@ export default function WorldDesignerPage() {
   const commitOperation = useCallback(() => {
     const op = activeOperationRef.current;
     activeOperationRef.current = null;
-    replaceTargetRef.current = null;
     if (!op || op.next.size === 0) return false;
 
     const indices = Array.from(op.next.keys());
@@ -597,23 +590,19 @@ export default function WorldDesignerPage() {
       x: number,
       y: number,
       terrainIndex: number,
-      operation: MutableOperation,
-      replaceTarget: number | null
+      operation: MutableOperation
     ) => {
       const radius = Math.floor((brushSize - 1) / 2);
-      const symmetryPoints = getSymmetryPoints(x, y, symmetry);
 
-      for (const point of symmetryPoints) {
-        for (let dy = -radius; dy <= radius; dy++) {
-          for (let dx = -radius; dx <= radius; dx++) {
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            if (distance > radius + 0.15) continue;
-            writeTerrainAt(point.x + dx, point.y + dy, terrainIndex, operation, replaceTarget);
-          }
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          if (distance > radius + 0.15) continue;
+          writeTerrainAt(x + dx, y + dy, terrainIndex, operation, null);
         }
       }
     },
-    [brushSize, symmetry, writeTerrainAt]
+    [brushSize, writeTerrainAt]
   );
 
   const applyBrushLine = useCallback(
@@ -623,8 +612,7 @@ export default function WorldDesignerPage() {
       x1: number,
       y1: number,
       terrainIndex: number,
-      operation: MutableOperation,
-      replaceTarget: number | null
+      operation: MutableOperation
     ) => {
       let cx = x0;
       let cy = y0;
@@ -635,7 +623,7 @@ export default function WorldDesignerPage() {
       let err = dx - dy;
 
       while (true) {
-        applyBrushAt(cx, cy, terrainIndex, operation, replaceTarget);
+        applyBrushAt(cx, cy, terrainIndex, operation);
         if (cx === x1 && cy === y1) break;
         const e2 = err * 2;
         if (e2 > -dy) {
@@ -665,49 +653,42 @@ export default function WorldDesignerPage() {
 
       for (let y = minY; y <= maxY; y++) {
         for (let x = minX; x <= maxX; x++) {
-          const symmetryPoints = getSymmetryPoints(x, y, symmetry);
-          for (const point of symmetryPoints) {
-            writeTerrainAt(point.x, point.y, terrainIndex, operation, null);
-          }
+          writeTerrainAt(x, y, terrainIndex, operation, null);
         }
       }
     },
-    [symmetry, writeTerrainAt]
+    [writeTerrainAt]
   );
 
   const floodFill = useCallback(
     (startX: number, startY: number, nextTerrainIndex: number, operation: MutableOperation) => {
-      const startPoints = getSymmetryPoints(startX, startY, symmetry);
+      const startIndex = tileIndex(startX, startY);
+      const targetTerrain = worldRef.current[startIndex];
+      if (targetTerrain === nextTerrainIndex) return;
 
-      for (const startPoint of startPoints) {
-        const startIndex = tileIndex(startPoint.x, startPoint.y);
-        const targetTerrain = worldRef.current[startIndex];
-        if (targetTerrain === nextTerrainIndex) continue;
+      const visited = new Uint8Array(WORLD_TILE_COUNT);
+      const queue: number[] = [startIndex];
+      let pointer = 0;
 
-        const visited = new Uint8Array(WORLD_TILE_COUNT);
-        const queue: number[] = [startIndex];
-        let pointer = 0;
+      while (pointer < queue.length) {
+        const index = queue[pointer++];
+        if (visited[index]) continue;
+        visited[index] = 1;
 
-        while (pointer < queue.length) {
-          const index = queue[pointer++];
-          if (visited[index]) continue;
-          visited[index] = 1;
+        const current = worldRef.current[index];
+        if (current !== targetTerrain) continue;
 
-          const current = worldRef.current[index];
-          if (current !== targetTerrain) continue;
+        const x = index % WORLD_SIZE;
+        const y = Math.floor(index / WORLD_SIZE);
+        writeTerrainAt(x, y, nextTerrainIndex, operation, targetTerrain);
 
-          const x = index % WORLD_SIZE;
-          const y = Math.floor(index / WORLD_SIZE);
-          writeTerrainAt(x, y, nextTerrainIndex, operation, targetTerrain);
-
-          if (x > 0) queue.push(index - 1);
-          if (x < WORLD_SIZE - 1) queue.push(index + 1);
-          if (y > 0) queue.push(index - WORLD_SIZE);
-          if (y < WORLD_SIZE - 1) queue.push(index + WORLD_SIZE);
-        }
+        if (x > 0) queue.push(index - 1);
+        if (x < WORLD_SIZE - 1) queue.push(index + 1);
+        if (y > 0) queue.push(index - WORLD_SIZE);
+        if (y < WORLD_SIZE - 1) queue.push(index + WORLD_SIZE);
       }
     },
-    [symmetry, writeTerrainAt]
+    [writeTerrainAt]
   );
 
   const setWorldWithSeed = useCallback(
@@ -904,7 +885,8 @@ export default function WorldDesignerPage() {
   useEffect(() => {
     ensureOffscreenCanvas();
     redrawOffscreenWorld();
-  }, [ensureOffscreenCanvas, redrawOffscreenWorld]);
+    drawCanvas();
+  }, [drawCanvas, ensureOffscreenCanvas, redrawOffscreenWorld]);
 
   useEffect(() => {
     viewStateRef.current = viewState;
@@ -917,8 +899,8 @@ export default function WorldDesignerPage() {
     if (!wrapper || !canvas) return;
 
     const resize = () => {
-      const width = Math.max(320, Math.floor(wrapper.clientWidth));
-      const height = Math.max(420, Math.floor(wrapper.clientHeight));
+      const width = Math.max(1, Math.floor(wrapper.clientWidth));
+      const height = Math.max(1, Math.floor(wrapper.clientHeight));
       canvas.width = width;
       canvas.height = height;
       setCanvasSize({ width, height });
@@ -1176,14 +1158,6 @@ export default function WorldDesignerPage() {
     interaction.lastTileX = tile.x;
     interaction.lastTileY = tile.y;
 
-    if (tool === 'eyedropper') {
-      const terrainIndex = worldRef.current[tileIndex(tile.x, tile.y)];
-      setSelectedTerrainIndex(terrainIndex);
-      setStatusMessage(`Picked terrain: ${indexToTerrain(terrainIndex)}.`);
-      setErrorMessage(null);
-      return;
-    }
-
     if (tool === 'bucket') {
       beginOperation('Bucket fill');
       const operation = activeOperationRef.current;
@@ -1202,11 +1176,10 @@ export default function WorldDesignerPage() {
       return;
     }
 
-    beginOperation(tool === 'replace' ? 'Replace stroke' : 'Brush stroke');
+    beginOperation('Brush stroke');
     const operation = activeOperationRef.current;
     if (!operation) return;
-    replaceTargetRef.current = tool === 'replace' ? worldRef.current[tileIndex(tile.x, tile.y)] : null;
-    applyBrushAt(tile.x, tile.y, selectedTerrainIndex, operation, replaceTargetRef.current);
+    applyBrushAt(tile.x, tile.y, selectedTerrainIndex, operation);
     interaction.mode = 'paint';
     drawCanvas();
   };
@@ -1250,8 +1223,7 @@ export default function WorldDesignerPage() {
         tile.x,
         tile.y,
         selectedTerrainIndex,
-        operation,
-        replaceTargetRef.current
+        operation
       );
 
       interaction.lastTileX = tile.x;
@@ -1288,7 +1260,6 @@ export default function WorldDesignerPage() {
 
     interaction.mode = 'none';
     interaction.pointerId = null;
-    replaceTargetRef.current = null;
     drawCanvas();
   }, [beginOperation, commitOperation, drawCanvas, fillRectangle, selectedTerrainIndex]);
 
@@ -1477,7 +1448,7 @@ export default function WorldDesignerPage() {
             </section>
 
             <section className="border-t border-slate-200 pt-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Brush & Symmetry</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Brush</h2>
               <label className="mt-2 block text-sm text-slate-600">
                 Brush size
                 <select
@@ -1490,19 +1461,6 @@ export default function WorldDesignerPage() {
                       {size}x{size}
                     </option>
                   ))}
-                </select>
-              </label>
-              <label className="mt-2 block text-sm text-slate-600">
-                Symmetry mode
-                <select
-                  value={symmetry}
-                  onChange={(event) => setSymmetry(event.target.value as WorldDesignerSymmetryMode)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm"
-                >
-                  <option value="off">Off</option>
-                  <option value="mirror_x">Mirror X (left/right)</option>
-                  <option value="mirror_y">Mirror Y (top/bottom)</option>
-                  <option value="quad">Quad mirror</option>
                 </select>
               </label>
               <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
@@ -1567,8 +1525,7 @@ export default function WorldDesignerPage() {
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm text-slate-600">
                   Active tool: <span className="font-semibold text-slate-800">{tool}</span> • Terrain:{' '}
-                  <span className="font-semibold text-slate-800">{selectedTerrain}</span> • Symmetry:{' '}
-                  <span className="font-semibold text-slate-800">{symmetry}</span>
+                  <span className="font-semibold text-slate-800">{selectedTerrain}</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <button
@@ -1601,7 +1558,7 @@ export default function WorldDesignerPage() {
                   </span>
                 </div>
               </div>
-              <div ref={viewportRef} className="relative h-[700px] w-full overflow-hidden rounded-lg border border-slate-300 bg-slate-50">
+              <div ref={viewportRef} className="relative mx-auto aspect-square w-full max-w-[700px] overflow-hidden rounded-lg border border-slate-300 bg-slate-50">
                 <canvas
                   ref={canvasRef}
                   className="h-full w-full touch-none cursor-crosshair"
