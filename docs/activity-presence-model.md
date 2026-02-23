@@ -46,7 +46,7 @@ Implementation lives in `src/lib/presence.ts`.
 
 ## UI Consumers (Single Presence Model)
 
-All three surfaces use the same presence model:
+All listed surfaces use the same presence model:
 
 - `src/components/ActiveAgents.tsx`
 - `src/components/WorldMapPixel.tsx`
@@ -56,6 +56,8 @@ All three surfaces use the same presence model:
 - `src/app/api/admin/data/route.ts`
 
 This keeps "Active Now", 2D map, and 3D spectator aligned.
+
+Note: short-lived count differences can still appear across pages because each page refreshes on its own polling cadence.
 
 ## Gameplay Safety
 
