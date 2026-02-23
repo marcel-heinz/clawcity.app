@@ -135,7 +135,7 @@ export default function WorldDesignerPage() {
   const countsRef = useRef<number[]>(computeTerrainCounts(worldRef.current));
 
   const [terrainCounts, setTerrainCounts] = useState<number[]>(countsRef.current);
-  const [worldVersion, setWorldVersion] = useState(0);
+  const [previewVersion, setPreviewVersion] = useState(0);
   const [tool, setTool] = useState<EditorTool>('brush');
   const [selectedTerrainIndex, setSelectedTerrainIndex] = useState(terrainToIndex('plains'));
   const [brushSize, setBrushSize] = useState<(typeof BRUSH_SIZES)[number]>(3);
@@ -145,7 +145,7 @@ export default function WorldDesignerPage() {
   const [viewState, setViewState] = useState<ViewState>({
     x: 0,
     y: 0,
-    zoom: 1.35,
+    zoom: 2,
   });
   const viewStateRef = useRef<ViewState>(viewState);
   const [canvasSize, setCanvasSize] = useState({ width: 900, height: 680 });
@@ -165,7 +165,6 @@ export default function WorldDesignerPage() {
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const minimapRef = useRef<HTMLCanvasElement | null>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const offscreenCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const rgbPaletteRef = useRef<Array<[number, number, number]>>(
@@ -191,6 +190,7 @@ export default function WorldDesignerPage() {
   const undoStackRef = useRef<StoredOperation[]>([]);
   const redoStackRef = useRef<StoredOperation[]>([]);
   const isSpacePressedRef = useRef(false);
+  const previewSyncRef = useRef<number>(0);
 
   const selectedTerrain = indexToTerrain(selectedTerrainIndex);
 
@@ -204,6 +204,14 @@ export default function WorldDesignerPage() {
       undo: undoStackRef.current.length,
       redo: redoStackRef.current.length,
     });
+  }, []);
+
+  const requestPreviewSync = useCallback((force = false) => {
+    const now = performance.now();
+    if (force || now - previewSyncRef.current >= 120) {
+      previewSyncRef.current = now;
+      setPreviewVersion((value) => value + 1);
+    }
   }, []);
 
   const ensureOffscreenCanvas = useCallback(() => {
@@ -258,7 +266,10 @@ export default function WorldDesignerPage() {
     (next: ViewState): ViewState => {
       const width = Math.max(1, canvasSize.width);
       const height = Math.max(1, canvasSize.height);
-      const zoom = clamp(next.zoom, 0.35, 28);
+      const fitZoomX = width / WORLD_SIZE;
+      const fitZoomY = height / WORLD_SIZE;
+      const minZoom = Math.max(0.35, fitZoomX, fitZoomY);
+      const zoom = clamp(next.zoom, minZoom, 28);
       const srcW = width / zoom;
       const srcH = height / zoom;
 
@@ -268,39 +279,6 @@ export default function WorldDesignerPage() {
       const x = maxX <= 0 ? (WORLD_SIZE - srcW) * 0.5 : clamp(next.x, 0, maxX);
       const y = maxY <= 0 ? (WORLD_SIZE - srcH) * 0.5 : clamp(next.y, 0, maxY);
       return { x, y, zoom };
-    },
-    [canvasSize.height, canvasSize.width]
-  );
-
-  const drawMinimap = useCallback(
-    (state: ViewState) => {
-      const minimap = minimapRef.current;
-      const offscreen = offscreenCanvasRef.current;
-      if (!minimap || !offscreen) return;
-      const ctx = minimap.getContext('2d');
-      if (!ctx) return;
-
-      ctx.clearRect(0, 0, minimap.width, minimap.height);
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(offscreen, 0, 0, minimap.width, minimap.height);
-
-      const srcW = canvasSize.width / state.zoom;
-      const srcH = canvasSize.height / state.zoom;
-      const scaleX = minimap.width / WORLD_SIZE;
-      const scaleY = minimap.height / WORLD_SIZE;
-      const rectX = state.x * scaleX;
-      const rectY = state.y * scaleY;
-      const rectW = srcW * scaleX;
-      const rectH = srcH * scaleY;
-
-      ctx.save();
-      ctx.fillStyle = 'rgba(20, 20, 20, 0.12)';
-      ctx.fillRect(0, 0, minimap.width, minimap.height);
-      ctx.clearRect(rectX, rectY, rectW, rectH);
-      ctx.strokeStyle = '#f97316';
-      ctx.lineWidth = 1.6;
-      ctx.strokeRect(rectX, rectY, rectW, rectH);
-      ctx.restore();
     },
     [canvasSize.height, canvasSize.width]
   );
@@ -368,8 +346,25 @@ export default function WorldDesignerPage() {
       ctx.restore();
     }
 
-    drawMinimap(state);
-  }, [canvasSize.height, canvasSize.width, drawMinimap, showGrid]);
+    const previewRadius = 26;
+    const previewCenterX = clamp(Math.round(state.x + srcW * 0.5), 0, WORLD_SIZE - 1);
+    const previewCenterY = clamp(Math.round(state.y + srcH * 0.5), 0, WORLD_SIZE - 1);
+    const previewMinX = previewCenterX - previewRadius;
+    const previewMinY = previewCenterY - previewRadius;
+    const previewSize = previewRadius * 2 + 1;
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(14, 165, 233, 0.85)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(
+      (previewMinX - state.x) * state.zoom,
+      (previewMinY - state.y) * state.zoom,
+      previewSize * state.zoom,
+      previewSize * state.zoom
+    );
+    ctx.restore();
+  }, [canvasSize.height, canvasSize.width, showGrid]);
 
   const getTileFromPointer = useCallback(
     (clientX: number, clientY: number): { x: number; y: number } | null => {
@@ -418,9 +413,9 @@ export default function WorldDesignerPage() {
     redoStackRef.current = [];
     syncHistoryState();
     setTerrainCounts([...countsRef.current]);
-    setWorldVersion((value) => value + 1);
+    requestPreviewSync(true);
     return true;
-  }, [syncHistoryState]);
+  }, [requestPreviewSync, syncHistoryState]);
 
   const writeTerrainAt = useCallback(
     (
@@ -575,7 +570,7 @@ export default function WorldDesignerPage() {
       setSeed(nextSeed);
       recalculateCounts();
       redrawOffscreenWorld();
-      setWorldVersion((value) => value + 1);
+      requestPreviewSync(true);
       undoStackRef.current = [];
       redoStackRef.current = [];
       syncHistoryState();
@@ -583,7 +578,7 @@ export default function WorldDesignerPage() {
       setErrorMessage(null);
       drawCanvas();
     },
-    [drawCanvas, recalculateCounts, redrawOffscreenWorld, syncHistoryState]
+    [drawCanvas, recalculateCounts, redrawOffscreenWorld, requestPreviewSync, syncHistoryState]
   );
 
   const applyStoredOperation = useCallback((operation: StoredOperation, direction: 'undo' | 'redo') => {
@@ -597,9 +592,9 @@ export default function WorldDesignerPage() {
       paintOffscreenPixel(x, y, values[i]);
     }
     recalculateCounts();
-    setWorldVersion((value) => value + 1);
+    requestPreviewSync(true);
     drawCanvas();
-  }, [drawCanvas, paintOffscreenPixel, recalculateCounts]);
+  }, [drawCanvas, paintOffscreenPixel, recalculateCounts, requestPreviewSync]);
 
   const undo = useCallback(() => {
     const operation = undoStackRef.current.pop();
@@ -630,11 +625,11 @@ export default function WorldDesignerPage() {
     setSeed(snapshot.seed);
     recalculateCounts();
     redrawOffscreenWorld();
-    setWorldVersion((value) => value + 1);
+    requestPreviewSync(true);
     setStatusMessage(`Loaded snapshot "${snapshot.name}".`);
     setErrorMessage(null);
     drawCanvas();
-  }, [drawCanvas, recalculateCounts, redrawOffscreenWorld]);
+  }, [drawCanvas, recalculateCounts, redrawOffscreenWorld, requestPreviewSync]);
 
   const saveSnapshot = useCallback(() => {
     const name = snapshotName.trim() || `Snapshot ${new Date().toLocaleString()}`;
@@ -721,14 +716,14 @@ export default function WorldDesignerPage() {
     worldRef.current = world;
     recalculateCounts();
     redrawOffscreenWorld();
-    setWorldVersion((value) => value + 1);
+    requestPreviewSync(true);
     undoStackRef.current = [];
     redoStackRef.current = [];
     syncHistoryState();
     drawCanvas();
     setStatusMessage(`Filled world with ${terrain}.`);
     setErrorMessage(null);
-  }, [drawCanvas, recalculateCounts, redrawOffscreenWorld, syncHistoryState]);
+  }, [drawCanvas, recalculateCounts, redrawOffscreenWorld, requestPreviewSync, syncHistoryState]);
 
   const checkAuth = useCallback(async () => {
     try {
@@ -768,7 +763,7 @@ export default function WorldDesignerPage() {
   useEffect(() => {
     viewStateRef.current = viewState;
     drawCanvas();
-  }, [viewState, drawCanvas, worldVersion, showGrid]);
+  }, [viewState, drawCanvas]);
 
   useEffect(() => {
     const wrapper = viewportRef.current;
@@ -890,7 +885,9 @@ export default function WorldDesignerPage() {
       zoom: nextZoom,
     });
 
+    viewStateRef.current = nextState;
     setViewState(nextState);
+    drawCanvas();
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -963,7 +960,9 @@ export default function WorldDesignerPage() {
         y: interaction.startViewY - dy / current.zoom,
         zoom: current.zoom,
       });
+      viewStateRef.current = next;
       setViewState(next);
+      drawCanvas();
       return;
     }
 
@@ -993,6 +992,7 @@ export default function WorldDesignerPage() {
 
       interaction.lastTileX = tile.x;
       interaction.lastTileY = tile.y;
+      requestPreviewSync(false);
       drawCanvas();
     }
   };
@@ -1048,10 +1048,10 @@ export default function WorldDesignerPage() {
 
   const previewTiles = useMemo(
     () => {
-      void worldVersion;
+      void previewVersion;
       return extractTileWindow(worldRef.current, previewCenter.x, previewCenter.y, 26);
     },
-    [previewCenter.x, previewCenter.y, worldVersion]
+    [previewCenter.x, previewCenter.y, previewVersion]
   );
 
   if (isAuthenticated === null) {
@@ -1327,16 +1327,8 @@ export default function WorldDesignerPage() {
 
           <aside className="space-y-4">
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Mini Map</h2>
-              <div className="mt-2 flex justify-center">
-                <canvas
-                  ref={minimapRef}
-                  width={220}
-                  height={220}
-                  className="rounded-lg border border-slate-300 bg-slate-50"
-                />
-              </div>
-              <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Terrain Breakdown</h2>
+              <div className="mt-2 max-h-52 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
                 {WORLD_DESIGNER_TERRAINS.map((terrain, index) => (
                   <div key={terrain} className="flex items-center justify-between py-0.5">
                     <span className="flex items-center gap-2">
@@ -1347,6 +1339,9 @@ export default function WorldDesignerPage() {
                   </div>
                 ))}
               </div>
+              <p className="mt-2 text-xs text-slate-500">
+                The dashed cyan box on the main map shows the exact area used for 3D preview.
+              </p>
             </section>
 
             <WorldDesigner3DPreview
