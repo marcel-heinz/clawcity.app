@@ -85,6 +85,12 @@ interface AutoModeSchedulerStatus {
     affordable_ticks_remaining: number;
     run_fraction: number;
   } | null;
+  gateway?: {
+    ready: boolean;
+    status_code: number | null;
+    checked_at: string | null;
+    error: string | null;
+  } | null;
 }
 
 interface AgentMemoryState {
@@ -130,6 +136,9 @@ function formatEta(targetIso: string | null): string {
 
 function normalizeFailureReason(entry: AutoModeFeedbackEntry): string {
   const code = (entry.error_code || entry.status || '').toLowerCase();
+  if (code === 'gateway_unavailable') return 'Gateway runtime is currently unavailable. Railway will retry once healthy.';
+  if (code === 'gateway_auth') return 'Gateway auth mismatch detected; check Railway token wiring.';
+  if (code === 'billing_unavailable') return 'Billing sync is temporarily unavailable; ticks are paused to avoid inconsistent usage accounting.';
   if (code === 'unknown_command') return 'Unknown command requested by model; prompt now forces valid CLI forms.';
   if (code === 'invalid_usage') return 'Invalid CLI usage shape; only exact command syntax is allowed.';
   if (code === 'gateway_timeout') return 'Gateway timeout while waiting for model response.';
@@ -921,6 +930,12 @@ export default function BuilderPage() {
                 Polling every {AUTO_MODE_FEEDBACK_POLL_MS / 1000}s
               </span>
             </div>
+
+            {schedulerStatus?.gateway?.ready === false && (
+              <p className="text-[10px] text-[var(--red)] mb-2">
+                Gateway unavailable ({schedulerStatus.gateway.error || 'runtime_unreachable'}). Auto-mode ticks will pause until Railway recovers.
+              </p>
+            )}
 
             {(feedbackLoading || schedulerLoading) && feedbackEntries.length === 0 ? (
               <p className="text-xs text-[var(--muted)]">Loading activity...</p>

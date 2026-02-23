@@ -107,6 +107,12 @@ export interface AutoModeProvisionStatus {
   last_tick_result?: string | null;
   last_tick_error_code?: string | null;
   prompt_updated_at?: string | null;
+  gateway?: {
+    ready: boolean;
+    status_code: number | null;
+    checked_at: string | null;
+    error: string | null;
+  } | null;
   running_agents: string[];
   configured_agents: string[];
   agents: AutoModeAgentStatus[];

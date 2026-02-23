@@ -28,6 +28,9 @@ const SKILL_SOURCE_DIR = path.join(OPENCLAW_HOME, 'workspace', 'skills', 'clawci
 const CHAT_TIMEOUT_MS = intEnv('OPENCLAW_CHAT_TIMEOUT_MS', 240_000);
 const CHAT_RETRIES = intEnv('OPENCLAW_CHAT_RETRIES', 2);
 const CHAT_RETRY_DELAY_MS = intEnv('OPENCLAW_CHAT_RETRY_DELAY_MS', 1_500);
+const GATEWAY_HEALTH_TIMEOUT_MS = intEnv('OPENCLAW_GATEWAY_HEALTH_TIMEOUT_MS', 2_500);
+const GATEWAY_HEALTH_CACHE_MS = intEnv('OPENCLAW_GATEWAY_HEALTH_CACHE_MS', 5_000);
+const INTERNAL_API_TIMEOUT_MS = intEnv('OPENCLAW_INTERNAL_API_TIMEOUT_MS', 8_000);
 
 const AUTOPLAY_ENABLED = boolEnv('OPENCLAW_AUTOPLAY_ENABLED', true);
 const AUTOPLAY_INTERVAL_MS = intEnv('OPENCLAW_AUTOPLAY_INTERVAL_MS', 300_000);
@@ -78,6 +81,8 @@ const autoplayAgentState = new Map<string, {
   last_tick_result: string | null;
   last_tick_error_code: string | null;
 }>();
+let gatewayHealthCache: GatewayRuntimeHealth | null = null;
+let gatewayHealthCheckedAtMs = 0;
 
 interface GatewayChatMessage {
   role: string;
@@ -215,6 +220,13 @@ interface ParsedGatewayChoice {
   };
 }
 
+interface GatewayRuntimeHealth {
+  ok: boolean;
+  statusCode: number | null;
+  checkedAt: string;
+  error?: string;
+}
+
 interface GatewayConfig {
   agents?: {
     defaults?: {
@@ -259,8 +271,26 @@ function authenticate(
 }
 
 // Health check (before auth — Railway healthcheck sends no auth header)
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', agents: listAgentIds() });
+app.get('/health', async (_req, res) => {
+  const gateway = await checkGatewayHealth(true);
+  const configured = listConfiguredAgentIds();
+  const payload = {
+    status: gateway.ok ? 'ok' : 'degraded',
+    agents: listAgentIds(),
+    configured_agents: configured,
+    gateway: {
+      ready: gateway.ok,
+      status_code: gateway.statusCode,
+      checked_at: gateway.checkedAt,
+      error: gateway.error || null,
+    },
+    autoplay: {
+      enabled: AUTOPLAY_ENABLED,
+      interval_ms: AUTOPLAY_INTERVAL_MS,
+      next_tick_at: autoplayNextTickAtMs ? new Date(autoplayNextTickAtMs).toISOString() : null,
+    },
+  };
+  res.status(gateway.ok ? 200 : 503).json(payload);
 });
 
 app.use(authenticate);
@@ -730,11 +760,30 @@ app.post('/api/chat', async (req, res) => {
       return;
     }
 
-    const callBudget = await consumeCallBudget(
-      agentId,
-      'manual',
-      `manual-chat:${agentId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
-    );
+    const gateway = await checkGatewayHealth();
+    if (!gateway.ok) {
+      res.status(503).json({
+        error: 'OpenClaw gateway unavailable',
+        details: gateway.error || 'gateway_unreachable',
+        gateway_status: gateway.statusCode,
+      });
+      return;
+    }
+
+    let callBudget: ConsumeCallResponse;
+    try {
+      callBudget = await consumeCallBudget(
+        agentId,
+        'manual',
+        `manual-chat:${agentId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+      );
+    } catch (error) {
+      res.status(502).json({
+        error: 'Billing service unavailable',
+        details: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
     if (!callBudget.allowed) {
       res.status(402).json({
         error: 'Call budget exhausted',
@@ -752,6 +801,13 @@ app.post('/api/chat', async (req, res) => {
 
     if (!response.ok) {
       const errorText = await safeResponseText(response);
+      if (response.status === 401 || response.status === 403) {
+        res.status(502).json({
+          error: 'Gateway authentication failed',
+          details: 'Check OPENCLAW_GATEWAY_TOKEN wiring on Railway.',
+        });
+        return;
+      }
       res.status(response.status).json({
         error: 'Gateway error',
         details: errorText,
@@ -794,11 +850,30 @@ app.post('/api/chat/stream', async (req, res) => {
       return;
     }
 
-    const callBudget = await consumeCallBudget(
-      agentId,
-      'manual',
-      `manual-stream:${agentId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
-    );
+    const gateway = await checkGatewayHealth();
+    if (!gateway.ok) {
+      res.status(503).json({
+        error: 'OpenClaw gateway unavailable',
+        details: gateway.error || 'gateway_unreachable',
+        gateway_status: gateway.statusCode,
+      });
+      return;
+    }
+
+    let callBudget: ConsumeCallResponse;
+    try {
+      callBudget = await consumeCallBudget(
+        agentId,
+        'manual',
+        `manual-stream:${agentId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+      );
+    } catch (error) {
+      res.status(502).json({
+        error: 'Billing service unavailable',
+        details: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
     if (!callBudget.allowed) {
       res.status(402).json({
         error: 'Call budget exhausted',
@@ -817,6 +892,13 @@ app.post('/api/chat/stream', async (req, res) => {
 
     if (!response.ok || !response.body) {
       const errorText = await safeResponseText(response);
+      if (response.status === 401 || response.status === 403) {
+        res.status(502).json({
+          error: 'Gateway authentication failed',
+          details: 'Check OPENCLAW_GATEWAY_TOKEN wiring on Railway.',
+        });
+        return;
+      }
       res.status(response.status).json({ error: 'Gateway error', details: errorText });
       return;
     }
@@ -849,6 +931,7 @@ app.post('/api/chat/stream', async (req, res) => {
 
 app.get('/api/autoplay/status', async (_req, res) => {
   try {
+    const gateway = await checkGatewayHealth();
     const configuredAgents = listConfiguredAgentIds();
     const agentStatus = await Promise.all(configuredAgents.map(async (agentId) => {
       const lastTick = readAutoplayFeedback(agentId, 1)[0] || null;
@@ -907,6 +990,12 @@ app.get('/api/autoplay/status', async (_req, res) => {
       last_tick_result: autoplayLastTickResult,
       last_tick_error_code: autoplayLastTickErrorCode,
       prompt_updated_at: autoplayPromptUpdatedAt,
+      gateway: {
+        ready: gateway.ok,
+        status_code: gateway.statusCode,
+        checked_at: gateway.checkedAt,
+        error: gateway.error || null,
+      },
       agents: agentStatus,
     });
   } catch (error) {
@@ -1006,8 +1095,14 @@ function isGatewayTimeoutMessage(message: string): boolean {
 
 function normalizeAutoplayErrorCode(details: string, statusCode?: number): string {
   const lowered = details.toLowerCase();
+  if (lowered.includes('gateway_unavailable') || lowered.includes('gateway unavailable')) {
+    return 'gateway_unavailable';
+  }
   if (isGatewayTimeoutMessage(details) || statusCode === 408 || statusCode === 504) {
     return 'gateway_timeout';
+  }
+  if (statusCode === 401 || statusCode === 403) {
+    return 'gateway_auth';
   }
   if (lowered.includes("unknown command '") || lowered.includes('unknown command "')) {
     return 'unknown_command';
@@ -1159,6 +1254,7 @@ function captureCliHelp(command: string, args: string[], timeoutMs = 12_000): st
 function buildAutoplayCommandSnapshot(): string {
   const sections = [
     { title: 'clawcity --help', args: ['--help'] },
+    { title: 'clawcity oracle --help', args: ['oracle', '--help'] },
     { title: 'clawcity move --help', args: ['move', '--help'] },
     { title: 'clawcity move-to --help', args: ['move-to', '--help'] },
     { title: 'clawcity step --help', args: ['step', '--help'] },
@@ -1166,6 +1262,10 @@ function buildAutoplayCommandSnapshot(): string {
     { title: 'clawcity look --help', args: ['look', '--help'] },
     { title: 'clawcity status --help', args: ['status', '--help'] },
     { title: 'clawcity gather --help', args: ['gather', '--help'] },
+    { title: 'clawcity buy --help', args: ['buy', '--help'] },
+    { title: 'clawcity craft --help', args: ['craft', '--help'] },
+    { title: 'clawcity market --help', args: ['market', '--help'] },
+    { title: 'clawcity market fill --help', args: ['market', 'fill', '--help'] },
     { title: 'clawcity trade --help', args: ['trade', '--help'] },
   ];
 
@@ -1179,9 +1279,11 @@ function buildAutoplayPrompt(snapshot: string): string {
     'AUTO-MODE TICK (CLI-ONLY):',
     '- Execute exactly one concise progress turn with a hard budget of 3-4 CLI commands.',
     '- Priorities: keep food >= 50, recover low food, move off depleted tiles, gather efficiently.',
+    '- If intent is unclear, run `clawcity oracle` and follow the highest-priority pending outcome.',
     '- Use only valid CLI command forms from snapshot.',
     '- Allowed movement commands: `clawcity move <terrain|x,y>`, `clawcity move-to <terrain|x,y>`, `clawcity step <north|south|east|west>`.',
     '- Allowed stats commands: `clawcity stats`, `clawcity look`, `clawcity status`, `clawcity summary`.',
+    '- Allowed economy commands: `clawcity buy rations -q <N>`, `clawcity craft <item>`, `clawcity market list`, `clawcity market fill ... --preview`.',
     '- Allowed trade commands: `clawcity trade create ...`, `clawcity trade accept ...`, `clawcity trade reject ...`.',
     '- Terrain values must be lowercase: plains, forest, mountain, market, water, rocky, sand, deep_water, marsh.',
     '- One retry branch max for cooldown/depleted outcomes; do not loop indefinitely.',
@@ -1815,6 +1917,55 @@ async function safeResponseText(response: Response): Promise<string> {
   }
 }
 
+function gatewayAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
+  return GATEWAY_TOKEN
+    ? { Authorization: `Bearer ${GATEWAY_TOKEN}`, ...extraHeaders }
+    : { ...extraHeaders };
+}
+
+async function checkGatewayHealth(force = false): Promise<GatewayRuntimeHealth> {
+  const now = Date.now();
+  if (!force && gatewayHealthCache && now - gatewayHealthCheckedAtMs < GATEWAY_HEALTH_CACHE_MS) {
+    return gatewayHealthCache;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GATEWAY_HEALTH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${GATEWAY_URL}/v1/models`, {
+      method: 'GET',
+      headers: gatewayAuthHeaders(),
+      signal: controller.signal,
+    });
+
+    // Any non-5xx means the gateway process is reachable (200/401/403/404 all acceptable for health).
+    const ok = response.status < 500;
+    const next: GatewayRuntimeHealth = {
+      ok,
+      statusCode: response.status,
+      checkedAt: new Date().toISOString(),
+      error: ok ? undefined : `gateway_http_${response.status}`,
+    };
+    gatewayHealthCache = next;
+    gatewayHealthCheckedAtMs = now;
+    return next;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const next: GatewayRuntimeHealth = {
+      ok: false,
+      statusCode: null,
+      checkedAt: new Date().toISOString(),
+      error: isGatewayTimeoutMessage(message) ? 'gateway_health_timeout' : message,
+    };
+    gatewayHealthCache = next;
+    gatewayHealthCheckedAtMs = now;
+    return next;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function internalApiFetch(pathname: string, options: RequestInit = {}): Promise<Response> {
   if (!INTERNAL_API_TOKEN) {
     throw new Error('OPENCLAW_INTERNAL_API_TOKEN is not configured');
@@ -1824,10 +1975,17 @@ async function internalApiFetch(pathname: string, options: RequestInit = {}): Pr
     Authorization: `Bearer ${INTERNAL_API_TOKEN}`,
     ...((options.headers as Record<string, string>) || {}),
   };
-  return fetch(`${CLAWCITY_API_URL}${pathname}`, {
-    ...options,
-    headers,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), INTERNAL_API_TIMEOUT_MS);
+  try {
+    return await fetch(`${CLAWCITY_API_URL}${pathname}`, {
+      ...options,
+      headers,
+      signal: options.signal || controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function syncMemoryTelemetry(agentId: string, state: MemoryState): Promise<void> {
@@ -1922,6 +2080,16 @@ async function distillMemoryForAgent(
   const current = readMemoryFile(agentId);
   const recent = readRecentMemoryEvents(agentId, 80);
   const budgetId = `memory-distill:${agentId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+
+  const gateway = await checkGatewayHealth();
+  if (!gateway.ok) {
+    return {
+      success: false,
+      statusCode: 503,
+      error: 'OpenClaw gateway unavailable for memory distillation',
+      details: gateway.error || 'gateway_unreachable',
+    };
+  }
 
   let budget: ConsumeCallResponse;
   try {
@@ -2168,13 +2336,13 @@ async function proxyGatewayChat({
       const outboundMessages = memoryPrelude
         ? [{ role: 'system', content: `Long-term memory (compact):\n${memoryPrelude}` }, ...messages]
         : messages;
+      const headers = gatewayAuthHeaders({
+        'Content-Type': 'application/json',
+        'x-openclaw-agent-id': agentId,
+      });
       const response = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${GATEWAY_TOKEN}`,
-          'x-openclaw-agent-id': agentId,
-        },
+        headers,
         body: JSON.stringify({
           model: `openclaw:${agentId}`,
           messages: outboundMessages,
@@ -2318,11 +2486,43 @@ async function runAutoplayForAgent(agentId: string, options: RunAutoplayOptions 
 
   autoplayInFlight.add(agentId);
   try {
-    const budget = await consumeCallBudget(
-      agentId,
-      'autoplay',
-      `autoplay:${agentId}:${startedAt.getTime()}:${Math.random().toString(36).slice(2, 8)}`
-    );
+    const gateway = await checkGatewayHealth();
+    if (!gateway.ok) {
+      const summary = 'Auto-mode skipped because gateway is unavailable.';
+      const details = gateway.statusCode
+        ? `gateway_unavailable:http_${gateway.statusCode}`
+        : `gateway_unavailable:${gateway.error || 'unreachable'}`;
+      recordAutoplayFeedback({
+        agentId,
+        startedAt,
+        status: 'failed',
+        summary,
+        details,
+        errorCode: 'gateway_unavailable',
+      });
+      return { success: false, status: 'failed', summary, details, errorCode: 'gateway_unavailable' };
+    }
+
+    let budget: ConsumeCallResponse;
+    try {
+      budget = await consumeCallBudget(
+        agentId,
+        'autoplay',
+        `autoplay:${agentId}:${startedAt.getTime()}:${Math.random().toString(36).slice(2, 8)}`
+      );
+    } catch (error) {
+      const details = error instanceof Error ? error.message : String(error);
+      const summary = 'Auto-mode skipped because billing service is unavailable.';
+      recordAutoplayFeedback({
+        agentId,
+        startedAt,
+        status: 'failed',
+        summary,
+        details,
+        errorCode: 'billing_unavailable',
+      });
+      return { success: false, status: 'failed', summary, details, errorCode: 'billing_unavailable' };
+    }
     if (!budget.allowed) {
       const summary = budget.reason === 'manual_reserve'
         ? 'Auto-mode skipped to preserve manual reserve.'
@@ -2737,6 +2937,7 @@ async function signalConfigReload(): Promise<void> {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[provision] Provisioning server running on :${PORT}`);
   console.log(`[provision] Gateway URL: ${GATEWAY_URL}`);
+  console.log(`[provision] Gateway auth token: ${GATEWAY_TOKEN ? 'configured' : 'not configured'}`);
   console.log(`[provision] OpenClaw home: ${OPENCLAW_HOME}`);
   console.log(`[provision] Existing agents: ${listAgentIds().join(', ') || 'none'}`);
   void restorePersistedModelSetting()

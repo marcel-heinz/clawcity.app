@@ -1,12 +1,34 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 echo "[startup] Starting OpenClaw Gateway + Provisioning Server"
+
+# Normalize internal gateway auth for non-tech Railway setups.
+# If no explicit gateway token is set, derive it from provision token or generate one.
+if [ -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]; then
+  if [ -n "${PROVISION_AUTH_TOKEN:-}" ]; then
+    export OPENCLAW_GATEWAY_TOKEN="${PROVISION_AUTH_TOKEN}"
+    echo "[startup] OPENCLAW_GATEWAY_TOKEN not set; reusing PROVISION_AUTH_TOKEN for internal gateway auth"
+  else
+    export OPENCLAW_GATEWAY_TOKEN="$(node -e "console.log(require('crypto').randomBytes(24).toString('hex'))")"
+    echo "[startup] OPENCLAW_GATEWAY_TOKEN not set; generated ephemeral token for this runtime"
+  fi
+fi
+
+if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+  echo "[startup] WARNING: OPENROUTER_API_KEY is not set; chat and auto-mode ticks will fail"
+fi
 
 # Update clawcity CLI to latest (ensures we always have the newest version
 # regardless of Docker layer cache)
 echo "[startup] Updating clawcity CLI..."
-npm install -g clawcity@latest 2>&1 | tail -1
+if npm install -g clawcity@latest >/tmp/clawcity-update.log 2>&1; then
+  tail -n 1 /tmp/clawcity-update.log || true
+else
+  echo "[startup] WARNING: clawcity CLI update failed; continuing with bundled version"
+  tail -n 3 /tmp/clawcity-update.log || true
+fi
+rm -f /tmp/clawcity-update.log
 
 # Ensure volume subdirectories exist (volume mount wipes Docker-build dirs)
 mkdir -p /home/node/.openclaw/agents \
@@ -62,12 +84,33 @@ echo "[startup] Starting OpenClaw gateway on :${GATEWAY_PORT}..."
 su --preserve-environment -s /bin/bash node -c "export HOME=/home/node; NODE_OPTIONS='--max-old-space-size=4096' openclaw gateway --bind lan --port ${GATEWAY_PORT} --allow-unconfigured" &
 GATEWAY_PID=$!
 
-# Give gateway a moment to boot (or fail)
-sleep 3
+wait_for_gateway_ready() {
+  local max_attempts=30
+  local attempt=1
+  while [ "$attempt" -le "$max_attempts" ]; do
+    local status
+    status="$(curl -sS -o /dev/null -w "%{http_code}" --connect-timeout 1 --max-time 2 \
+      -H "Authorization: Bearer ${OPENCLAW_GATEWAY_TOKEN}" \
+      "http://127.0.0.1:${GATEWAY_PORT}/v1/models" || true)"
+    if [ "$status" = "200" ] || [ "$status" = "401" ] || [ "$status" = "403" ] || [ "$status" = "404" ]; then
+      return 0
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+  return 1
+}
+
+# Give gateway time to boot and start accepting HTTP requests.
+sleep 2
 
 # Check if gateway is still running
 if kill -0 $GATEWAY_PID 2>/dev/null; then
-  echo "[startup] OpenClaw gateway running (pid=$GATEWAY_PID)"
+  if wait_for_gateway_ready; then
+    echo "[startup] OpenClaw gateway running and reachable (pid=$GATEWAY_PID)"
+  else
+    echo "[startup] WARNING: OpenClaw gateway process is running but HTTP endpoint is not ready"
+  fi
 else
   echo "[startup] WARNING: OpenClaw gateway failed to start — provisioning server will still run"
   echo "[startup] Check that OPENROUTER_API_KEY and other env vars are set"

@@ -22,8 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
     && git config --system url."https://github.com/".insteadOf "ssh://git@github.com/" \
     && git config --system --add url."https://github.com/".insteadOf "git@github.com:"
 
-# Install clawcity CLI globally (no git deps, fast)
-RUN npm install -g clawcity@2.0.3
+# Install clawcity CLI globally (baseline pinned to latest known-good; startup.sh still refreshes to latest)
+RUN npm install -g clawcity@2.2.7
 
 # Install openclaw globally (has git dep on libsignal-node)
 RUN npm install -g openclaw@latest

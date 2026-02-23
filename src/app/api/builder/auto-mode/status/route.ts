@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
     const agentStatus = statusResult.status.agents.find((entry) => entry.agent_id === config.id) || null;
     const effectiveEnabled = Boolean(
       statusResult.status.enabled &&
+      statusResult.status.gateway?.ready !== false &&
       config.auto_mode_enabled !== false &&
       agentStatus?.enabled !== false
     );
@@ -65,6 +66,7 @@ export async function GET(request: NextRequest) {
         last_tick_error_code: agentStatus?.last_tick_error_code || statusResult.status.last_tick_error_code || null,
         memory: agentStatus?.memory || null,
         budget: agentStatus?.budget || null,
+        gateway: statusResult.status.gateway || null,
       },
     });
   } catch (error) {
