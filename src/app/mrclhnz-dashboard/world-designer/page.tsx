@@ -61,9 +61,26 @@ interface InteractionState {
   lastTileY: number;
 }
 
+interface CanvasProjection {
+  canvasWidth: number;
+  canvasHeight: number;
+  srcX: number;
+  srcY: number;
+  srcWidth: number;
+  srcHeight: number;
+  destX: number;
+  destY: number;
+  destWidth: number;
+  destHeight: number;
+  zoom: number;
+}
+
 const STORAGE_KEY = 'clawcity-world-designer-snapshots-v1';
 const MAX_SNAPSHOTS = 10;
 const MAX_HISTORY = 160;
+const MAX_ZOOM = 28;
+const MIN_ZOOM_FLOOR = 0.35;
+const PREVIEW_RADIUS = 26;
 const BRUSH_SIZES = [1, 3, 5, 9] as const;
 const TERRAIN_SHORTCUTS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'] as const;
 
@@ -145,10 +162,17 @@ export default function WorldDesignerPage() {
   const [viewState, setViewState] = useState<ViewState>({
     x: 0,
     y: 0,
-    zoom: 2,
+    zoom: 1,
   });
   const viewStateRef = useRef<ViewState>(viewState);
   const [canvasSize, setCanvasSize] = useState({ width: 900, height: 680 });
+  const hasInitializedViewRef = useRef(false);
+
+  const [followPreviewCenter, setFollowPreviewCenter] = useState(true);
+  const [manualPreviewCenter, setManualPreviewCenter] = useState({
+    x: Math.floor(WORLD_SIZE / 2),
+    y: Math.floor(WORLD_SIZE / 2),
+  });
 
   const [statusMessage, setStatusMessage] = useState<string | null>(
     'This world is randomly generated. You can build on top of it.'
@@ -197,6 +221,65 @@ export default function WorldDesignerPage() {
   const selectedSnapshot = useMemo(
     () => snapshots.find((item) => item.id === selectedSnapshotId) ?? null,
     [snapshots, selectedSnapshotId]
+  );
+
+  const getProjectionForState = useCallback((state: ViewState): CanvasProjection => {
+    const canvasWidth = Math.max(1, canvasSize.width);
+    const canvasHeight = Math.max(1, canvasSize.height);
+    const zoom = Math.max(state.zoom, 0.0001);
+
+    const viewWorldWidth = canvasWidth / zoom;
+    const viewWorldHeight = canvasHeight / zoom;
+    const viewMinX = state.x;
+    const viewMinY = state.y;
+    const viewMaxX = viewMinX + viewWorldWidth;
+    const viewMaxY = viewMinY + viewWorldHeight;
+
+    const srcX = clamp(viewMinX, 0, WORLD_SIZE);
+    const srcY = clamp(viewMinY, 0, WORLD_SIZE);
+    const srcMaxX = clamp(viewMaxX, 0, WORLD_SIZE);
+    const srcMaxY = clamp(viewMaxY, 0, WORLD_SIZE);
+    const srcWidth = Math.max(0, srcMaxX - srcX);
+    const srcHeight = Math.max(0, srcMaxY - srcY);
+
+    const destX = (srcX - viewMinX) * zoom;
+    const destY = (srcY - viewMinY) * zoom;
+    const destWidth = srcWidth * zoom;
+    const destHeight = srcHeight * zoom;
+
+    return {
+      canvasWidth,
+      canvasHeight,
+      srcX,
+      srcY,
+      srcWidth,
+      srcHeight,
+      destX,
+      destY,
+      destWidth,
+      destHeight,
+      zoom,
+    };
+  }, [canvasSize.height, canvasSize.width]);
+
+  const mapCenter = useMemo(() => {
+    const projection = getProjectionForState(viewState);
+    if (projection.srcWidth <= 0 || projection.srcHeight <= 0) {
+      return {
+        x: Math.floor(WORLD_SIZE / 2),
+        y: Math.floor(WORLD_SIZE / 2),
+      };
+    }
+
+    return {
+      x: clamp(Math.round(projection.srcX + projection.srcWidth * 0.5), 0, WORLD_SIZE - 1),
+      y: clamp(Math.round(projection.srcY + projection.srcHeight * 0.5), 0, WORLD_SIZE - 1),
+    };
+  }, [getProjectionForState, viewState]);
+
+  const activePreviewCenter = useMemo(
+    () => (followPreviewCenter ? mapCenter : manualPreviewCenter),
+    [followPreviewCenter, mapCenter, manualPreviewCenter]
   );
 
   const syncHistoryState = useCallback(() => {
@@ -268,16 +351,16 @@ export default function WorldDesignerPage() {
       const height = Math.max(1, canvasSize.height);
       const fitZoomX = width / WORLD_SIZE;
       const fitZoomY = height / WORLD_SIZE;
-      const minZoom = Math.max(0.35, fitZoomX, fitZoomY);
-      const zoom = clamp(next.zoom, minZoom, 28);
-      const srcW = width / zoom;
-      const srcH = height / zoom;
+      const minZoom = Math.max(MIN_ZOOM_FLOOR, Math.min(fitZoomX, fitZoomY));
+      const zoom = clamp(next.zoom, minZoom, MAX_ZOOM);
+      const viewWorldWidth = width / zoom;
+      const viewWorldHeight = height / zoom;
 
-      const maxX = WORLD_SIZE - srcW;
-      const maxY = WORLD_SIZE - srcH;
+      const maxX = WORLD_SIZE - viewWorldWidth;
+      const maxY = WORLD_SIZE - viewWorldHeight;
 
-      const x = maxX <= 0 ? (WORLD_SIZE - srcW) * 0.5 : clamp(next.x, 0, maxX);
-      const y = maxY <= 0 ? (WORLD_SIZE - srcH) * 0.5 : clamp(next.y, 0, maxY);
+      const x = maxX <= 0 ? (WORLD_SIZE - viewWorldWidth) * 0.5 : clamp(next.x, 0, maxX);
+      const y = maxY <= 0 ? (WORLD_SIZE - viewWorldHeight) * 0.5 : clamp(next.y, 0, maxY);
       return { x, y, zoom };
     },
     [canvasSize.height, canvasSize.width]
@@ -291,33 +374,47 @@ export default function WorldDesignerPage() {
     if (!ctx) return;
 
     const state = viewStateRef.current;
-    const srcW = canvasSize.width / state.zoom;
-    const srcH = canvasSize.height / state.zoom;
+    const projection = getProjectionForState(state);
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#f8fafc';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(offscreen, state.x, state.y, srcW, srcH, 0, 0, canvas.width, canvas.height);
+    if (projection.srcWidth > 0 && projection.srcHeight > 0 && projection.destWidth > 0 && projection.destHeight > 0) {
+      ctx.drawImage(
+        offscreen,
+        projection.srcX,
+        projection.srcY,
+        projection.srcWidth,
+        projection.srcHeight,
+        projection.destX,
+        projection.destY,
+        projection.destWidth,
+        projection.destHeight
+      );
+    }
 
-    if (showGrid && state.zoom >= 2.4) {
-      const startX = Math.floor(state.x);
-      const endX = Math.ceil(state.x + srcW);
-      const startY = Math.floor(state.y);
-      const endY = Math.ceil(state.y + srcH);
+    if (showGrid && state.zoom >= 2.4 && projection.srcWidth > 0 && projection.srcHeight > 0) {
+      const startX = Math.floor(projection.srcX);
+      const endX = Math.ceil(projection.srcX + projection.srcWidth);
+      const startY = Math.floor(projection.srcY);
+      const endY = Math.ceil(projection.srcY + projection.srcHeight);
 
       ctx.save();
+      ctx.beginPath();
+      ctx.rect(projection.destX, projection.destY, projection.destWidth, projection.destHeight);
+      ctx.clip();
       ctx.strokeStyle = 'rgba(15, 23, 42, 0.2)';
       ctx.lineWidth = 1;
       ctx.beginPath();
 
       for (let x = startX; x <= endX; x++) {
-        const screenX = (x - state.x) * state.zoom;
+        const screenX = (x - state.x) * projection.zoom;
         ctx.moveTo(screenX, 0);
         ctx.lineTo(screenX, canvas.height);
       }
       for (let y = startY; y <= endY; y++) {
-        const screenY = (y - state.y) * state.zoom;
+        const screenY = (y - state.y) * projection.zoom;
         ctx.moveTo(0, screenY);
         ctx.lineTo(canvas.width, screenY);
       }
@@ -332,12 +429,15 @@ export default function WorldDesignerPage() {
       const y0 = Math.min(a.y, b.y);
       const x1 = Math.max(a.x, b.x);
       const y1 = Math.max(a.y, b.y);
-      const sx = (x0 - state.x) * state.zoom;
-      const sy = (y0 - state.y) * state.zoom;
-      const sw = (x1 - x0 + 1) * state.zoom;
-      const sh = (y1 - y0 + 1) * state.zoom;
+      const sx = (x0 - state.x) * projection.zoom;
+      const sy = (y0 - state.y) * projection.zoom;
+      const sw = (x1 - x0 + 1) * projection.zoom;
+      const sh = (y1 - y0 + 1) * projection.zoom;
 
       ctx.save();
+      ctx.beginPath();
+      ctx.rect(projection.destX, projection.destY, projection.destWidth, projection.destHeight);
+      ctx.clip();
       ctx.fillStyle = 'rgba(249, 115, 22, 0.18)';
       ctx.strokeStyle = '#ea580c';
       ctx.lineWidth = 2;
@@ -346,25 +446,25 @@ export default function WorldDesignerPage() {
       ctx.restore();
     }
 
-    const previewRadius = 26;
-    const previewCenterX = clamp(Math.round(state.x + srcW * 0.5), 0, WORLD_SIZE - 1);
-    const previewCenterY = clamp(Math.round(state.y + srcH * 0.5), 0, WORLD_SIZE - 1);
-    const previewMinX = previewCenterX - previewRadius;
-    const previewMinY = previewCenterY - previewRadius;
-    const previewSize = previewRadius * 2 + 1;
+    const previewMinX = activePreviewCenter.x - PREVIEW_RADIUS;
+    const previewMinY = activePreviewCenter.y - PREVIEW_RADIUS;
+    const previewSize = PREVIEW_RADIUS * 2 + 1;
 
     ctx.save();
+    ctx.beginPath();
+    ctx.rect(projection.destX, projection.destY, projection.destWidth, projection.destHeight);
+    ctx.clip();
     ctx.strokeStyle = 'rgba(14, 165, 233, 0.85)';
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 4]);
     ctx.strokeRect(
-      (previewMinX - state.x) * state.zoom,
-      (previewMinY - state.y) * state.zoom,
-      previewSize * state.zoom,
-      previewSize * state.zoom
+      (previewMinX - state.x) * projection.zoom,
+      (previewMinY - state.y) * projection.zoom,
+      previewSize * projection.zoom,
+      previewSize * projection.zoom
     );
     ctx.restore();
-  }, [canvasSize.height, canvasSize.width, showGrid]);
+  }, [activePreviewCenter.x, activePreviewCenter.y, getProjectionForState, showGrid]);
 
   const getTileFromPointer = useCallback(
     (clientX: number, clientY: number): { x: number; y: number } | null => {
@@ -375,15 +475,18 @@ export default function WorldDesignerPage() {
       const scaleY = canvas.height / Math.max(rect.height, 1);
       const px = (clientX - rect.left) * scaleX;
       const py = (clientY - rect.top) * scaleY;
-      if (px < 0 || py < 0 || px > canvas.width || py > canvas.height) return null;
+      if (px < 0 || py < 0 || px >= canvas.width || py >= canvas.height) return null;
 
       const state = viewStateRef.current;
-      const x = Math.floor(state.x + px / state.zoom);
-      const y = Math.floor(state.y + py / state.zoom);
+      const projection = getProjectionForState(state);
+      const worldX = state.x + px / projection.zoom;
+      const worldY = state.y + py / projection.zoom;
+      const x = Math.floor(worldX);
+      const y = Math.floor(worldY);
       if (x < 0 || x >= WORLD_SIZE || y < 0 || y >= WORLD_SIZE) return null;
       return { x, y };
     },
-    []
+    [getProjectionForState]
   );
 
   const beginOperation = useCallback((label: string) => {
@@ -788,7 +891,13 @@ export default function WorldDesignerPage() {
   }, []);
 
   useEffect(() => {
-    setViewState((current) => clampViewState(current));
+    setViewState((current) => {
+      if (!hasInitializedViewRef.current) {
+        hasInitializedViewRef.current = true;
+        return clampViewState({ x: 0, y: 0, zoom: 0 });
+      }
+      return clampViewState(current);
+    });
   }, [canvasSize.height, canvasSize.width, clampViewState]);
 
   useEffect(() => {
@@ -874,8 +983,8 @@ export default function WorldDesignerPage() {
     const px = canvas.width * 0.5;
     const py = canvas.height * 0.5;
     const current = viewStateRef.current;
-    const zoomFactor = direction === 'in' ? 1.15 : 1 / 1.15;
-    const nextZoom = clamp(current.zoom * zoomFactor, 0.35, 28);
+    const zoomFactor = 1.1;
+    const nextZoom = direction === 'in' ? current.zoom * zoomFactor : current.zoom / zoomFactor;
 
     const worldX = current.x + px / current.zoom;
     const worldY = current.y + py / current.zoom;
@@ -891,9 +1000,6 @@ export default function WorldDesignerPage() {
   }, [clampViewState, drawCanvas]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    const tile = getTileFromPointer(event.clientX, event.clientY);
-    if (!tile) return;
-
     const shouldPan = event.button === 1 || event.button === 2 || isSpacePressedRef.current;
     const interaction = interactionRef.current;
     interaction.pointerId = event.pointerId;
@@ -901,16 +1007,27 @@ export default function WorldDesignerPage() {
     interaction.startClientY = event.clientY;
     interaction.startViewX = viewStateRef.current.x;
     interaction.startViewY = viewStateRef.current.y;
-    interaction.lastTileX = tile.x;
-    interaction.lastTileY = tile.y;
+    interaction.lastTileX = -1;
+    interaction.lastTileY = -1;
 
     const canvas = canvasRef.current;
-    if (canvas) canvas.setPointerCapture(event.pointerId);
 
     if (shouldPan) {
+      if (canvas) canvas.setPointerCapture(event.pointerId);
       interaction.mode = 'pan';
       return;
     }
+
+    const tile = getTileFromPointer(event.clientX, event.clientY);
+    if (!tile) {
+      interaction.pointerId = null;
+      return;
+    }
+
+    if (canvas) canvas.setPointerCapture(event.pointerId);
+
+    interaction.lastTileX = tile.x;
+    interaction.lastTileY = tile.y;
 
     if (tool === 'eyedropper') {
       const terrainIndex = worldRef.current[tileIndex(tile.x, tile.y)];
@@ -1036,22 +1153,12 @@ export default function WorldDesignerPage() {
     event.preventDefault();
   };
 
-  const previewCenter = useMemo(() => {
-    const state = viewState;
-    const srcW = canvasSize.width / state.zoom;
-    const srcH = canvasSize.height / state.zoom;
-    return {
-      x: clamp(Math.round(state.x + srcW * 0.5), 0, WORLD_SIZE - 1),
-      y: clamp(Math.round(state.y + srcH * 0.5), 0, WORLD_SIZE - 1),
-    };
-  }, [canvasSize.height, canvasSize.width, viewState]);
-
   const previewTiles = useMemo(
     () => {
       void previewVersion;
-      return extractTileWindow(worldRef.current, previewCenter.x, previewCenter.y, 26);
+      return extractTileWindow(worldRef.current, activePreviewCenter.x, activePreviewCenter.y, PREVIEW_RADIUS);
     },
-    [previewCenter.x, previewCenter.y, previewVersion]
+    [activePreviewCenter.x, activePreviewCenter.y, previewVersion]
   );
 
   if (isAuthenticated === null) {
@@ -1293,7 +1400,7 @@ export default function WorldDesignerPage() {
                 </button>
               </div>
               <p className="mt-2 text-xs text-slate-500">
-                Navigation: wheel zoom, drag pan with right-click or hold space.
+                Navigation: zoom with +/- buttons, pan with right-click/middle-click or hold space.
               </p>
             </section>
           </aside>
@@ -1310,17 +1417,20 @@ export default function WorldDesignerPage() {
                   <button
                     onClick={() => applyZoom('out')}
                     className="rounded border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 hover:border-orange-300"
+                    title="Zoom out"
                   >
                     −
                   </button>
                   <button
                     onClick={() => applyZoom('in')}
                     className="rounded border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 hover:border-orange-300"
+                    title="Zoom in"
                   >
                     +
                   </button>
                   <span>
-                    Center: ({previewCenter.x}, {previewCenter.y}) • Zoom {viewState.zoom.toFixed(2)}x
+                    Map center: ({mapCenter.x}, {mapCenter.y}) • 3D source: ({activePreviewCenter.x}, {activePreviewCenter.y}) • Zoom{' '}
+                    {viewState.zoom.toFixed(2)}x
                   </span>
                 </div>
               </div>
@@ -1342,18 +1452,74 @@ export default function WorldDesignerPage() {
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">3D Source Reference</h2>
               <p className="mt-2 text-xs text-slate-600">
-                3D preview uses the cyan dashed box from the main map.
+                3D preview uses the cyan dashed box from the main map. You can keep it synced to the map center or set it manually.
               </p>
+              <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={followPreviewCenter}
+                  onChange={(event) => setFollowPreviewCenter(event.target.checked)}
+                />
+                Follow map center
+              </label>
+              {!followPreviewCenter && (
+                <div className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-xs text-slate-600">
+                      Source X
+                      <input
+                        type="number"
+                        min={0}
+                        max={WORLD_SIZE - 1}
+                        value={manualPreviewCenter.x}
+                        onChange={(event) => {
+                          const parsed = Number.parseInt(event.target.value, 10);
+                          if (Number.isNaN(parsed)) return;
+                          setManualPreviewCenter((current) => ({
+                            ...current,
+                            x: clamp(parsed, 0, WORLD_SIZE - 1),
+                          }));
+                        }}
+                        className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700"
+                      />
+                    </label>
+                    <label className="text-xs text-slate-600">
+                      Source Y
+                      <input
+                        type="number"
+                        min={0}
+                        max={WORLD_SIZE - 1}
+                        value={manualPreviewCenter.y}
+                        onChange={(event) => {
+                          const parsed = Number.parseInt(event.target.value, 10);
+                          if (Number.isNaN(parsed)) return;
+                          setManualPreviewCenter((current) => ({
+                            ...current,
+                            y: clamp(parsed, 0, WORLD_SIZE - 1),
+                          }));
+                        }}
+                        className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700"
+                      />
+                    </label>
+                  </div>
+                  <button
+                    onClick={() => setManualPreviewCenter(mapCenter)}
+                    className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 hover:border-orange-300"
+                  >
+                    Use current map center
+                  </button>
+                </div>
+              )}
               <p className="mt-1 text-xs text-slate-600">
-                Source center: ({previewCenter.x}, {previewCenter.y}) • Radius: 26 tiles
+                Source center: ({activePreviewCenter.x}, {activePreviewCenter.y}) • Radius: {PREVIEW_RADIUS} tiles
               </p>
             </section>
 
             <WorldDesigner3DPreview
               title="3D Preview (main-world style)"
               tiles={previewTiles}
-              centerX={previewCenter.x}
-              centerY={previewCenter.y}
+              centerX={activePreviewCenter.x}
+              centerY={activePreviewCenter.y}
             />
 
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
