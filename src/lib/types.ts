@@ -57,6 +57,8 @@ export interface AgentPublic {
   y: number;
   reputation: number;
   last_active: string;
+  last_seen_at?: string | null;
+  is_online?: boolean;
   wealth?: number;
   territory_count?: number;
   avatar?: AgentAvatar;

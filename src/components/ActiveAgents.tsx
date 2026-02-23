@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { AgentLeaderboard } from '@/lib/types';
 import { CrabSprite } from './CrabSprite';
 import { resolveAvatar } from '@/lib/avatar';
+import { isAgentOnline } from '@/lib/presence';
 
 interface ActiveAgentsProps {
   agents: AgentLeaderboard[];
@@ -11,17 +12,17 @@ interface ActiveAgentsProps {
   isConnected?: boolean;
 }
 
-// Check if agent was active in the last 5 minutes
-function isActiveAgent(lastActive: string): boolean {
-  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-  const lastActiveTime = new Date(lastActive).getTime();
-  return lastActiveTime >= fiveMinutesAgo;
+// Shared presence signal from world/status (with local fallback).
+function isActiveAgent(agent: AgentLeaderboard): boolean {
+  return isAgentOnline(agent);
 }
 
 // Format time ago
-function formatTimeAgo(lastActive: string): string {
+function formatTimeAgo(lastSeenAt?: string | null): string {
+  if (!lastSeenAt) return 'offline';
   const now = Date.now();
-  const lastActiveTime = new Date(lastActive).getTime();
+  const lastActiveTime = new Date(lastSeenAt).getTime();
+  if (!Number.isFinite(lastActiveTime)) return 'offline';
   const diffMs = now - lastActiveTime;
 
   const seconds = Math.floor(diffMs / 1000);
@@ -40,8 +41,12 @@ export function ActiveAgents({ agents, onAgentClick, isConnected = true }: Activ
   // Filter to only active agents and sort by most recently active
   const activeAgents = useMemo(() => {
     return agents
-      .filter(agent => isActiveAgent(agent.last_active))
-      .sort((a, b) => new Date(b.last_active).getTime() - new Date(a.last_active).getTime());
+      .filter(agent => isActiveAgent(agent))
+      .sort((a, b) => {
+        const aTime = new Date(a.last_seen_at || a.last_active).getTime();
+        const bTime = new Date(b.last_seen_at || b.last_active).getTime();
+        return bTime - aTime;
+      });
   }, [agents]);
   const showConnectingState = !isConnected && activeAgents.length === 0;
 
@@ -82,7 +87,7 @@ export function ActiveAgents({ agents, onAgentClick, isConnected = true }: Activ
                 </div>
                 <div className="text-[10px] text-[var(--muted)] flex items-center gap-2">
                   <span>({agent.x}, {agent.y})</span>
-                  <span className="text-green-500">{formatTimeAgo(agent.last_active)}</span>
+                  <span className="text-green-500">{formatTimeAgo(agent.last_seen_at || agent.last_active)}</span>
                 </div>
               </div>
 

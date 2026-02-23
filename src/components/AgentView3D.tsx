@@ -6,6 +6,7 @@ import { AgentPublic, AgentAvatar, Tile, TerrainType, WORLD_SIZE } from '@/lib/t
 import { supabase } from '@/lib/supabase';
 import { resolveAvatar, hexToThreeColor } from '@/lib/avatar';
 import { createCrabMesh as createSharedCrabMesh } from '@/lib/crab-mesh';
+import { isAgentOnline } from '@/lib/presence';
 
 // ─── Color palette ───────────────────────────────────────────────────────────
 const COLORS = {
@@ -203,7 +204,39 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
   // Sync refs for animation loop access
   useEffect(() => { agentNameRef.current = agentName; }, [agentName]);
-  useEffect(() => { agentsDataRef.current = agents; }, [agents]);
+  useEffect(() => {
+    agentsDataRef.current = agents;
+    const agentGroup = agentGroupRef.current;
+    if (!agentGroup) return;
+
+    const center = isSpectator ? terrainCenterRef.current : targetPosRef.current;
+    const visibleAgents = new Map(
+      agents
+        .filter((agent) => isAgentOnline(agent))
+        .map((agent) => [agent.id, agent] as const)
+    );
+
+    otherAgentsRef.current.forEach((agentData, agentId) => {
+      const latest = visibleAgents.get(agentId);
+      if (!latest || (!isSpectator && agentId === selectedAgentId)) {
+        agentGroup.remove(agentData.mesh);
+        otherAgentsRef.current.delete(agentId);
+        const label = agentLabelElsRef.current.get(agentId);
+        if (label) {
+          label.remove();
+          agentLabelElsRef.current.delete(agentId);
+        }
+        return;
+      }
+
+      agentData.name = latest.name;
+      agentData.worldX = latest.x;
+      agentData.worldY = latest.y;
+      const relX = latest.x - center.x;
+      const relZ = latest.y - center.y;
+      agentData.target.set(relX, 0, relZ);
+    });
+  }, [agents, isSpectator, selectedAgentId]);
 
   // ─── Mesh Creators ───────────────────────────────────────────────────────────
 
@@ -1470,6 +1503,18 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         const agentGroup = agentGroupRef.current;
         if (!agentGroup) return;
 
+        const canonicalAgent = agentsDataRef.current.find((agent) => agent.id === updatedAgent.id);
+        if (!canonicalAgent || !isAgentOnline(canonicalAgent)) {
+          const existing = otherAgentsRef.current.get(updatedAgent.id);
+          if (existing) {
+            agentGroup.remove(existing.mesh);
+            otherAgentsRef.current.delete(updatedAgent.id);
+            const lbl = agentLabelElsRef.current.get(updatedAgent.id);
+            if (lbl) { lbl.remove(); agentLabelElsRef.current.delete(updatedAgent.id); }
+          }
+          return;
+        }
+
         const center = getCenter();
         const relX = updatedAgent.x - center.x;
         const relZ = updatedAgent.y - center.y;
@@ -1490,15 +1535,16 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           existing.target.set(relX, 0, relZ);
           existing.worldX = updatedAgent.x;
           existing.worldY = updatedAgent.y;
+          existing.name = canonicalAgent.name;
         } else {
-          const av = resolveAvatar(updatedAgent.name, updatedAgent.avatar);
+          const av = resolveAvatar(canonicalAgent.name, canonicalAgent.avatar || updatedAgent.avatar);
           const mesh = createCrabMesh({ body: hexToThreeColor(av.body_color), claw: hexToThreeColor(av.claw_color), eye: hexToThreeColor(av.eye_color) });
           mesh.position.set(relX, 0, relZ);
           agentGroup.add(mesh);
           otherAgentsRef.current.set(updatedAgent.id, {
             worldX: updatedAgent.x,
             worldY: updatedAgent.y,
-            name: updatedAgent.name,
+            name: canonicalAgent.name,
             current: new THREE.Vector3(relX, 0, relZ),
             target: new THREE.Vector3(relX, 0, relZ),
             mesh,
@@ -1514,6 +1560,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         const data = await response.json();
         if (data.success && data.data.agents) {
           const allAgents: AgentPublic[] = data.data.agents;
+          agentsDataRef.current = allAgents;
+          const onlineAgents = allAgents.filter((agent) => isAgentOnline(agent));
 
           if (!isSpectator) {
             const ourAgent = allAgents.find(a => a.id === selectedAgentId);
@@ -1529,7 +1577,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           const agentGroup = agentGroupRef.current;
           if (agentGroup) {
             const center = getCenter();
-            allAgents.forEach(agent => {
+            onlineAgents.forEach(agent => {
               if (!isSpectator && agent.id === selectedAgentId) return;
               const relX = agent.x - center.x;
               const relZ = agent.y - center.y;

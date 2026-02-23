@@ -3,6 +3,7 @@ import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { jsonResponse, errorResponse } from '@/lib/auth';
 import { calculateWealthBreakdown, AgentLeaderboard } from '@/lib/types';
 import { toPublicAvatarLabView } from '@/lib/avatar-lab';
+import { isAgentOnline, PRESENCE_ONLINE_WINDOW_MS, resolveLastSeenAt } from '@/lib/presence';
 
 export async function GET(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -43,6 +44,7 @@ export async function GET(request: NextRequest) {
     const radius = parseInt(url.searchParams.get('radius') || '10');
     // compact=true returns only leaderboard + stats (no agents array, no events)
     const compact = url.searchParams.get('compact') === 'true';
+    const nowMs = Date.now();
 
     const systemFlagProbe = await supabase
       .from('agents')
@@ -56,7 +58,7 @@ export async function GET(request: NextRequest) {
     // Get all agents with resources and gathering stats
     let agentsQuery = supabase
       .from('agents')
-      .select('id, name, x, y, gold, wood, food, stone, reputation, last_active, created_at, total_gathered_gold, total_gathered_wood, total_gathered_food, total_gathered_stone, claimed, claimed_by_twitter, avatar')
+      .select('id, name, x, y, gold, wood, food, stone, reputation, last_active, last_move_at, last_gather_at, last_trade_at, last_craft_at, last_build_at, last_forum_thread_at, last_forum_post_at, created_at, total_gathered_gold, total_gathered_wood, total_gathered_food, total_gathered_stone, claimed, claimed_by_twitter, avatar')
       .order('reputation', { ascending: false });
 
     if (supportsSystemFlag) {
@@ -178,10 +180,14 @@ export async function GET(request: NextRequest) {
         lifetime_spent: 0,
       };
       const claimableClawCredits = claimableClawCreditMap.get(agent.id) || 0;
+      const last_seen_at = resolveLastSeenAt(agent);
+      const is_online = isAgentOnline(agent, { nowMs });
 
       return {
         ...agent,
         avatar: toPublicAvatarLabView(agent.name, agent.avatar),
+        last_seen_at,
+        is_online,
         wealth: wealthBreakdown.total,
         resource_wealth: wealthBreakdown.resource_wealth,
         infrastructure_wealth: wealthBreakdown.infrastructure_wealth,
@@ -266,16 +272,33 @@ export async function GET(request: NextRequest) {
     }
     const { count: totalAgents } = await totalAgentsQuery;
 
-    // Count active agents (active in last 5 minutes)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // Presence count for UI ("online"), derived from recent activity timestamps.
+    let activeAgents = agents.filter(agent => agent.is_online).length;
+    const presenceCutoffIso = new Date(nowMs - PRESENCE_ONLINE_WINDOW_MS).toISOString();
+    const presenceOrFilters = [
+      `last_active.gte.${presenceCutoffIso}`,
+      `last_move_at.gte.${presenceCutoffIso}`,
+      `last_gather_at.gte.${presenceCutoffIso}`,
+      `last_trade_at.gte.${presenceCutoffIso}`,
+      `last_craft_at.gte.${presenceCutoffIso}`,
+      `last_build_at.gte.${presenceCutoffIso}`,
+      `last_forum_thread_at.gte.${presenceCutoffIso}`,
+      `last_forum_post_at.gte.${presenceCutoffIso}`,
+    ].join(',');
+
     let activeAgentsQuery = supabase
       .from('agents')
       .select('*', { count: 'exact', head: true })
-      .gte('last_active', fiveMinutesAgo);
+      .or(presenceOrFilters);
     if (supportsSystemFlag) {
       activeAgentsQuery = activeAgentsQuery.eq('is_system', false);
     }
-    const { count: activeAgents } = await activeAgentsQuery;
+    const { count: activeAgentCount, error: activeAgentCountError } = await activeAgentsQuery;
+    if (!activeAgentCountError && typeof activeAgentCount === 'number') {
+      activeAgents = activeAgentCount;
+    } else if (activeAgentCountError) {
+      console.error('Error counting online agents:', activeAgentCountError);
+    }
 
     // Count completed trades
     const { count: totalTrades } = await supabase

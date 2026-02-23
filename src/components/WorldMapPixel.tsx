@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { AgentPublic, TerrainType, WORLD_SIZE } from '@/lib/types';
 import { CrabSprite } from '@/components/CrabSprite';
 import { resolveAvatar } from '@/lib/avatar';
+import { isAgentOnline } from '@/lib/presence';
 
 // Terrain colors matching terrain-demo.html
 const TERRAIN_COLORS: Record<TerrainType, string> = {
@@ -18,11 +19,9 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
   marsh: '#457b9d',
 };
 
-// Check if agent was active in the last 5 minutes
-function isActiveAgent(lastActive: string): boolean {
-  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-  const lastActiveTime = new Date(lastActive).getTime();
-  return lastActiveTime >= fiveMinutesAgo;
+// Shared presence signal from world/status (with local fallback).
+function isActiveAgent(agent: AgentPublic): boolean {
+  return isAgentOnline(agent);
 }
 
 interface WorldMapPixelProps {
@@ -89,7 +88,7 @@ export function WorldMapPixel({ agents, onAgentClick, onMapClick, isConnected = 
 
   // Filter to only active agents
   const activeAgents = useMemo(() => {
-    return agents.filter(agent => isActiveAgent(agent.last_active));
+    return agents.filter(agent => isActiveAgent(agent));
   }, [agents]);
 
   // Draw the map
