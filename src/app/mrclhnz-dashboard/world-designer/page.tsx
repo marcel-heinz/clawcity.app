@@ -371,9 +371,11 @@ export default function WorldDesignerPage() {
       const canvas = canvasRef.current;
       if (!canvas) return null;
       const rect = canvas.getBoundingClientRect();
-      const px = clientX - rect.left;
-      const py = clientY - rect.top;
-      if (px < 0 || py < 0 || px > rect.width || py > rect.height) return null;
+      const scaleX = canvas.width / Math.max(rect.width, 1);
+      const scaleY = canvas.height / Math.max(rect.height, 1);
+      const px = (clientX - rect.left) * scaleX;
+      const py = (clientY - rect.top) * scaleY;
+      if (px < 0 || py < 0 || px > canvas.width || py > canvas.height) return null;
 
       const state = viewStateRef.current;
       const x = Math.floor(state.x + px / state.zoom);
@@ -865,16 +867,14 @@ export default function WorldDesignerPage() {
     }
   };
 
-  const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
-    event.preventDefault();
+  const applyZoom = useCallback((direction: 'in' | 'out') => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const px = event.clientX - rect.left;
-    const py = event.clientY - rect.top;
+    const px = canvas.width * 0.5;
+    const py = canvas.height * 0.5;
     const current = viewStateRef.current;
-    const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+    const zoomFactor = direction === 'in' ? 1.15 : 1 / 1.15;
     const nextZoom = clamp(current.zoom * zoomFactor, 0.35, 28);
 
     const worldX = current.x + px / current.zoom;
@@ -888,7 +888,7 @@ export default function WorldDesignerPage() {
     viewStateRef.current = nextState;
     setViewState(nextState);
     drawCanvas();
-  };
+  }, [clampViewState, drawCanvas]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const tile = getTileFromPointer(event.clientX, event.clientY);
@@ -1306,15 +1306,28 @@ export default function WorldDesignerPage() {
                   <span className="font-semibold text-slate-800">{selectedTerrain}</span> • Symmetry:{' '}
                   <span className="font-semibold text-slate-800">{symmetry}</span>
                 </div>
-                <div className="text-xs text-slate-500">
-                  Center: ({previewCenter.x}, {previewCenter.y}) • Zoom {viewState.zoom.toFixed(2)}x
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <button
+                    onClick={() => applyZoom('out')}
+                    className="rounded border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 hover:border-orange-300"
+                  >
+                    −
+                  </button>
+                  <button
+                    onClick={() => applyZoom('in')}
+                    className="rounded border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 hover:border-orange-300"
+                  >
+                    +
+                  </button>
+                  <span>
+                    Center: ({previewCenter.x}, {previewCenter.y}) • Zoom {viewState.zoom.toFixed(2)}x
+                  </span>
                 </div>
               </div>
               <div ref={viewportRef} className="relative h-[700px] w-full overflow-hidden rounded-lg border border-slate-300 bg-slate-50">
                 <canvas
                   ref={canvasRef}
                   className="h-full w-full touch-none cursor-crosshair"
-                  onWheel={handleWheel}
                   onPointerDown={handlePointerDown}
                   onPointerMove={handlePointerMove}
                   onPointerUp={handlePointerUp}
@@ -1326,6 +1339,23 @@ export default function WorldDesignerPage() {
           </section>
 
           <aside className="space-y-4">
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">3D Source Reference</h2>
+              <p className="mt-2 text-xs text-slate-600">
+                3D preview uses the cyan dashed box from the main map.
+              </p>
+              <p className="mt-1 text-xs text-slate-600">
+                Source center: ({previewCenter.x}, {previewCenter.y}) • Radius: 26 tiles
+              </p>
+            </section>
+
+            <WorldDesigner3DPreview
+              title="3D Preview (main-world style)"
+              tiles={previewTiles}
+              centerX={previewCenter.x}
+              centerY={previewCenter.y}
+            />
+
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Terrain Breakdown</h2>
               <div className="mt-2 max-h-52 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
@@ -1343,13 +1373,6 @@ export default function WorldDesignerPage() {
                 The dashed cyan box on the main map shows the exact area used for 3D preview.
               </p>
             </section>
-
-            <WorldDesigner3DPreview
-              title="3D Preview (main-world style)"
-              tiles={previewTiles}
-              centerX={previewCenter.x}
-              centerY={previewCenter.y}
-            />
 
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Snapshots</h2>
