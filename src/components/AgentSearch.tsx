@@ -3,28 +3,30 @@
 import { useState } from 'react';
 import { AgentLeaderboard } from '@/lib/types';
 import { resolveAvatar } from '@/lib/avatar';
+import { isAgentOnline, resolveLastSeenMs } from '@/lib/presence';
 
 interface AgentSearchProps {
   agents: AgentLeaderboard[];
 }
 
-function formatLastActive(timestamp: string): string {
-  const date = new Date(timestamp);
+function formatLastActive(agent: AgentLeaderboard): string {
+  const lastSeenMs = resolveLastSeenMs(agent);
+  if (lastSeenMs === null) return 'offline';
+  const date = new Date(lastSeenMs);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMin = Math.floor(diffMs / 60000);
 
   if (diffMin < 1) return 'just now';
-  if (diffMin < 5) return 'active';
+  if (isAgentOnline(agent)) return 'active';
   if (diffMin < 60) return `${diffMin}m ago`;
   const diffHours = Math.floor(diffMin / 60);
   if (diffHours < 24) return `${diffHours}h ago`;
   return `${Math.floor(diffHours / 24)}d ago`;
 }
 
-function isRecentlyActive(lastActive: string): boolean {
-  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-  return new Date(lastActive).getTime() > fiveMinutesAgo;
+function isRecentlyActive(agent: AgentLeaderboard): boolean {
+  return isAgentOnline(agent);
 }
 
 function formatWealth(wealth: number): string {
@@ -97,11 +99,11 @@ export function AgentSearch({ agents }: AgentSearchProps) {
                   <td className="py-3 pr-4">
                     <span
                       className={`inline-block w-2.5 h-2.5 rounded-full ${
-                        isRecentlyActive(agent.last_active)
+                        isRecentlyActive(agent)
                           ? 'bg-[var(--accent)] animate-pulse'
                           : 'bg-[var(--muted)]'
                       }`}
-                      title={isRecentlyActive(agent.last_active) ? 'Online' : 'Offline'}
+                      title={isRecentlyActive(agent) ? 'Online' : 'Offline'}
                     />
                   </td>
                   <td className="py-3 pr-4 font-medium text-[var(--foreground)]">
@@ -131,7 +133,7 @@ export function AgentSearch({ agents }: AgentSearchProps) {
                     {formatWealth(agent.wealth)}
                   </td>
                   <td className="py-3 text-[var(--muted)] text-xs">
-                    {formatLastActive(agent.last_active)}
+                    {formatLastActive(agent)}
                   </td>
                 </tr>
               ))}

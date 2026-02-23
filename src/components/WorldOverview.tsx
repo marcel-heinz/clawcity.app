@@ -3,12 +3,11 @@
 import { useEffect, useState, useMemo } from 'react';
 import { AgentPublic, Tile } from '@/lib/types';
 import { AgentCrab } from './CrabSprite';
+import { isAgentOnline } from '@/lib/presence';
 
-// Check if agent was active in the last 5 minutes
-function isActiveAgent(lastActive: string): boolean {
-  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-  const lastActiveTime = new Date(lastActive).getTime();
-  return lastActiveTime >= fiveMinutesAgo;
+// Shared presence signal from world/status (with local fallback).
+function isActiveAgent(agent: AgentPublic): boolean {
+  return isAgentOnline(agent);
 }
 
 interface WorldOverviewProps {
@@ -145,9 +144,9 @@ export function WorldOverview({ agents, onAgentClick }: WorldOverviewProps) {
       });
     });
 
-    // Only count active agents (last active within 5 minutes)
+    // Only count online agents using shared presence logic.
     agents.forEach(agent => {
-      if (!isActiveAgent(agent.last_active)) return;
+      if (!isActiveAgent(agent)) return;
       const zoneId = getAgentZone(agent.x, agent.y);
       const zoneStat = stats.get(zoneId);
       if (zoneStat) zoneStat.agentCount++;
@@ -182,9 +181,9 @@ export function WorldOverview({ agents, onAgentClick }: WorldOverviewProps) {
     return stats;
   }, [agents, tiles]);
 
-  // Filter to only active agents (last active within 5 minutes)
+  // Filter to only online agents using shared presence logic.
   const activeAgents = useMemo(() => {
-    return agents.filter(agent => isActiveAgent(agent.last_active));
+    return agents.filter(agent => isActiveAgent(agent));
   }, [agents]);
 
   const totalAgents = activeAgents.length;

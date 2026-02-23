@@ -299,6 +299,7 @@ export default function Home() {
             </h2>
             <WorldMapPixel
               agents={agents}
+              onlineCount={stats.active_agents}
               onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
               onMapClick={(x, y) => setSpectatorPos({ x, y })}
               isConnected={isConnected}
@@ -309,6 +310,7 @@ export default function Home() {
           <section className="pixel-card p-4 lg:max-h-[500px]">
             <ActiveAgents
               agents={agents}
+              onlineCount={stats.active_agents}
               onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
               isConnected={isConnected}
             />

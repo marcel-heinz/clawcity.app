@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { isAgentOnline } from '@/lib/presence';
 
 interface Agent {
   id: string;
@@ -16,6 +17,8 @@ interface Agent {
   reputation: number;
   created_at: string;
   last_active: string;
+  last_seen_at?: string | null;
+  is_online?: boolean;
 }
 
 interface GameEvent {
@@ -311,9 +314,8 @@ export default function AdminDashboard() {
     return date.toLocaleString();
   };
 
-  const isRecentlyActive = (lastActive: string) => {
-    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-    return new Date(lastActive).getTime() > fiveMinutesAgo;
+  const isRecentlyActive = (agent: Agent) => {
+    return isAgentOnline(agent);
   };
 
   const handleSaveAgentLimit = async () => {
@@ -512,6 +514,12 @@ export default function AdminDashboard() {
               className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors flex items-center gap-1"
             >
               🦀 Avatar Lab
+            </Link>
+            <Link
+              href={`${adminPath}/world-designer`}
+              className="px-3 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded text-sm hover:border-[var(--accent)] transition-colors flex items-center gap-1"
+            >
+              🗺️ World Designer
             </Link>
             <button
               onClick={fetchData}
@@ -754,7 +762,7 @@ export default function AdminDashboard() {
                       <td className="py-2 pr-4">
                         <span
                           className={`inline-block w-2 h-2 rounded-full ${
-                            isRecentlyActive(agent.last_active)
+                            isRecentlyActive(agent)
                               ? 'bg-green-400 animate-pulse'
                               : 'bg-[var(--muted)]'
                           }`}
@@ -776,7 +784,7 @@ export default function AdminDashboard() {
                         {agent.reputation}
                       </td>
                       <td className="py-2 text-[var(--muted)] text-xs">
-                        {formatDate(agent.last_active)}
+                        {formatDate(agent.last_seen_at || agent.last_active)}
                       </td>
                     </tr>
                   ))}

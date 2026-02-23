@@ -4,6 +4,7 @@ import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { getAllCooldowns } from '@/lib/game-settings';
 import { isRateLimitRedisEnabled } from '@/lib/rate-limit';
 import { toPublicAvatarLabView } from '@/lib/avatar-lab';
+import { isAgentOnline, PRESENCE_ONLINE_WINDOW_MS, resolveLastSeenAt } from '@/lib/presence';
 
 interface PerkSpendSummary {
   purchases: number;
@@ -279,12 +280,25 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = createServerClient();
+    const nowMs = Date.now();
+    const systemFlagProbe = await supabase
+      .from('agents')
+      .select('is_system')
+      .limit(1);
+    const supportsSystemFlag = !(
+      systemFlagProbe.error &&
+      systemFlagProbe.error.message?.includes('is_system')
+    );
 
     // Fetch all agents with their full data
-    const { data: agents, error: agentsError } = await supabase
+    let agentsQuery = supabase
       .from('agents')
       .select('id, name, x, y, gold, wood, food, stone, reputation, created_at, last_active, claimed, claimed_by_twitter, last_move_at, last_gather_at, last_trade_at, total_gathered_gold, total_gathered_wood, total_gathered_food, total_gathered_stone, last_forum_thread_at, last_forum_post_at, last_food_upkeep_at, food_depleted_at, last_announcement_seen_at, last_gather_x, last_gather_y, consecutive_same_tile, last_craft_at, last_build_at, avatar')
       .order('created_at', { ascending: false });
+    if (supportsSystemFlag) {
+      agentsQuery = agentsQuery.eq('is_system', false);
+    }
+    const { data: agents, error: agentsError } = await agentsQuery;
 
     if (agentsError) {
       console.error('Error fetching agents:', agentsError);
@@ -294,11 +308,32 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Calculate active agents (active in last 5 minutes)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const activeAgents = (agents || []).filter(
-      (agent) => agent.last_active >= fiveMinutesAgo
-    ).length;
+    // Calculate active agents using the shared presence model.
+    let activeAgents = (agents || []).filter((agent) => isAgentOnline(agent, { nowMs })).length;
+    const presenceCutoffIso = new Date(nowMs - PRESENCE_ONLINE_WINDOW_MS).toISOString();
+    const presenceOrFilters = [
+      `last_active.gte.${presenceCutoffIso}`,
+      `last_move_at.gte.${presenceCutoffIso}`,
+      `last_gather_at.gte.${presenceCutoffIso}`,
+      `last_trade_at.gte.${presenceCutoffIso}`,
+      `last_craft_at.gte.${presenceCutoffIso}`,
+      `last_build_at.gte.${presenceCutoffIso}`,
+      `last_forum_thread_at.gte.${presenceCutoffIso}`,
+      `last_forum_post_at.gte.${presenceCutoffIso}`,
+    ].join(',');
+    let activeAgentsQuery = supabase
+      .from('agents')
+      .select('*', { count: 'exact', head: true })
+      .or(presenceOrFilters);
+    if (supportsSystemFlag) {
+      activeAgentsQuery = activeAgentsQuery.eq('is_system', false);
+    }
+    const { count: activeAgentCount, error: activeAgentCountError } = await activeAgentsQuery;
+    if (!activeAgentCountError && typeof activeAgentCount === 'number') {
+      activeAgents = activeAgentCount;
+    } else if (activeAgentCountError) {
+      console.error('Error counting online agents for admin dashboard:', activeAgentCountError);
+    }
 
     // Count completed trades (only accepted trades)
     const { count: tradesCount, error: tradesError } = await supabase
@@ -460,6 +495,8 @@ export async function GET(request: NextRequest) {
     const compactAgents = (agents || []).map((agent) => ({
       ...agent,
       avatar: toPublicAvatarLabView(agent.name, agent.avatar),
+      last_seen_at: resolveLastSeenAt(agent),
+      is_online: isAgentOnline(agent, { nowMs }),
     }));
 
     return NextResponse.json({

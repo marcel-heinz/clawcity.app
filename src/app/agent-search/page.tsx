@@ -6,6 +6,7 @@ import { AgentLeaderboard, AgentAvatar } from '@/lib/types';
 import { ITEM_DEFINITIONS } from '@/lib/crafting';
 import { BUILDING_DEFINITIONS, BuildingType } from '@/lib/buildings';
 import { AgentAvatar3DPreview } from '@/components/AgentAvatar3DPreview';
+import { isAgentOnline, resolveLastSeenMs } from '@/lib/presence';
 
 // --- Types ---
 
@@ -96,23 +97,24 @@ const RESOURCE_COLORS: Record<string, string> = {
 
 // --- Helpers ---
 
-function formatLastActive(timestamp: string): string {
-  const date = new Date(timestamp);
+function formatLastActive(agent: AgentLeaderboard): string {
+  const lastSeenMs = resolveLastSeenMs(agent);
+  if (lastSeenMs === null) return 'offline';
+  const date = new Date(lastSeenMs);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMin = Math.floor(diffMs / 60000);
 
   if (diffMin < 1) return 'just now';
-  if (diffMin < 5) return 'active';
+  if (isAgentOnline(agent)) return 'active';
   if (diffMin < 60) return `${diffMin}m ago`;
   const diffHours = Math.floor(diffMin / 60);
   if (diffHours < 24) return `${diffHours}h ago`;
   return `${Math.floor(diffHours / 24)}d ago`;
 }
 
-function isRecentlyActive(lastActive: string): boolean {
-  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-  return new Date(lastActive).getTime() > fiveMinutesAgo;
+function isRecentlyActive(agent: AgentLeaderboard): boolean {
+  return isAgentOnline(agent);
 }
 
 function formatWealth(wealth: number): string {
@@ -567,6 +569,7 @@ function AgentDetailPanel({
 
 export default function AgentSearchPage() {
   const [agents, setAgents] = useState<AgentLeaderboard[]>([]);
+  const [onlineCount, setOnlineCount] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'wealth' | 'claw_credits' | 'name' | 'reputation' | 'last_active'>('wealth');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -581,6 +584,8 @@ export default function AgentSearchPage() {
       const data = await res.json();
       if (data.success) {
         setAgents(data.data.agents || []);
+        const online = data.data?.stats?.active_agents;
+        setOnlineCount(typeof online === 'number' ? online : null);
       }
     } catch (error) {
       console.error('Error fetching agents:', error);
@@ -642,7 +647,7 @@ export default function AgentSearchPage() {
         comparison = a.reputation - b.reputation;
         break;
       case 'last_active':
-        comparison = new Date(a.last_active).getTime() - new Date(b.last_active).getTime();
+        comparison = (resolveLastSeenMs(a) || 0) - (resolveLastSeenMs(b) || 0);
         break;
     }
     return sortOrder === 'desc' ? -comparison : comparison;
@@ -657,7 +662,7 @@ export default function AgentSearchPage() {
     }
   };
 
-  const activeAgents = agents.filter(a => isRecentlyActive(a.last_active)).length;
+  const activeAgents = onlineCount ?? agents.filter(a => isRecentlyActive(a)).length;
 
   return (
     <main className="min-h-screen bg-[var(--background)]">
@@ -781,11 +786,11 @@ export default function AgentSearchPage() {
                             <td className="py-3 pr-4">
                               <span
                                 className={`inline-block w-2.5 h-2.5 rounded-full ${
-                                  isRecentlyActive(agent.last_active)
+                                  isRecentlyActive(agent)
                                     ? 'bg-[var(--accent)] animate-pulse'
                                     : 'bg-[var(--muted)]'
                                 }`}
-                                title={isRecentlyActive(agent.last_active) ? 'Online' : 'Offline'}
+                                title={isRecentlyActive(agent) ? 'Online' : 'Offline'}
                               />
                             </td>
                             <td className="py-3 pr-4">
@@ -850,7 +855,7 @@ export default function AgentSearchPage() {
                               </span>
                             </td>
                             <td className="py-3 text-[var(--muted)] text-xs hidden sm:table-cell">
-                              {formatLastActive(agent.last_active)}
+                              {formatLastActive(agent)}
                             </td>
                           </tr>
                           {isExpanded && (

@@ -8,6 +8,7 @@ import { isAgentOnline } from '@/lib/presence';
 
 interface ActiveAgentsProps {
   agents: AgentLeaderboard[];
+  onlineCount?: number;
   onAgentClick?: (agentId: string, x: number, y: number) => void;
   isConnected?: boolean;
 }
@@ -37,7 +38,7 @@ function formatTimeAgo(lastSeenAt?: string | null): string {
   return 'offline';
 }
 
-export function ActiveAgents({ agents, onAgentClick, isConnected = true }: ActiveAgentsProps) {
+export function ActiveAgents({ agents, onlineCount, onAgentClick, isConnected = true }: ActiveAgentsProps) {
   // Filter to only active agents and sort by most recently active
   const activeAgents = useMemo(() => {
     return agents
@@ -48,6 +49,7 @@ export function ActiveAgents({ agents, onAgentClick, isConnected = true }: Activ
         return bTime - aTime;
       });
   }, [agents]);
+  const displayedOnlineCount = typeof onlineCount === 'number' ? onlineCount : activeAgents.length;
   const showConnectingState = !isConnected && activeAgents.length === 0;
 
   return (
@@ -59,7 +61,7 @@ export function ActiveAgents({ agents, onAgentClick, isConnected = true }: Activ
           Active Now
         </h3>
         <span className="text-xs text-[var(--muted)]">
-          {showConnectingState ? 'syncing...' : `${activeAgents.length} online`}
+          {showConnectingState ? 'syncing...' : `${displayedOnlineCount} online`}
         </span>
       </div>
 

@@ -51,6 +51,9 @@ All three surfaces use the same presence model:
 - `src/components/ActiveAgents.tsx`
 - `src/components/WorldMapPixel.tsx`
 - `src/components/AgentView3D.tsx`
+- `src/app/agent-search/page.tsx`
+- `src/app/mrclhnz-dashboard/page.tsx`
+- `src/app/api/admin/data/route.ts`
 
 This keeps "Active Now", 2D map, and 3D spectator aligned.
 

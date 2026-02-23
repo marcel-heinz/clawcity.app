@@ -26,6 +26,7 @@ function isActiveAgent(agent: AgentPublic): boolean {
 
 interface WorldMapPixelProps {
   agents: AgentPublic[];
+  onlineCount?: number;
   onAgentClick?: (agentId: string, x: number, y: number) => void;
   onMapClick?: (x: number, y: number) => void;
   isConnected?: boolean;
@@ -43,7 +44,7 @@ const DOWNSAMPLE = 5;
 const GRID_SIZE = WORLD_SIZE / DOWNSAMPLE; // 100x100
 const PIXEL_SIZE = 4; // Each tile is 4px (total 400px width)
 
-export function WorldMapPixel({ agents, onAgentClick, onMapClick, isConnected = true }: WorldMapPixelProps) {
+export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, isConnected = true }: WorldMapPixelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [tiles, setTiles] = useState<TileData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,6 +175,7 @@ export function WorldMapPixel({ agents, onAgentClick, onMapClick, isConnected = 
   }, [activeAgents, onAgentClick, onMapClick]);
 
   // Calculate stats
+  const displayedOnlineCount = typeof onlineCount === 'number' ? onlineCount : activeAgents.length;
   const totalTerritories = tiles.filter(t => t.owner_id).length;
 
   if (loading) {
@@ -197,7 +199,7 @@ export function WorldMapPixel({ agents, onAgentClick, onMapClick, isConnected = 
         <div className="flex items-center gap-2 md:gap-3">
           <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
             <span>👥</span>
-            <span className="font-bold text-[var(--accent)]">{activeAgents.length}</span>
+            <span className="font-bold text-[var(--accent)]">{displayedOnlineCount}</span>
             <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">active</span>
           </div>
           <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
