@@ -10,7 +10,6 @@ interface WorldDesigner3DPreviewProps {
   tiles: WorldDesignerTile[];
   centerX: number;
   centerY: number;
-  elevationScale?: number;
 }
 
 const COLORS: Record<TerrainType, number> = {
@@ -24,6 +23,15 @@ const COLORS: Record<TerrainType, number> = {
   deep_water: 0x244772,
   marsh: 0x4f7569,
 };
+
+const ELEVATION_UNIT_HEIGHT = 0.14;
+const TILE_FLOOR_Y = -0.24;
+
+function tintColor(colorHex: number, factor: number): number {
+  const color = new THREE.Color(colorHex);
+  color.multiplyScalar(factor);
+  return color.getHex();
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -198,7 +206,6 @@ export function WorldDesigner3DPreview({
   tiles,
   centerX,
   centerY,
-  elevationScale = 0.14,
 }: WorldDesigner3DPreviewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -370,25 +377,38 @@ export function WorldDesigner3DPreview({
       const localZ = tile.y - centerY;
       const seed = tileSeed(tile.x, tile.y);
       const terrain = tile.terrain;
-      const baseHeight = tile.elevation * elevationScale;
-      elevationSum += baseHeight;
+      const terrainTopY = tile.elevation * ELEVATION_UNIT_HEIGHT;
+      elevationSum += terrainTopY;
 
       const tileGroup = new THREE.Group();
       tileGroup.position.set(localX, 0, localZ);
 
-      const planeHeight = terrain === 'deep_water' ? -0.16 : terrain === 'water' ? -0.08 : 0;
-      const plane = new THREE.Mesh(
-        new THREE.PlaneGeometry(1, 1),
-        new THREE.MeshStandardMaterial({
-          color: COLORS[terrain],
-          roughness: terrain.includes('water') ? 0.2 : 0.9,
-          metalness: terrain.includes('water') ? 0.32 : 0.02,
-        })
+      const waterOffset = terrain === 'deep_water' ? -0.16 : terrain === 'water' ? -0.08 : 0;
+      const topY = terrainTopY + waterOffset;
+      const columnHeight = Math.max(0.05, topY - TILE_FLOOR_Y);
+      const topColor = COLORS[terrain];
+      const sideColor = tintColor(topColor, 0.78);
+      const bottomColor = tintColor(topColor, 0.55);
+
+      const column = new THREE.Mesh(
+        new THREE.BoxGeometry(1, columnHeight, 1),
+        [
+          new THREE.MeshStandardMaterial({ color: sideColor, roughness: 0.92, metalness: 0.02 }),
+          new THREE.MeshStandardMaterial({ color: sideColor, roughness: 0.92, metalness: 0.02 }),
+          new THREE.MeshStandardMaterial({
+            color: topColor,
+            roughness: terrain.includes('water') ? 0.26 : 0.88,
+            metalness: terrain.includes('water') ? 0.3 : 0.03,
+          }),
+          new THREE.MeshStandardMaterial({ color: bottomColor, roughness: 0.95, metalness: 0.01 }),
+          new THREE.MeshStandardMaterial({ color: sideColor, roughness: 0.92, metalness: 0.02 }),
+          new THREE.MeshStandardMaterial({ color: sideColor, roughness: 0.92, metalness: 0.02 }),
+        ]
       );
-      plane.rotation.x = -Math.PI / 2;
-      plane.position.y = baseHeight + planeHeight;
-      plane.receiveShadow = true;
-      tileGroup.add(plane);
+      column.position.y = TILE_FLOOR_Y + columnHeight * 0.5;
+      column.castShadow = true;
+      column.receiveShadow = true;
+      tileGroup.add(column);
 
       let feature: THREE.Object3D | null = null;
       if (terrain === 'mountain') {
@@ -406,14 +426,14 @@ export function WorldDesigner3DPreview({
       }
 
       if (feature) {
-        feature.position.y += baseHeight + planeHeight;
+        feature.position.y += topY;
         tileGroup.add(feature);
       }
 
       group.add(tileGroup);
     }
     cameraStateRef.current.targetY = tiles.length > 0 ? elevationSum / tiles.length : 0;
-  }, [tilesKey, tiles, centerX, centerY, elevationScale]);
+  }, [tilesKey, tiles, centerX, centerY]);
 
   return (
     <div className="rounded-xl border border-slate-300 bg-white shadow-sm">

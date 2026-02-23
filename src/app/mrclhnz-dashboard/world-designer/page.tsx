@@ -22,7 +22,7 @@ import {
 import { WorldDesigner3DPreview } from '@/components/world-designer/WorldDesigner3DPreview';
 
 type TerrainTool = 'brush' | 'rectangle' | 'bucket';
-type ElevationTool = 'raise' | 'lower' | 'flatten' | 'smooth';
+type ElevationTool = 'raise' | 'lower';
 type EditorTool = TerrainTool | ElevationTool;
 type EditLayer = 'terrain' | 'elevation';
 
@@ -108,8 +108,6 @@ const TERRAIN_TOOL_OPTIONS: Array<{ id: TerrainTool; label: string; help: string
 const ELEVATION_TOOL_OPTIONS: Array<{ id: ElevationTool; label: string; help: string }> = [
   { id: 'raise', label: 'Raise', help: `Increase elevation by ${ELEVATION_STEP} on drag.` },
   { id: 'lower', label: 'Lower', help: `Decrease elevation by ${ELEVATION_STEP} on drag.` },
-  { id: 'flatten', label: 'Flatten', help: 'Set elevation to the chosen level on drag.' },
-  { id: 'smooth', label: 'Smooth', help: 'Average local heights for softer terrain.' },
 ];
 
 function randomSeed(): number {
@@ -177,8 +175,6 @@ export default function WorldDesignerPage() {
   const [elevationTool, setElevationTool] = useState<ElevationTool>('raise');
   const [selectedTerrainIndex, setSelectedTerrainIndex] = useState(terrainToIndex('plains'));
   const [brushSize, setBrushSize] = useState<(typeof BRUSH_SIZES)[number]>(3);
-  const [flattenElevation, setFlattenElevation] = useState<number>(Math.round(ELEVATION_MAX_LEVEL * 0.5));
-  const [previewElevationScale, setPreviewElevationScale] = useState(1.2);
   const [showGrid, setShowGrid] = useState(true);
 
   const [viewState, setViewState] = useState<ViewState>({
@@ -716,21 +712,6 @@ export default function WorldDesignerPage() {
       const radius = Math.floor((brushSize - 1) / 2);
       const elevationMap = elevationRef.current;
 
-      const sampleAverage = (tx: number, ty: number): number => {
-        let sum = 0;
-        let count = 0;
-        for (let oy = -1; oy <= 1; oy++) {
-          for (let ox = -1; ox <= 1; ox++) {
-            const nx = tx + ox;
-            const ny = ty + oy;
-            if (nx < 0 || ny < 0 || nx >= WORLD_SIZE || ny >= WORLD_SIZE) continue;
-            sum += elevationMap[tileIndex(nx, ny)];
-            count += 1;
-          }
-        }
-        return count > 0 ? sum / count : elevationMap[tileIndex(tx, ty)];
-      };
-
       for (let dy = -radius; dy <= radius; dy++) {
         for (let dx = -radius; dx <= radius; dx++) {
           const distance = Math.sqrt(dx * dx + dy * dy);
@@ -741,17 +722,13 @@ export default function WorldDesignerPage() {
           const current = elevationMap[tileIndex(tx, ty)];
           if (mode === 'raise') {
             writeElevationAt(tx, ty, current + ELEVATION_STEP, operation);
-          } else if (mode === 'lower') {
-            writeElevationAt(tx, ty, current - ELEVATION_STEP, operation);
-          } else if (mode === 'flatten') {
-            writeElevationAt(tx, ty, flattenElevation, operation);
           } else {
-            writeElevationAt(tx, ty, sampleAverage(tx, ty), operation);
+            writeElevationAt(tx, ty, current - ELEVATION_STEP, operation);
           }
         }
       }
     },
-    [brushSize, flattenElevation, writeElevationAt]
+    [brushSize, writeElevationAt]
   );
 
   const applyElevationBrushLine = useCallback(
@@ -1378,16 +1355,7 @@ export default function WorldDesignerPage() {
       return;
     }
 
-    beginOperation(
-      activeTool === 'raise'
-        ? 'Raise elevation'
-        : activeTool === 'lower'
-          ? 'Lower elevation'
-          : activeTool === 'flatten'
-            ? 'Flatten elevation'
-            : 'Smooth elevation',
-      'elevation'
-    );
+    beginOperation(activeTool === 'raise' ? 'Raise elevation' : 'Lower elevation', 'elevation');
     const operation = activeOperationRef.current;
     if (!operation) return;
     applyElevationBrushAt(tile.x, tile.y, activeTool as ElevationTool, operation);
@@ -1734,20 +1702,6 @@ export default function WorldDesignerPage() {
                   ))}
                 </select>
               </label>
-              {editLayer === 'elevation' && activeTool === 'flatten' && (
-                <label className="mt-2 block text-sm text-slate-600">
-                  Flatten level ({flattenElevation})
-                  <input
-                    type="range"
-                    min={0}
-                    max={ELEVATION_MAX_LEVEL}
-                    step={1}
-                    value={flattenElevation}
-                    onChange={(event) => setFlattenElevation(clamp(Number(event.target.value), 0, ELEVATION_MAX_LEVEL))}
-                    className="mt-1 w-full"
-                  />
-                </label>
-              )}
               {editLayer === 'elevation' && (
                 <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
                   Elevation range: {elevationSummary.min} to {elevationSummary.max}
@@ -1961,18 +1915,6 @@ export default function WorldDesignerPage() {
               <p className="mt-1 text-xs text-slate-500">
                 3D preview always renders a {PREVIEW_RADIUS * 2 + 1}x{PREVIEW_RADIUS * 2 + 1} tile window, not the full 500x500 map.
               </p>
-              <label className="mt-3 block text-xs text-slate-600">
-                3D elevation scale ({previewElevationScale.toFixed(1)}x)
-                <input
-                  type="range"
-                  min={0.5}
-                  max={3}
-                  step={0.1}
-                  value={previewElevationScale}
-                  onChange={(event) => setPreviewElevationScale(clamp(Number(event.target.value), 0.5, 3))}
-                  className="mt-1 w-full"
-                />
-              </label>
             </section>
 
             <WorldDesigner3DPreview
@@ -1980,7 +1922,6 @@ export default function WorldDesignerPage() {
               tiles={previewTiles}
               centerX={activePreviewCenter.x}
               centerY={activePreviewCenter.y}
-              elevationScale={previewElevationScale * 0.14}
             />
 
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
