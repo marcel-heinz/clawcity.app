@@ -177,9 +177,7 @@ export default function WorldDesignerPage() {
   });
   const [isPreviewPickMode, setIsPreviewPickMode] = useState(false);
 
-  const [statusMessage, setStatusMessage] = useState<string | null>(
-    'This world is randomly generated. You can build on top of it.'
-  );
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [snapshots, setSnapshots] = useState<WorldDesignerSnapshot[]>([]);
