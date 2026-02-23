@@ -81,6 +81,9 @@ const MAX_HISTORY = 160;
 const MAX_ZOOM = 28;
 const MIN_ZOOM_FLOOR = 0.35;
 const PREVIEW_RADIUS = 26;
+const ZOOM_STEP_FACTOR = 1.08;
+const ZOOM_SETTLE_EPSILON = 0.001;
+const PREVIEW_FOLLOW_SYNC_MS = 160;
 const BRUSH_SIZES = [1, 3, 5, 9] as const;
 const TERRAIN_SHORTCUTS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'] as const;
 
@@ -169,6 +172,10 @@ export default function WorldDesignerPage() {
   const hasInitializedViewRef = useRef(false);
 
   const [followPreviewCenter, setFollowPreviewCenter] = useState(true);
+  const [followedPreviewCenter, setFollowedPreviewCenter] = useState({
+    x: Math.floor(WORLD_SIZE / 2),
+    y: Math.floor(WORLD_SIZE / 2),
+  });
   const [manualPreviewCenter, setManualPreviewCenter] = useState({
     x: Math.floor(WORLD_SIZE / 2),
     y: Math.floor(WORLD_SIZE / 2),
@@ -215,6 +222,9 @@ export default function WorldDesignerPage() {
   const redoStackRef = useRef<StoredOperation[]>([]);
   const isSpacePressedRef = useRef(false);
   const previewSyncRef = useRef<number>(0);
+  const previewFollowTimeoutRef = useRef<number | null>(null);
+  const zoomAnimationFrameRef = useRef<number | null>(null);
+  const zoomTargetRef = useRef<number | null>(null);
 
   const selectedTerrain = indexToTerrain(selectedTerrainIndex);
 
@@ -277,9 +287,18 @@ export default function WorldDesignerPage() {
     };
   }, [getProjectionForState, viewState]);
 
+  const getZoomBounds = useCallback(() => {
+    const width = Math.max(1, canvasSize.width);
+    const height = Math.max(1, canvasSize.height);
+    const fitZoomX = width / WORLD_SIZE;
+    const fitZoomY = height / WORLD_SIZE;
+    const minZoom = Math.max(MIN_ZOOM_FLOOR, Math.min(fitZoomX, fitZoomY));
+    return { minZoom, maxZoom: MAX_ZOOM };
+  }, [canvasSize.height, canvasSize.width]);
+
   const activePreviewCenter = useMemo(
-    () => (followPreviewCenter ? mapCenter : manualPreviewCenter),
-    [followPreviewCenter, mapCenter, manualPreviewCenter]
+    () => (followPreviewCenter ? followedPreviewCenter : manualPreviewCenter),
+    [followPreviewCenter, followedPreviewCenter, manualPreviewCenter]
   );
 
   const syncHistoryState = useCallback(() => {
@@ -349,10 +368,8 @@ export default function WorldDesignerPage() {
     (next: ViewState): ViewState => {
       const width = Math.max(1, canvasSize.width);
       const height = Math.max(1, canvasSize.height);
-      const fitZoomX = width / WORLD_SIZE;
-      const fitZoomY = height / WORLD_SIZE;
-      const minZoom = Math.max(MIN_ZOOM_FLOOR, Math.min(fitZoomX, fitZoomY));
-      const zoom = clamp(next.zoom, minZoom, MAX_ZOOM);
+      const bounds = getZoomBounds();
+      const zoom = clamp(next.zoom, bounds.minZoom, bounds.maxZoom);
       const viewWorldWidth = width / zoom;
       const viewWorldHeight = height / zoom;
 
@@ -363,7 +380,7 @@ export default function WorldDesignerPage() {
       const y = maxY <= 0 ? (WORLD_SIZE - viewWorldHeight) * 0.5 : clamp(next.y, 0, maxY);
       return { x, y, zoom };
     },
-    [canvasSize.height, canvasSize.width]
+    [canvasSize.height, canvasSize.width, getZoomBounds]
   );
 
   const drawCanvas = useCallback(() => {
@@ -901,6 +918,45 @@ export default function WorldDesignerPage() {
   }, [canvasSize.height, canvasSize.width, clampViewState]);
 
   useEffect(() => {
+    if (!followPreviewCenter) return;
+    const nextCenterX = mapCenter.x;
+    const nextCenterY = mapCenter.y;
+    if (followedPreviewCenter.x === nextCenterX && followedPreviewCenter.y === nextCenterY) return;
+
+    if (previewFollowTimeoutRef.current !== null) {
+      window.clearTimeout(previewFollowTimeoutRef.current);
+    }
+    previewFollowTimeoutRef.current = window.setTimeout(() => {
+      setFollowedPreviewCenter({ x: nextCenterX, y: nextCenterY });
+      previewFollowTimeoutRef.current = null;
+    }, PREVIEW_FOLLOW_SYNC_MS);
+
+    return () => {
+      if (previewFollowTimeoutRef.current !== null) {
+        window.clearTimeout(previewFollowTimeoutRef.current);
+        previewFollowTimeoutRef.current = null;
+      }
+    };
+  }, [
+    followPreviewCenter,
+    followedPreviewCenter.x,
+    followedPreviewCenter.y,
+    mapCenter.x,
+    mapCenter.y,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (previewFollowTimeoutRef.current !== null) {
+        window.clearTimeout(previewFollowTimeoutRef.current);
+      }
+      if (zoomAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(zoomAnimationFrameRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const activeElement = document.activeElement;
       const isTextInput = activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement;
@@ -976,16 +1032,13 @@ export default function WorldDesignerPage() {
     }
   };
 
-  const applyZoom = useCallback((direction: 'in' | 'out') => {
+  const applyZoomAtCanvasCenter = useCallback((nextZoom: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const px = canvas.width * 0.5;
     const py = canvas.height * 0.5;
     const current = viewStateRef.current;
-    const zoomFactor = 1.1;
-    const nextZoom = direction === 'in' ? current.zoom * zoomFactor : current.zoom / zoomFactor;
-
     const worldX = current.x + px / current.zoom;
     const worldY = current.y + py / current.zoom;
     const nextState = clampViewState({
@@ -998,6 +1051,54 @@ export default function WorldDesignerPage() {
     setViewState(nextState);
     drawCanvas();
   }, [clampViewState, drawCanvas]);
+
+  const animateZoomTo = useCallback((nextTargetZoom: number) => {
+    const bounds = getZoomBounds();
+    zoomTargetRef.current = clamp(nextTargetZoom, bounds.minZoom, bounds.maxZoom);
+
+    if (zoomAnimationFrameRef.current !== null) return;
+
+    const tick = () => {
+      const target = zoomTargetRef.current;
+      if (target === null) {
+        zoomAnimationFrameRef.current = null;
+        return;
+      }
+
+      const currentZoom = viewStateRef.current.zoom;
+      const delta = target - currentZoom;
+
+      if (Math.abs(delta) <= ZOOM_SETTLE_EPSILON) {
+        applyZoomAtCanvasCenter(target);
+        zoomAnimationFrameRef.current = null;
+        if (zoomTargetRef.current === target) {
+          zoomTargetRef.current = null;
+        }
+        return;
+      }
+
+      const nextZoom = currentZoom + delta * 0.28;
+      applyZoomAtCanvasCenter(nextZoom);
+      zoomAnimationFrameRef.current = window.requestAnimationFrame(tick);
+    };
+
+    zoomAnimationFrameRef.current = window.requestAnimationFrame(tick);
+  }, [applyZoomAtCanvasCenter, getZoomBounds]);
+
+  const applyZoom = useCallback((direction: 'in' | 'out') => {
+    const bounds = getZoomBounds();
+    const baseZoom = zoomTargetRef.current ?? viewStateRef.current.zoom;
+    const nextZoom = direction === 'in'
+      ? baseZoom * ZOOM_STEP_FACTOR
+      : baseZoom / ZOOM_STEP_FACTOR;
+    const clampedZoom = clamp(nextZoom, bounds.minZoom, bounds.maxZoom);
+    animateZoomTo(clampedZoom);
+  }, [animateZoomTo, getZoomBounds]);
+
+  const fitZoom = useCallback(() => {
+    const bounds = getZoomBounds();
+    animateZoomTo(bounds.minZoom);
+  }, [animateZoomTo, getZoomBounds]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const shouldPan = event.button === 1 || event.button === 2 || isSpacePressedRef.current;
@@ -1160,6 +1261,11 @@ export default function WorldDesignerPage() {
     },
     [activePreviewCenter.x, activePreviewCenter.y, previewVersion]
   );
+
+  const zoomBounds = useMemo(() => getZoomBounds(), [getZoomBounds]);
+  const canZoomOut = viewState.zoom > zoomBounds.minZoom + 0.001;
+  const canZoomIn = viewState.zoom < zoomBounds.maxZoom - 0.001;
+  const zoomPercent = Math.round((viewState.zoom / Math.max(zoomBounds.minZoom, 0.0001)) * 100);
 
   if (isAuthenticated === null) {
     return (
@@ -1400,7 +1506,7 @@ export default function WorldDesignerPage() {
                 </button>
               </div>
               <p className="mt-2 text-xs text-slate-500">
-                Navigation: zoom with +/- buttons, pan with right-click/middle-click or hold space.
+                Navigation: zoom with -, Fit, + buttons, pan with right-click/middle-click or hold space.
               </p>
             </section>
           </aside>
@@ -1416,21 +1522,31 @@ export default function WorldDesignerPage() {
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <button
                     onClick={() => applyZoom('out')}
-                    className="rounded border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 hover:border-orange-300"
+                    disabled={!canZoomOut}
+                    className="rounded border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 hover:border-orange-300 disabled:cursor-not-allowed disabled:opacity-40"
                     title="Zoom out"
                   >
                     −
                   </button>
                   <button
+                    onClick={fitZoom}
+                    disabled={!canZoomOut}
+                    className="rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700 hover:border-orange-300 disabled:cursor-not-allowed disabled:opacity-40"
+                    title="Fit full map"
+                  >
+                    Fit
+                  </button>
+                  <button
                     onClick={() => applyZoom('in')}
-                    className="rounded border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 hover:border-orange-300"
+                    disabled={!canZoomIn}
+                    className="rounded border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 hover:border-orange-300 disabled:cursor-not-allowed disabled:opacity-40"
                     title="Zoom in"
                   >
                     +
                   </button>
                   <span>
                     Map center: ({mapCenter.x}, {mapCenter.y}) • 3D source: ({activePreviewCenter.x}, {activePreviewCenter.y}) • Zoom{' '}
-                    {viewState.zoom.toFixed(2)}x
+                    {viewState.zoom.toFixed(2)}x ({zoomPercent}%)
                   </span>
                 </div>
               </div>
@@ -1458,7 +1574,17 @@ export default function WorldDesignerPage() {
                 <input
                   type="checkbox"
                   checked={followPreviewCenter}
-                  onChange={(event) => setFollowPreviewCenter(event.target.checked)}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setFollowPreviewCenter(checked);
+                    if (checked) {
+                      if (previewFollowTimeoutRef.current !== null) {
+                        window.clearTimeout(previewFollowTimeoutRef.current);
+                        previewFollowTimeoutRef.current = null;
+                      }
+                      setFollowedPreviewCenter(mapCenter);
+                    }
+                  }}
                 />
                 Follow map center
               </label>
