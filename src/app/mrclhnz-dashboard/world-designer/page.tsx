@@ -228,9 +228,19 @@ export default function WorldDesignerPage() {
     [snapshots, selectedSnapshotId]
   );
 
+  const getCanvasDimensions = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      return { width: canvas.width, height: canvas.height };
+    }
+    return {
+      width: Math.max(1, canvasSize.width),
+      height: Math.max(1, canvasSize.height),
+    };
+  }, [canvasSize.height, canvasSize.width]);
+
   const getProjectionForState = useCallback((state: ViewState): CanvasProjection => {
-    const canvasWidth = Math.max(1, canvasSize.width);
-    const canvasHeight = Math.max(1, canvasSize.height);
+    const { width: canvasWidth, height: canvasHeight } = getCanvasDimensions();
     const zoom = Math.max(state.zoom, 0.0001);
 
     const viewWorldWidth = canvasWidth / zoom;
@@ -261,7 +271,7 @@ export default function WorldDesignerPage() {
       destHeight,
       zoom,
     };
-  }, [canvasSize.height, canvasSize.width]);
+  }, [getCanvasDimensions]);
 
   const mapCenter = useMemo(() => {
     const projection = getProjectionForState(viewState);
@@ -279,13 +289,12 @@ export default function WorldDesignerPage() {
   }, [getProjectionForState, viewState]);
 
   const getZoomBounds = useCallback(() => {
-    const width = Math.max(1, canvasSize.width);
-    const height = Math.max(1, canvasSize.height);
+    const { width, height } = getCanvasDimensions();
     const fitZoomX = width / WORLD_SIZE;
     const fitZoomY = height / WORLD_SIZE;
     const minZoom = Math.max(MIN_ZOOM_FLOOR, Math.min(fitZoomX, fitZoomY));
     return { minZoom, maxZoom: MAX_ZOOM };
-  }, [canvasSize.height, canvasSize.width]);
+  }, [getCanvasDimensions]);
 
   const activePreviewCenter = useMemo(
     () => (followPreviewCenter ? followedPreviewCenter : manualPreviewCenter),
@@ -357,8 +366,7 @@ export default function WorldDesignerPage() {
 
   const clampViewState = useCallback(
     (next: ViewState): ViewState => {
-      const width = Math.max(1, canvasSize.width);
-      const height = Math.max(1, canvasSize.height);
+      const { width, height } = getCanvasDimensions();
       const bounds = getZoomBounds();
       const zoom = clamp(next.zoom, bounds.minZoom, bounds.maxZoom);
       const viewWorldWidth = width / zoom;
@@ -371,7 +379,7 @@ export default function WorldDesignerPage() {
       const y = maxY <= 0 ? 0 : clamp(next.y, 0, maxY);
       return { x, y, zoom };
     },
-    [canvasSize.height, canvasSize.width, getZoomBounds]
+    [getCanvasDimensions, getZoomBounds]
   );
 
   const drawCanvas = useCallback(() => {
@@ -904,6 +912,22 @@ export default function WorldDesignerPage() {
       canvas.width = width;
       canvas.height = height;
       setCanvasSize({ width, height });
+
+      setViewState((current) => {
+        if (!hasInitializedViewRef.current) {
+          hasInitializedViewRef.current = true;
+          const next = clampViewState({ x: 0, y: 0, zoom: 0 });
+          viewStateRef.current = next;
+          return next;
+        }
+        const next = clampViewState(current);
+        viewStateRef.current = next;
+        return next;
+      });
+
+      window.requestAnimationFrame(() => {
+        drawCanvas();
+      });
     };
 
     const observer = new ResizeObserver(resize);
@@ -911,17 +935,7 @@ export default function WorldDesignerPage() {
     resize();
 
     return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    setViewState((current) => {
-      if (!hasInitializedViewRef.current) {
-        hasInitializedViewRef.current = true;
-        return clampViewState({ x: 0, y: 0, zoom: 0 });
-      }
-      return clampViewState(current);
-    });
-  }, [canvasSize.height, canvasSize.width, clampViewState]);
+  }, [clampViewState, drawCanvas]);
 
   useEffect(() => {
     if (!followPreviewCenter) return;
