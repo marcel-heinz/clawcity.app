@@ -891,17 +891,20 @@ export default function WorldDesignerPage() {
   }, [snapshots]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     ensureOffscreenCanvas();
     redrawOffscreenWorld();
     drawCanvas();
-  }, [drawCanvas, ensureOffscreenCanvas, redrawOffscreenWorld]);
+  }, [drawCanvas, ensureOffscreenCanvas, isAuthenticated, redrawOffscreenWorld]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     viewStateRef.current = viewState;
     drawCanvas();
-  }, [viewState, drawCanvas]);
+  }, [viewState, drawCanvas, isAuthenticated]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     const wrapper = viewportRef.current;
     const canvas = canvasRef.current;
     if (!wrapper || !canvas) return;
@@ -935,7 +938,7 @@ export default function WorldDesignerPage() {
     resize();
 
     return () => observer.disconnect();
-  }, [clampViewState, drawCanvas]);
+  }, [clampViewState, drawCanvas, isAuthenticated]);
 
   useEffect(() => {
     if (!followPreviewCenter) return;
