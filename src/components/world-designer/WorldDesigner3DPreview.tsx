@@ -10,6 +10,7 @@ interface WorldDesigner3DPreviewProps {
   tiles: WorldDesignerTile[];
   centerX: number;
   centerY: number;
+  elevationScale?: number;
 }
 
 const COLORS: Record<TerrainType, number> = {
@@ -197,6 +198,7 @@ export function WorldDesigner3DPreview({
   tiles,
   centerX,
   centerY,
+  elevationScale = 0.14,
 }: WorldDesigner3DPreviewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -205,6 +207,7 @@ export function WorldDesigner3DPreview({
 
   const cameraStateRef = useRef({
     targetX: 0,
+    targetY: 0,
     targetZ: 0,
     distance: 28,
     polar: 0.85,
@@ -321,7 +324,7 @@ export function WorldDesigner3DPreview({
       const spherical = new THREE.Spherical(state.distance, state.polar, state.azimuth);
       const offset = new THREE.Vector3().setFromSpherical(spherical);
       camera.position.set(state.targetX + offset.x, Math.max(3, offset.y), state.targetZ + offset.z);
-      camera.lookAt(state.targetX, 0, state.targetZ);
+      camera.lookAt(state.targetX, state.targetY, state.targetZ);
       renderer.render(scene, camera);
     };
 
@@ -360,16 +363,20 @@ export function WorldDesigner3DPreview({
       disposeObject3D(child);
     }
 
+    let elevationSum = 0;
+
     for (const tile of tiles) {
       const localX = tile.x - centerX;
       const localZ = tile.y - centerY;
       const seed = tileSeed(tile.x, tile.y);
       const terrain = tile.terrain;
+      const baseHeight = tile.elevation * elevationScale;
+      elevationSum += baseHeight;
 
       const tileGroup = new THREE.Group();
       tileGroup.position.set(localX, 0, localZ);
 
-      const planeHeight = terrain === 'deep_water' ? -0.12 : terrain === 'water' ? -0.06 : 0;
+      const planeHeight = terrain === 'deep_water' ? -0.16 : terrain === 'water' ? -0.08 : 0;
       const plane = new THREE.Mesh(
         new THREE.PlaneGeometry(1, 1),
         new THREE.MeshStandardMaterial({
@@ -379,7 +386,7 @@ export function WorldDesigner3DPreview({
         })
       );
       plane.rotation.x = -Math.PI / 2;
-      plane.position.y = planeHeight;
+      plane.position.y = baseHeight + planeHeight;
       plane.receiveShadow = true;
       tileGroup.add(plane);
 
@@ -399,13 +406,14 @@ export function WorldDesigner3DPreview({
       }
 
       if (feature) {
-        feature.position.y += planeHeight;
+        feature.position.y += baseHeight + planeHeight;
         tileGroup.add(feature);
       }
 
       group.add(tileGroup);
     }
-  }, [tilesKey, tiles, centerX, centerY]);
+    cameraStateRef.current.targetY = tiles.length > 0 ? elevationSum / tiles.length : 0;
+  }, [tilesKey, tiles, centerX, centerY, elevationScale]);
 
   return (
     <div className="rounded-xl border border-slate-300 bg-white shadow-sm">

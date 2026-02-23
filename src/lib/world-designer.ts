@@ -27,6 +27,7 @@ export const WORLD_DESIGNER_TERRAIN_COLORS: Record<TerrainType, string> = {
 };
 
 export const WORLD_TILE_COUNT = WORLD_SIZE * WORLD_SIZE;
+export const ELEVATION_MAX_LEVEL = 15;
 
 const TERRAIN_TO_INDEX = new Map<TerrainType, number>(
   WORLD_DESIGNER_TERRAINS.map((terrain, index) => [terrain, index])
@@ -154,6 +155,24 @@ export function generateSeededWorld(seed: number): Uint8Array {
   return world;
 }
 
+export function generateSeededElevation(seed: number): Uint8Array {
+  const elevationMap = new Uint8Array(WORLD_TILE_COUNT);
+
+  for (let y = 0; y < WORLD_SIZE; y++) {
+    for (let x = 0; x < WORLD_SIZE; x++) {
+      const index = tileIndex(x, y);
+      const baseElevation =
+        valueNoise(x, y, 180, seed + 11) * 0.58 +
+        valueNoise(x, y, 90, seed + 29) * 0.29 +
+        valueNoise(x, y, 45, seed + 53) * 0.13;
+      const shaped = Math.pow(clamp(baseElevation, 0, 1), 1.1);
+      elevationMap[index] = clamp(Math.round(shaped * ELEVATION_MAX_LEVEL), 0, ELEVATION_MAX_LEVEL);
+    }
+  }
+
+  return elevationMap;
+}
+
 export function computeTerrainCounts(world: Uint8Array): number[] {
   const counts = new Array<number>(WORLD_DESIGNER_TERRAINS.length).fill(0);
   for (let i = 0; i < world.length; i++) {
@@ -223,10 +242,12 @@ export interface WorldDesignerTile {
   x: number;
   y: number;
   terrain: TerrainType;
+  elevation: number;
 }
 
 export function extractTileWindow(
   world: Uint8Array,
+  elevationMap: Uint8Array,
   centerX: number,
   centerY: number,
   radius: number
@@ -243,6 +264,7 @@ export function extractTileWindow(
         x,
         y,
         terrain: indexToTerrain(world[tileIndex(x, y)]),
+        elevation: elevationMap[tileIndex(x, y)] ?? 0,
       });
     }
   }

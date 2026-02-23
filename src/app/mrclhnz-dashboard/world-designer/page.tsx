@@ -7,7 +7,9 @@ import {
   clamp,
   computeTerrainCounts,
   deserializeWorldFromBase64,
+  ELEVATION_MAX_LEVEL,
   extractTileWindow,
+  generateSeededElevation,
   generateSeededWorld,
   indexToTerrain,
   serializeWorldToBase64,
@@ -19,7 +21,10 @@ import {
 } from '@/lib/world-designer';
 import { WorldDesigner3DPreview } from '@/components/world-designer/WorldDesigner3DPreview';
 
-type EditorTool = 'brush' | 'rectangle' | 'bucket';
+type TerrainTool = 'brush' | 'rectangle' | 'bucket';
+type ElevationTool = 'raise' | 'lower' | 'flatten' | 'smooth';
+type EditorTool = TerrainTool | ElevationTool;
+type EditLayer = 'terrain' | 'elevation';
 
 interface ViewState {
   x: number;
@@ -33,16 +38,19 @@ interface WorldDesignerSnapshot {
   createdAt: string;
   seed: number;
   worldBase64: string;
+  elevationBase64?: string;
 }
 
 interface MutableOperation {
   label: string;
+  target: EditLayer;
   previous: Map<number, number>;
   next: Map<number, number>;
 }
 
 interface StoredOperation {
   label: string;
+  target: EditLayer;
   indices: number[];
   previous: number[];
   next: number[];
@@ -84,14 +92,24 @@ const ZOOM_SETTLE_EPSILON = 0.001;
 const PREVIEW_FOLLOW_SYNC_MS = 160;
 const BRUSH_SIZES = [1, 3, 5, 9] as const;
 const TERRAIN_SHORTCUTS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'] as const;
+const ELEVATION_STEP = 1;
+const ELEVATION_SHADE_MIN = 0.72;
+const ELEVATION_SHADE_RANGE = 0.56;
 
 const rawAdminPath = process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard';
 const adminPath = rawAdminPath.startsWith('/') ? rawAdminPath : `/${rawAdminPath}`;
 
-const TOOL_OPTIONS: Array<{ id: EditorTool; label: string; help: string }> = [
+const TERRAIN_TOOL_OPTIONS: Array<{ id: TerrainTool; label: string; help: string }> = [
   { id: 'brush', label: 'Brush', help: 'Paint selected terrain on drag.' },
   { id: 'rectangle', label: 'Rectangle', help: 'Drag to fill a rectangle area.' },
   { id: 'bucket', label: 'Bucket', help: 'Flood-fill connected region.' },
+];
+
+const ELEVATION_TOOL_OPTIONS: Array<{ id: ElevationTool; label: string; help: string }> = [
+  { id: 'raise', label: 'Raise', help: `Increase elevation by ${ELEVATION_STEP} on drag.` },
+  { id: 'lower', label: 'Lower', help: `Decrease elevation by ${ELEVATION_STEP} on drag.` },
+  { id: 'flatten', label: 'Flatten', help: 'Set elevation to the chosen level on drag.' },
+  { id: 'smooth', label: 'Smooth', help: 'Average local heights for softer terrain.' },
 ];
 
 function randomSeed(): number {
@@ -130,6 +148,7 @@ function parseSnapshots(input: unknown): WorldDesignerSnapshot[] {
       createdAt: value.createdAt,
       seed: Math.floor(value.seed),
       worldBase64: value.worldBase64,
+      elevationBase64: typeof value.elevationBase64 === 'string' ? value.elevationBase64 : undefined,
     });
   }
 
@@ -148,13 +167,18 @@ export default function WorldDesignerPage() {
 
   const [seed, setSeed] = useState<number>(() => randomSeed());
   const worldRef = useRef<Uint8Array>(generateSeededWorld(seed));
+  const elevationRef = useRef<Uint8Array>(generateSeededElevation(seed));
   const countsRef = useRef<number[]>(computeTerrainCounts(worldRef.current));
 
   const [terrainCounts, setTerrainCounts] = useState<number[]>(countsRef.current);
   const [previewVersion, setPreviewVersion] = useState(0);
-  const [tool, setTool] = useState<EditorTool>('brush');
+  const [editLayer, setEditLayer] = useState<EditLayer>('terrain');
+  const [terrainTool, setTerrainTool] = useState<TerrainTool>('brush');
+  const [elevationTool, setElevationTool] = useState<ElevationTool>('raise');
   const [selectedTerrainIndex, setSelectedTerrainIndex] = useState(terrainToIndex('plains'));
   const [brushSize, setBrushSize] = useState<(typeof BRUSH_SIZES)[number]>(3);
+  const [flattenElevation, setFlattenElevation] = useState<number>(Math.round(ELEVATION_MAX_LEVEL * 0.5));
+  const [previewElevationScale, setPreviewElevationScale] = useState(1.2);
   const [showGrid, setShowGrid] = useState(true);
 
   const [viewState, setViewState] = useState<ViewState>({
@@ -220,6 +244,7 @@ export default function WorldDesignerPage() {
   const zoomTargetRef = useRef<number | null>(null);
 
   const selectedTerrain = indexToTerrain(selectedTerrainIndex);
+  const activeTool: EditorTool = editLayer === 'terrain' ? terrainTool : elevationTool;
 
   const selectedSnapshot = useMemo(
     () => snapshots.find((item) => item.id === selectedSnapshotId) ?? null,
@@ -331,6 +356,17 @@ export default function WorldDesignerPage() {
     setTerrainCounts([...countsRef.current]);
   }, []);
 
+  const getTileColor = useCallback((terrainIndex: number, elevationLevel: number): [number, number, number] => {
+    const [baseR, baseG, baseB] = rgbPaletteRef.current[terrainIndex];
+    const elevationFactor = elevationLevel / Math.max(ELEVATION_MAX_LEVEL, 1);
+    const shade = ELEVATION_SHADE_MIN + elevationFactor * ELEVATION_SHADE_RANGE;
+    return [
+      clamp(Math.round(baseR * shade), 0, 255),
+      clamp(Math.round(baseG * shade), 0, 255),
+      clamp(Math.round(baseB * shade), 0, 255),
+    ];
+  }, []);
+
   const redrawOffscreenWorld = useCallback(() => {
     ensureOffscreenCanvas();
     const offscreen = offscreenCanvasRef.current;
@@ -340,10 +376,10 @@ export default function WorldDesignerPage() {
     const image = ctx.createImageData(WORLD_SIZE, WORLD_SIZE);
     const data = image.data;
     const world = worldRef.current;
-    const palette = rgbPaletteRef.current;
+    const elevationMap = elevationRef.current;
 
     for (let i = 0; i < world.length; i++) {
-      const [r, g, b] = palette[world[i]];
+      const [r, g, b] = getTileColor(world[i], elevationMap[i] ?? 0);
       const base = i * 4;
       data[base] = r;
       data[base + 1] = g;
@@ -352,15 +388,16 @@ export default function WorldDesignerPage() {
     }
 
     ctx.putImageData(image, 0, 0);
-  }, [ensureOffscreenCanvas]);
+  }, [ensureOffscreenCanvas, getTileColor]);
 
-  const paintOffscreenPixel = useCallback((x: number, y: number, terrainIndex: number) => {
+  const paintOffscreenTile = useCallback((x: number, y: number) => {
     const ctx = offscreenCtxRef.current;
     if (!ctx) return;
-    const terrain = indexToTerrain(terrainIndex);
-    ctx.fillStyle = TERRAIN_COLORS[terrain];
+    const index = tileIndex(x, y);
+    const [r, g, b] = getTileColor(worldRef.current[index], elevationRef.current[index] ?? 0);
+    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
     ctx.fillRect(x, y, 1, 1);
-  }, []);
+  }, [getTileColor]);
 
   const clampViewState = useCallback(
     (next: ViewState): ViewState => {
@@ -530,9 +567,10 @@ export default function WorldDesignerPage() {
     [getProjectionForState]
   );
 
-  const beginOperation = useCallback((label: string) => {
+  const beginOperation = useCallback((label: string, target: EditLayer) => {
     activeOperationRef.current = {
       label,
+      target,
       previous: new Map(),
       next: new Map(),
     };
@@ -546,6 +584,7 @@ export default function WorldDesignerPage() {
     const indices = Array.from(op.next.keys());
     const stored: StoredOperation = {
       label: op.label,
+      target: op.target,
       indices,
       previous: indices.map((index) => op.previous.get(index) ?? 0),
       next: indices.map((index) => op.next.get(index) ?? 0),
@@ -557,7 +596,9 @@ export default function WorldDesignerPage() {
     }
     redoStackRef.current = [];
     syncHistoryState();
-    setTerrainCounts([...countsRef.current]);
+    if (op.target === 'terrain') {
+      setTerrainCounts([...countsRef.current]);
+    }
     requestPreviewSync(true);
     return true;
   }, [requestPreviewSync, syncHistoryState]);
@@ -585,10 +626,30 @@ export default function WorldDesignerPage() {
       world[index] = nextTerrainIndex;
       countsRef.current[current] -= 1;
       countsRef.current[nextTerrainIndex] += 1;
-      paintOffscreenPixel(x, y, nextTerrainIndex);
+      paintOffscreenTile(x, y);
       return true;
     },
-    [paintOffscreenPixel]
+    [paintOffscreenTile]
+  );
+
+  const writeElevationAt = useCallback(
+    (x: number, y: number, nextLevel: number, operation: MutableOperation) => {
+      if (x < 0 || x >= WORLD_SIZE || y < 0 || y >= WORLD_SIZE) return false;
+      const index = tileIndex(x, y);
+      const elevationMap = elevationRef.current;
+      const current = elevationMap[index];
+      const clampedLevel = clamp(Math.round(nextLevel), 0, ELEVATION_MAX_LEVEL);
+      if (current === clampedLevel) return false;
+
+      if (!operation.previous.has(index)) {
+        operation.previous.set(index, current);
+      }
+      operation.next.set(index, clampedLevel);
+      elevationMap[index] = clampedLevel;
+      paintOffscreenTile(x, y);
+      return true;
+    },
+    [paintOffscreenTile]
   );
 
   const applyBrushAt = useCallback(
@@ -643,6 +704,88 @@ export default function WorldDesignerPage() {
       }
     },
     [applyBrushAt]
+  );
+
+  const applyElevationBrushAt = useCallback(
+    (
+      x: number,
+      y: number,
+      mode: ElevationTool,
+      operation: MutableOperation
+    ) => {
+      const radius = Math.floor((brushSize - 1) / 2);
+      const elevationMap = elevationRef.current;
+
+      const sampleAverage = (tx: number, ty: number): number => {
+        let sum = 0;
+        let count = 0;
+        for (let oy = -1; oy <= 1; oy++) {
+          for (let ox = -1; ox <= 1; ox++) {
+            const nx = tx + ox;
+            const ny = ty + oy;
+            if (nx < 0 || ny < 0 || nx >= WORLD_SIZE || ny >= WORLD_SIZE) continue;
+            sum += elevationMap[tileIndex(nx, ny)];
+            count += 1;
+          }
+        }
+        return count > 0 ? sum / count : elevationMap[tileIndex(tx, ty)];
+      };
+
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          if (distance > radius + 0.15) continue;
+          const tx = x + dx;
+          const ty = y + dy;
+          if (tx < 0 || ty < 0 || tx >= WORLD_SIZE || ty >= WORLD_SIZE) continue;
+          const current = elevationMap[tileIndex(tx, ty)];
+          if (mode === 'raise') {
+            writeElevationAt(tx, ty, current + ELEVATION_STEP, operation);
+          } else if (mode === 'lower') {
+            writeElevationAt(tx, ty, current - ELEVATION_STEP, operation);
+          } else if (mode === 'flatten') {
+            writeElevationAt(tx, ty, flattenElevation, operation);
+          } else {
+            writeElevationAt(tx, ty, sampleAverage(tx, ty), operation);
+          }
+        }
+      }
+    },
+    [brushSize, flattenElevation, writeElevationAt]
+  );
+
+  const applyElevationBrushLine = useCallback(
+    (
+      x0: number,
+      y0: number,
+      x1: number,
+      y1: number,
+      mode: ElevationTool,
+      operation: MutableOperation
+    ) => {
+      let cx = x0;
+      let cy = y0;
+      const dx = Math.abs(x1 - x0);
+      const dy = Math.abs(y1 - y0);
+      const sx = x0 < x1 ? 1 : -1;
+      const sy = y0 < y1 ? 1 : -1;
+      let err = dx - dy;
+
+      while (true) {
+        applyElevationBrushAt(cx, cy, mode, operation);
+        if (cx === x1 && cy === y1) break;
+        const e2 = err * 2;
+        if (e2 > -dy) {
+          err -= dy;
+          cx += sx;
+        }
+        if (e2 < dx) {
+          err += dx;
+          cy += sy;
+        }
+      }
+    },
+    [applyElevationBrushAt]
   );
 
   const fillRectangle = useCallback(
@@ -700,6 +843,7 @@ export default function WorldDesignerPage() {
   const setWorldWithSeed = useCallback(
     (nextSeed: number) => {
       worldRef.current = generateSeededWorld(nextSeed);
+      elevationRef.current = generateSeededElevation(nextSeed);
       setSeed(nextSeed);
       recalculateCounts();
       redrawOffscreenWorld();
@@ -715,19 +859,31 @@ export default function WorldDesignerPage() {
   );
 
   const applyStoredOperation = useCallback((operation: StoredOperation, direction: 'undo' | 'redo') => {
-    const world = worldRef.current;
     const values = direction === 'undo' ? operation.previous : operation.next;
-    for (let i = 0; i < operation.indices.length; i++) {
-      const index = operation.indices[i];
-      world[index] = values[i];
-      const x = index % WORLD_SIZE;
-      const y = Math.floor(index / WORLD_SIZE);
-      paintOffscreenPixel(x, y, values[i]);
+
+    if (operation.target === 'terrain') {
+      const world = worldRef.current;
+      for (let i = 0; i < operation.indices.length; i++) {
+        const index = operation.indices[i];
+        world[index] = values[i];
+        const x = index % WORLD_SIZE;
+        const y = Math.floor(index / WORLD_SIZE);
+        paintOffscreenTile(x, y);
+      }
+      recalculateCounts();
+    } else {
+      const elevationMap = elevationRef.current;
+      for (let i = 0; i < operation.indices.length; i++) {
+        const index = operation.indices[i];
+        elevationMap[index] = clamp(values[i], 0, ELEVATION_MAX_LEVEL);
+        const x = index % WORLD_SIZE;
+        const y = Math.floor(index / WORLD_SIZE);
+        paintOffscreenTile(x, y);
+      }
     }
-    recalculateCounts();
     requestPreviewSync(true);
     drawCanvas();
-  }, [drawCanvas, paintOffscreenPixel, recalculateCounts, requestPreviewSync]);
+  }, [drawCanvas, paintOffscreenTile, recalculateCounts, requestPreviewSync]);
 
   const undo = useCallback(() => {
     const operation = undoStackRef.current.pop();
@@ -754,7 +910,12 @@ export default function WorldDesignerPage() {
       return;
     }
 
+    const parsedElevation = typeof snapshot.elevationBase64 === 'string'
+      ? deserializeWorldFromBase64(snapshot.elevationBase64, WORLD_TILE_COUNT)
+      : null;
+
     worldRef.current = parsed;
+    elevationRef.current = parsedElevation ?? generateSeededElevation(snapshot.seed);
     setSeed(snapshot.seed);
     recalculateCounts();
     redrawOffscreenWorld();
@@ -772,6 +933,7 @@ export default function WorldDesignerPage() {
       createdAt: nowIso(),
       seed,
       worldBase64: serializeWorldToBase64(worldRef.current),
+      elevationBase64: serializeWorldToBase64(elevationRef.current),
     };
 
     setSnapshots((previous) => [snapshot, ...previous].slice(0, MAX_SNAPSHOTS));
@@ -817,9 +979,12 @@ export default function WorldDesignerPage() {
         return;
       }
 
-      const validIncoming = incoming.filter((snapshot) =>
-        deserializeWorldFromBase64(snapshot.worldBase64) !== null
-      );
+      const validIncoming = incoming.filter((snapshot) => {
+        const parsedWorld = deserializeWorldFromBase64(snapshot.worldBase64);
+        if (!parsedWorld) return false;
+        if (typeof snapshot.elevationBase64 !== 'string') return true;
+        return deserializeWorldFromBase64(snapshot.elevationBase64, WORLD_TILE_COUNT) !== null;
+      });
       if (validIncoming.length === 0) {
         setErrorMessage('Snapshots could not be decoded (invalid payload).');
         return;
@@ -857,6 +1022,18 @@ export default function WorldDesignerPage() {
     setStatusMessage(`Filled world with ${terrain}.`);
     setErrorMessage(null);
   }, [drawCanvas, recalculateCounts, redrawOffscreenWorld, requestPreviewSync, syncHistoryState]);
+
+  const regenerateElevation = useCallback(() => {
+    elevationRef.current = generateSeededElevation(seed);
+    redrawOffscreenWorld();
+    requestPreviewSync(true);
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    syncHistoryState();
+    drawCanvas();
+    setStatusMessage(`Regenerated elevation from seed ${seed}.`);
+    setErrorMessage(null);
+  }, [drawCanvas, redrawOffscreenWorld, requestPreviewSync, seed, syncHistoryState]);
 
   const checkAuth = useCallback(async () => {
     try {
@@ -1173,28 +1350,47 @@ export default function WorldDesignerPage() {
     interaction.lastTileX = tile.x;
     interaction.lastTileY = tile.y;
 
-    if (tool === 'bucket') {
-      beginOperation('Bucket fill');
+    if (editLayer === 'terrain') {
+      if (activeTool === 'bucket') {
+        beginOperation('Bucket fill', 'terrain');
+        const operation = activeOperationRef.current;
+        if (!operation) return;
+        floodFill(tile.x, tile.y, selectedTerrainIndex, operation);
+        commitOperation();
+        drawCanvas();
+        return;
+      }
+
+      if (activeTool === 'rectangle') {
+        interaction.mode = 'rectangle';
+        rectStartRef.current = tile;
+        rectCurrentRef.current = tile;
+        drawCanvas();
+        return;
+      }
+
+      beginOperation('Brush stroke', 'terrain');
       const operation = activeOperationRef.current;
       if (!operation) return;
-      floodFill(tile.x, tile.y, selectedTerrainIndex, operation);
-      commitOperation();
+      applyBrushAt(tile.x, tile.y, selectedTerrainIndex, operation);
+      interaction.mode = 'paint';
       drawCanvas();
       return;
     }
 
-    if (tool === 'rectangle') {
-      interaction.mode = 'rectangle';
-      rectStartRef.current = tile;
-      rectCurrentRef.current = tile;
-      drawCanvas();
-      return;
-    }
-
-    beginOperation('Brush stroke');
+    beginOperation(
+      activeTool === 'raise'
+        ? 'Raise elevation'
+        : activeTool === 'lower'
+          ? 'Lower elevation'
+          : activeTool === 'flatten'
+            ? 'Flatten elevation'
+            : 'Smooth elevation',
+      'elevation'
+    );
     const operation = activeOperationRef.current;
     if (!operation) return;
-    applyBrushAt(tile.x, tile.y, selectedTerrainIndex, operation);
+    applyElevationBrushAt(tile.x, tile.y, activeTool as ElevationTool, operation);
     interaction.mode = 'paint';
     drawCanvas();
   };
@@ -1232,14 +1428,25 @@ export default function WorldDesignerPage() {
       const operation = activeOperationRef.current;
       if (!operation) return;
 
-      applyBrushLine(
-        interaction.lastTileX,
-        interaction.lastTileY,
-        tile.x,
-        tile.y,
-        selectedTerrainIndex,
-        operation
-      );
+      if (operation.target === 'terrain') {
+        applyBrushLine(
+          interaction.lastTileX,
+          interaction.lastTileY,
+          tile.x,
+          tile.y,
+          selectedTerrainIndex,
+          operation
+        );
+      } else {
+        applyElevationBrushLine(
+          interaction.lastTileX,
+          interaction.lastTileY,
+          tile.x,
+          tile.y,
+          activeTool as ElevationTool,
+          operation
+        );
+      }
 
       interaction.lastTileX = tile.x;
       interaction.lastTileY = tile.y;
@@ -1252,14 +1459,14 @@ export default function WorldDesignerPage() {
     const interaction = interactionRef.current;
     if (interaction.mode === 'paint') {
       if (commitOperation()) {
-        setStatusMessage('Applied paint operation.');
+        setStatusMessage(editLayer === 'terrain' ? 'Applied terrain paint operation.' : 'Applied elevation operation.');
         setErrorMessage(null);
       }
     } else if (interaction.mode === 'rectangle') {
       const start = rectStartRef.current;
       const end = rectCurrentRef.current;
       if (start && end) {
-        beginOperation('Rectangle fill');
+        beginOperation('Rectangle fill', 'terrain');
         const operation = activeOperationRef.current;
         if (operation) {
           fillRectangle(start, end, selectedTerrainIndex, operation);
@@ -1276,7 +1483,7 @@ export default function WorldDesignerPage() {
     interaction.mode = 'none';
     interaction.pointerId = null;
     drawCanvas();
-  }, [beginOperation, commitOperation, drawCanvas, fillRectangle, selectedTerrainIndex]);
+  }, [beginOperation, commitOperation, drawCanvas, editLayer, fillRectangle, selectedTerrainIndex]);
 
   const handlePointerUp = () => {
     finishInteraction();
@@ -1289,7 +1496,13 @@ export default function WorldDesignerPage() {
   const previewTiles = useMemo(
     () => {
       void previewVersion;
-      return extractTileWindow(worldRef.current, activePreviewCenter.x, activePreviewCenter.y, PREVIEW_RADIUS);
+      return extractTileWindow(
+        worldRef.current,
+        elevationRef.current,
+        activePreviewCenter.x,
+        activePreviewCenter.y,
+        PREVIEW_RADIUS
+      );
     },
     [activePreviewCenter.x, activePreviewCenter.y, previewVersion]
   );
@@ -1298,6 +1511,21 @@ export default function WorldDesignerPage() {
   const canZoomOut = viewState.zoom > zoomBounds.minZoom + 0.001;
   const canZoomIn = viewState.zoom < zoomBounds.maxZoom - 0.001;
   const zoomPercent = Math.round((viewState.zoom / Math.max(zoomBounds.minZoom, 0.0001)) * 100);
+  const elevationSummary = useMemo(() => {
+    void previewVersion;
+    const elevationMap = elevationRef.current;
+    let min = ELEVATION_MAX_LEVEL;
+    let max = 0;
+    let sum = 0;
+    for (let i = 0; i < elevationMap.length; i++) {
+      const value = elevationMap[i];
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+      sum += value;
+    }
+    const avg = elevationMap.length > 0 ? sum / elevationMap.length : 0;
+    return { min, max, avg };
+  }, [previewVersion]);
 
   if (isAuthenticated === null) {
     return (
@@ -1422,12 +1650,40 @@ export default function WorldDesignerPage() {
             <section>
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Tools</h2>
               <div className="mt-2 grid grid-cols-2 gap-2">
-                {TOOL_OPTIONS.map((option) => (
+                <button
+                  onClick={() => setEditLayer('terrain')}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                    editLayer === 'terrain'
+                      ? 'border-orange-400 bg-orange-50 text-orange-800'
+                      : 'border-slate-300 bg-white text-slate-700 hover:border-orange-300'
+                  }`}
+                >
+                  Terrain
+                </button>
+                <button
+                  onClick={() => setEditLayer('elevation')}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                    editLayer === 'elevation'
+                      ? 'border-orange-400 bg-orange-50 text-orange-800'
+                      : 'border-slate-300 bg-white text-slate-700 hover:border-orange-300'
+                  }`}
+                >
+                  Elevation
+                </button>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {(editLayer === 'terrain' ? TERRAIN_TOOL_OPTIONS : ELEVATION_TOOL_OPTIONS).map((option) => (
                   <button
                     key={option.id}
-                    onClick={() => setTool(option.id)}
+                    onClick={() => {
+                      if (editLayer === 'terrain') {
+                        setTerrainTool(option.id as TerrainTool);
+                      } else {
+                        setElevationTool(option.id as ElevationTool);
+                      }
+                    }}
                     className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
-                      tool === option.id
+                      activeTool === option.id
                         ? 'border-orange-400 bg-orange-50 text-orange-800'
                         : 'border-slate-300 bg-white text-slate-700 hover:border-orange-300'
                     }`}
@@ -1478,6 +1734,25 @@ export default function WorldDesignerPage() {
                   ))}
                 </select>
               </label>
+              {editLayer === 'elevation' && activeTool === 'flatten' && (
+                <label className="mt-2 block text-sm text-slate-600">
+                  Flatten level ({flattenElevation})
+                  <input
+                    type="range"
+                    min={0}
+                    max={ELEVATION_MAX_LEVEL}
+                    step={1}
+                    value={flattenElevation}
+                    onChange={(event) => setFlattenElevation(clamp(Number(event.target.value), 0, ELEVATION_MAX_LEVEL))}
+                    className="mt-1 w-full"
+                  />
+                </label>
+              )}
+              {editLayer === 'elevation' && (
+                <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
+                  Elevation range: {elevationSummary.min} to {elevationSummary.max}
+                </div>
+              )}
               <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
                 <input
                   type="checkbox"
@@ -1523,6 +1798,12 @@ export default function WorldDesignerPage() {
                 >
                   Fill world with selected terrain ({selectedTerrain})
                 </button>
+                <button
+                  onClick={regenerateElevation}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-700 hover:border-orange-300"
+                >
+                  Regenerate elevation from current seed
+                </button>
               </div>
               <p className="mt-2 text-xs text-slate-500">
                 Navigation: zoom with -, Fit, + buttons, pan with right-click/middle-click or hold space.
@@ -1539,8 +1820,10 @@ export default function WorldDesignerPage() {
             <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm text-slate-600">
-                  Active tool: <span className="font-semibold text-slate-800">{tool}</span> • Terrain:{' '}
-                  <span className="font-semibold text-slate-800">{selectedTerrain}</span>
+                  Layer: <span className="font-semibold text-slate-800">{editLayer}</span> • Active tool:{' '}
+                  <span className="font-semibold text-slate-800">{activeTool}</span> • Terrain:{' '}
+                  <span className="font-semibold text-slate-800">{selectedTerrain}</span> • Elevation avg:{' '}
+                  <span className="font-semibold text-slate-800">{elevationSummary.avg.toFixed(1)}</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <button
@@ -1678,6 +1961,18 @@ export default function WorldDesignerPage() {
               <p className="mt-1 text-xs text-slate-500">
                 3D preview always renders a {PREVIEW_RADIUS * 2 + 1}x{PREVIEW_RADIUS * 2 + 1} tile window, not the full 500x500 map.
               </p>
+              <label className="mt-3 block text-xs text-slate-600">
+                3D elevation scale ({previewElevationScale.toFixed(1)}x)
+                <input
+                  type="range"
+                  min={0.5}
+                  max={3}
+                  step={0.1}
+                  value={previewElevationScale}
+                  onChange={(event) => setPreviewElevationScale(clamp(Number(event.target.value), 0.5, 3))}
+                  className="mt-1 w-full"
+                />
+              </label>
             </section>
 
             <WorldDesigner3DPreview
@@ -1685,6 +1980,7 @@ export default function WorldDesignerPage() {
               tiles={previewTiles}
               centerX={activePreviewCenter.x}
               centerY={activePreviewCenter.y}
+              elevationScale={previewElevationScale * 0.14}
             />
 
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
