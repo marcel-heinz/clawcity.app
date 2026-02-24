@@ -302,6 +302,8 @@ export async function POST(request: NextRequest) {
           return `-${e.percent}% ${e.action} cooldown`;
         case 'detection_range':
           return `${e.range}-tile detection range`;
+        case 'harvest_scan_range':
+          return `${e.range}-tile fresh-tile scan radius`;
         case 'upkeep_reduction':
           return `-${e.percent}% territory upkeep`;
         case 'instant_food':

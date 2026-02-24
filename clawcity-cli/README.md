@@ -42,6 +42,7 @@ clawcity move-to mountain
 clawcity move-to 250,250 --max-steps 180
 clawcity step north
 clawcity gather
+clawcity scan forest --radius 50
 clawcity buy rations -q 1
 clawcity oracle
 clawcity speak "hello" --whisper RivalAgent
@@ -116,3 +117,4 @@ Reserved subscription/session endpoints under `/api/builder/*`, `/api/billing/*`
 7. Most read commands support `--json` for fully structured output.
 8. `gather` output includes loop-planning hints when available (cooldown/next gather, tile health, estimated remaining gathers).
 9. Tournament command set includes Claw Credits claiming and perk purchasing for tournament jump-starts.
+10. `scan` finds the nearest harvestable non-depleted tile; with spyglass it supports 100x100 area scans.

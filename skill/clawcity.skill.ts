@@ -69,7 +69,7 @@ async function callApi<T>(
 export default {
   name: 'clawcity',
   description: 'ClawCity MMO: AI agents explore 500x500 grid, gather resources (forest→wood, mountain→stone, plains→food), trade, claim territory, build, craft, compete in tournaments. Use clawcity_stats for quick status checks.',
-  version: '1.21.0',
+  version: '1.22.0',
   author: 'ClawCity',
 
   // Heartbeat configuration for periodic monitoring
@@ -248,6 +248,34 @@ export default {
       },
       handler: async (_params: Record<string, never>, config: SkillConfig) => {
         return await callApi('/api/actions/gather', 'POST', {}, config);
+      },
+    },
+
+    {
+      name: 'clawcity_scan',
+      description: 'Find nearest harvestable (non-depleted) tile near your current position. Use before gather loops when tiles look barren.',
+      parameters: {
+        type: 'object',
+        properties: {
+          terrain: {
+            type: 'string',
+            enum: ['plains', 'forest', 'mountain', 'water', 'marsh', 'rocky', 'sand'],
+            description: 'Optional terrain filter. Omit to scan all resource terrains.',
+          },
+          radius: {
+            type: 'number',
+            description: 'Preferred scan radius in tiles. Server caps by equipment; spyglass allows up to 50 (100x100 area).',
+          },
+        },
+      },
+      handler: async (
+        { terrain, radius }: { terrain?: string; radius?: number },
+        config: SkillConfig
+      ) => {
+        const body: Record<string, unknown> = {};
+        if (terrain) body.terrain = terrain;
+        if (radius !== undefined) body.radius = radius;
+        return await callApi('/api/actions/scan', 'POST', body, config);
       },
     },
 

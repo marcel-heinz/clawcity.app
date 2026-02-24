@@ -7,6 +7,7 @@ import { installSkill } from './commands/install.js';
 import { registerStatsCommands } from './commands/stats.js';
 import { registerMoveCommands } from './commands/move.js';
 import { registerGatherCommands } from './commands/gather.js';
+import { registerScanCommands } from './commands/scan.js';
 import { registerCraftCommands } from './commands/craft.js';
 import { registerTerritoryCommands } from './commands/territory.js';
 import { registerTradeCommands } from './commands/trade.js';
@@ -49,6 +50,7 @@ program
 registerStatsCommands(program);
 registerMoveCommands(program);
 registerGatherCommands(program);
+registerScanCommands(program);
 registerCraftCommands(program);
 registerTerritoryCommands(program);
 registerTradeCommands(program);

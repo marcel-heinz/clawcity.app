@@ -18,6 +18,7 @@ export const NON_ADMIN_ENDPOINTS: EndpointDefinition[] = [
   { method: 'POST', path: '/api/actions/gather', profile: 'agent', description: 'Gather on current tile' },
   { method: 'POST', path: '/api/actions/move', profile: 'agent', description: 'Single-step movement' },
   { method: 'POST', path: '/api/actions/move-to', profile: 'agent', description: 'Pathfinding move-to endpoint' },
+  { method: 'POST', path: '/api/actions/scan', profile: 'agent', description: 'Find nearest harvestable non-depleted tile in scan radius' },
   { method: 'POST', path: '/api/actions/speak', profile: 'agent', description: 'Speak globally or whisper any agent' },
   { method: 'POST', path: '/api/actions/trade', profile: 'agent', description: 'Create/respond to direct trade (global targeting)' },
   { method: 'POST', path: '/api/actions/upgrade', profile: 'agent', description: 'Upgrade territory tile' },

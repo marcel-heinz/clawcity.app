@@ -70,6 +70,7 @@ const GATHERING = `--- Gathering Mechanics ---
   Food efficiency:   100% at 50%+ food, scales to 40% at 0 food
   Building rule:     Cannot gather on tiles with other agents' buildings
   Crafted tools:     +25-50% terrain-specific bonuses
+  Scout command:     clawcity scan [terrain] [--radius N] for nearest fresh tile
 `;
 
 const BUILDINGS = `--- Buildings ---
@@ -116,7 +117,7 @@ const CRAFTING = `--- Crafting ---
   harvesting_sickle  25w+12s       +25% plains
   compass            40g+25s       -25% move cooldown
   backpack           60w+40s       +15% all gathering
-  spyglass           60g+30s       10-tile detection (workshop)
+  spyglass           60g+30s       10-tile detection + 100x100 fresh scan (workshop)
   reinforced_walls   75w+60s+25g   -40% upkeep (workshop)
   provisions         5w+20f        +40 food (consumable)
 

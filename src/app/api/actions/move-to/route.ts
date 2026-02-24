@@ -311,6 +311,7 @@ export async function POST(request: NextRequest) {
     if (hasTerrain) {
       const desiredTerrain = targetTerrain as TerrainType;
       const currentTerrain = terrainAt(agent.x, agent.y);
+
       if (currentTerrain === desiredTerrain) {
         const { data: currentTile, error: currentTileError } = await supabase
           .from('tiles')
@@ -339,53 +340,53 @@ export async function POST(request: NextRequest) {
             },
           });
         }
+      }
 
-        // Current tile is depleted: find nearest fresh tile of the same terrain if possible.
-        const radii = [...FRESH_TILE_SEARCH_RADII.filter((radius) => radius < effectiveMaxSteps), effectiveMaxSteps]
-          .filter((radius, index, all) => radius > 0 && all.indexOf(radius) === index);
-        let freshTarget: { x: number; y: number; distance: number } | null = null;
+      // Always prefer fresh tiles for terrain mode (not only when standing on a depleted tile).
+      const radii = [...FRESH_TILE_SEARCH_RADII.filter((radius) => radius < effectiveMaxSteps), effectiveMaxSteps]
+        .filter((radius, index, all) => radius > 0 && all.indexOf(radius) === index);
+      let freshTarget: { x: number; y: number; distance: number } | null = null;
 
-        for (const radius of radii) {
-          try {
-            const terrainTiles = await fetchTerrainTileStates(supabase, agent.x, agent.y, radius, desiredTerrain);
-            if (terrainTiles.length === 0) continue;
+      for (const radius of radii) {
+        try {
+          const terrainTiles = await fetchTerrainTileStates(supabase, agent.x, agent.y, radius, desiredTerrain);
+          if (terrainTiles.length === 0) continue;
 
-            blockedTerrainGoals = new Set([
-              ...blockedTerrainGoals,
-              ...buildBlockedGoalSet(terrainTiles, nowMs),
-            ]);
+          blockedTerrainGoals = new Set([
+            ...blockedTerrainGoals,
+            ...buildBlockedGoalSet(terrainTiles, nowMs),
+          ]);
 
-            const target = findNearestFreshTerrainTile({
-              startX: agent.x,
-              startY: agent.y,
-              targetTerrain: desiredTerrain,
-              maxSteps: radius,
-              terrainAt,
-              tileStateMap: buildTerrainTileStateMap(terrainTiles),
-              nowMs,
-            });
+          const target = findNearestFreshTerrainTile({
+            startX: agent.x,
+            startY: agent.y,
+            targetTerrain: desiredTerrain,
+            maxSteps: radius,
+            terrainAt,
+            tileStateMap: buildTerrainTileStateMap(terrainTiles),
+            nowMs,
+          });
 
-            if (target) {
-              freshTarget = target;
-              break;
-            }
-          } catch (error) {
-            console.error('move-to: failed to scan nearby terrain tiles:', error);
+          if (target) {
+            freshTarget = target;
             break;
           }
+        } catch (error) {
+          console.error('move-to: failed to scan nearby terrain tiles:', error);
+          break;
         }
+      }
 
-        if (freshTarget) {
-          const targetPoint = freshTarget;
-          goalDescription = `fresh ${desiredTerrain} tile`;
-          isGoal = (x, y) => x === targetPoint.x && y === targetPoint.y;
-          effectiveMaxSteps = Math.max(effectiveMaxSteps, targetPoint.distance + 6);
-          effectiveMaxSteps = Math.min(effectiveMaxSteps, MAX_STEPS_LIMIT);
-        } else if (blockedTerrainGoals.size > 0) {
-          goalDescription = `nearest fresh ${desiredTerrain} tile`;
-          isGoal = (x, y, terrain) =>
-            terrain === desiredTerrain && !blockedTerrainGoals.has(tileCoordKey(x, y));
-        }
+      if (freshTarget) {
+        const targetPoint = freshTarget;
+        goalDescription = `fresh ${desiredTerrain} tile`;
+        isGoal = (x, y) => x === targetPoint.x && y === targetPoint.y;
+        effectiveMaxSteps = Math.max(effectiveMaxSteps, targetPoint.distance + 6);
+        effectiveMaxSteps = Math.min(effectiveMaxSteps, MAX_STEPS_LIMIT);
+      } else if (blockedTerrainGoals.size > 0) {
+        goalDescription = `nearest fresh ${desiredTerrain} tile`;
+        isGoal = (x, y, terrain) =>
+          terrain === desiredTerrain && !blockedTerrainGoals.has(tileCoordKey(x, y));
       }
 
       // Spiral scan to find nearest matching terrain and auto-expand max_steps

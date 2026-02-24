@@ -1,4 +1,4 @@
-import { TerrainType, ResourceType } from './types';
+import { TerrainType } from './types';
 
 // =============================================================================
 // ITEM & CRAFTING SYSTEM
@@ -32,6 +32,11 @@ export interface DetectionRange {
   range: number; // tile radius
 }
 
+export interface HarvestScanRange {
+  type: 'harvest_scan_range';
+  range: number; // tile radius for fresh resource scanning
+}
+
 export interface UpkeepReduction {
   type: 'upkeep_reduction';
   percent: number; // e.g. 40 = -40%
@@ -57,6 +62,7 @@ export type ItemEffect =
   | GatherBonus
   | CooldownReduction
   | DetectionRange
+  | HarvestScanRange
   | UpkeepReduction
   | InstantFood
   | ClaimDiscount
@@ -198,12 +204,18 @@ export const ITEM_DEFINITIONS = {
   },
   spyglass: {
     name: 'Spyglass',
-    description: 'See further. Nearby agent detection range doubled to 10 tiles. (80 uses) Requires Workshop.',
+    description: 'Survey terrain from afar. Nearby agent detection range doubled to 10 tiles and fresh-tile scan radius extends to 50 (100x100 area). (80 uses) Requires Workshop.',
     category: 'equipment' as ItemCategory,
-    effects: [{
-      type: 'detection_range' as const,
-      range: 10,
-    }],
+    effects: [
+      {
+        type: 'detection_range' as const,
+        range: 10,
+      },
+      {
+        type: 'harvest_scan_range' as const,
+        range: 50,
+      },
+    ],
     recipe: { gold: 60, stone: 30 },
     max_uses: 80,
     max_quantity: 1,
@@ -429,6 +441,28 @@ export function getDetectionRange(items: AgentItem[]): number {
 
     for (const effect of def.effects) {
       if (effect.type === 'detection_range') {
+        maxRange = Math.max(maxRange, effect.range);
+      }
+    }
+  }
+
+  return maxRange;
+}
+
+/**
+ * Get fresh resource scan radius from items.
+ * Default supports short-range scouting; spyglass extends it to 100x100 area.
+ */
+export function getHarvestScanRange(items: AgentItem[]): number {
+  let maxRange = 15; // 31x31 local scan without special equipment
+
+  for (const item of items) {
+    const def = getItemDefinition(item.item_id);
+    if (!def) continue;
+    if (def.max_uses !== null && item.uses_remaining !== null && item.uses_remaining <= 0) continue;
+
+    for (const effect of def.effects) {
+      if (effect.type === 'harvest_scan_range') {
         maxRange = Math.max(maxRange, effect.range);
       }
     }
