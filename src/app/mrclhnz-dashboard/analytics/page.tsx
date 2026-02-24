@@ -91,6 +91,7 @@ const RESOURCE_COLORS = {
 
 const rawAdminPath = process.env.NEXT_PUBLIC_ADMIN_PATH || '/mrclhnz-dashboard';
 const adminPath = rawAdminPath.startsWith('/') ? rawAdminPath : `/${rawAdminPath}`;
+const ANALYTICS_REQUEST_TIMEOUT_MS = 20000;
 
 export default function AnalyticsDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -161,19 +162,29 @@ export default function AnalyticsDashboard() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), ANALYTICS_REQUEST_TIMEOUT_MS);
 
     try {
-      const response = await fetch('/api/admin/analytics');
-      const data = await response.json();
+      const response = await fetch('/api/admin/analytics', {
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      const payload = await response.json().catch(() => null);
 
-      if (data.success) {
-        setAnalyticsData(data.data);
+      if (response.ok && payload?.success) {
+        setAnalyticsData(payload.data);
       } else {
-        setError(data.error || 'Failed to fetch analytics');
+        setError(payload?.error || `Failed to fetch analytics (HTTP ${response.status})`);
       }
-    } catch {
-      setError('Connection error');
+    } catch (fetchError) {
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        setError('Analytics request timed out. Please refresh or try again in a moment.');
+      } else {
+        setError('Connection error');
+      }
     } finally {
+      window.clearTimeout(timeoutId);
       setIsLoading(false);
     }
   }, []);
@@ -415,6 +426,9 @@ export default function AnalyticsDashboard() {
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <span>🎯</span> Retention Rates
               </h2>
+              <p className="text-xs text-[var(--muted)] mb-4">
+                Action-based rolling retention (move, gather, trade, craft) to avoid auto-enrollment online spikes.
+              </p>
               <div className="grid grid-cols-3 gap-4">
                 <div className="text-center">
                   <div className="text-4xl font-bold text-[var(--accent)]">

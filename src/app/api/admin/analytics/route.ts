@@ -84,6 +84,19 @@ interface RecentAgentRecord {
   stone: number;
 }
 
+interface RetentionAgentRecord {
+  id: string;
+  created_at: string;
+  last_move_at: string | null;
+  last_gather_at: string | null;
+  last_trade_at: string | null;
+  last_craft_at: string | null;
+}
+
+const FALLBACK_EVENTS_PAGE_SIZE = 1000;
+const MAX_FALLBACK_EVENTS = 25000;
+const MAX_ONBOARDING_COHORT_SIZE = 2000;
+
 function buildEmptyOnboardingFunnel(): OnboardingFunnelData {
   return {
     ...buildOnboardingFunnel([]),
@@ -103,6 +116,7 @@ async function fetchRecentPlayerAgents(
     .select(selectFields)
     .gte('created_at', sinceIso)
     .eq('is_system', false)
+    .order('created_at', { ascending: false })
     .limit(10000);
 
   if (error && error.message?.includes('is_system')) {
@@ -110,6 +124,7 @@ async function fetchRecentPlayerAgents(
       .from('agents')
       .select(selectFields)
       .gte('created_at', sinceIso)
+      .order('created_at', { ascending: false })
       .limit(10000);
     data = fallback.data;
     error = fallback.error;
@@ -120,6 +135,97 @@ async function fetchRecentPlayerAgents(
   }
 
   return (data || []) as RecentAgentRecord[];
+}
+
+async function fetchRetentionAgents(
+  supabase: ReturnType<typeof createServerClient>,
+): Promise<RetentionAgentRecord[]> {
+  const selectFields = 'id, created_at, last_move_at, last_gather_at, last_trade_at, last_craft_at';
+
+  let { data, error } = await supabase
+    .from('agents')
+    .select(selectFields)
+    .eq('is_system', false)
+    .limit(10000);
+
+  if (error && error.message?.includes('is_system')) {
+    const fallback = await supabase
+      .from('agents')
+      .select(selectFields)
+      .limit(10000);
+    data = fallback.data;
+    error = fallback.error;
+  }
+
+  if (error) {
+    throw new Error(`Failed to fetch retention cohorts: ${error.message}`);
+  }
+
+  return (data || []) as RetentionAgentRecord[];
+}
+
+function parseTimestampMs(timestamp: string | null | undefined): number | null {
+  if (!timestamp) return null;
+  const ms = Date.parse(timestamp);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function calculateActionBasedRollingRetention(
+  agents: RetentionAgentRecord[],
+  nowMs: number,
+): { day1: number; day7: number; day30: number } {
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const sevenDaysMs = 7 * oneDayMs;
+  const thirtyDaysMs = 30 * oneDayMs;
+
+  let day1Total = 0;
+  let day1Retained = 0;
+  let day7Total = 0;
+  let day7Retained = 0;
+  let day30Total = 0;
+  let day30Retained = 0;
+
+  for (const agent of agents) {
+    const createdAtMs = parseTimestampMs(agent.created_at);
+    if (createdAtMs === null) continue;
+
+    const ageSinceCreation = nowMs - createdAtMs;
+    const engagementMsCandidates = [
+      parseTimestampMs(agent.last_move_at),
+      parseTimestampMs(agent.last_gather_at),
+      parseTimestampMs(agent.last_trade_at),
+      parseTimestampMs(agent.last_craft_at),
+    ].filter((ms): ms is number => typeof ms === 'number');
+    const latestEngagementMs =
+      engagementMsCandidates.length > 0 ? Math.max(...engagementMsCandidates) : null;
+
+    if (ageSinceCreation > oneDayMs) {
+      day1Total++;
+      if (latestEngagementMs !== null && latestEngagementMs >= createdAtMs + oneDayMs) {
+        day1Retained++;
+      }
+    }
+
+    if (ageSinceCreation > sevenDaysMs) {
+      day7Total++;
+      if (latestEngagementMs !== null && latestEngagementMs >= createdAtMs + sevenDaysMs) {
+        day7Retained++;
+      }
+    }
+
+    if (ageSinceCreation > thirtyDaysMs) {
+      day30Total++;
+      if (latestEngagementMs !== null && latestEngagementMs >= createdAtMs + thirtyDaysMs) {
+        day30Retained++;
+      }
+    }
+  }
+
+  return {
+    day1: day1Total > 0 ? Math.round((day1Retained / day1Total) * 100) : 0,
+    day7: day7Total > 0 ? Math.round((day7Retained / day7Total) * 100) : 0,
+    day30: day30Total > 0 ? Math.round((day30Retained / day30Total) * 100) : 0,
+  };
 }
 
 async function getDistinctEventActorsForCohort(
@@ -204,23 +310,23 @@ async function getEventsSummaryFallback(
   hourlyActivityHeatmap: Array<{ hour: number; count: number }>;
   topAgentsByActivity: Array<{ agent_id: string; event_count: number }>;
 }> {
-  // Paginate to fetch ALL events (avoids PostgREST 1000-row default limit)
-  const PAGE_SIZE = 1000;
+  // Paginate event rows with a hard cap so analytics cannot stall indefinitely.
   const allEvents: Array<{ id: string; agent_id: string; created_at: string }> = [];
   let offset = 0;
 
-  while (true) {
+  while (allEvents.length < MAX_FALLBACK_EVENTS) {
     const { data } = await supabase
       .from('events')
       .select('id, agent_id, created_at')
       .gte('created_at', thirtyDaysAgo.toISOString())
       .order('created_at', { ascending: true })
-      .range(offset, offset + PAGE_SIZE - 1);
+      .range(offset, offset + FALLBACK_EVENTS_PAGE_SIZE - 1);
 
     if (!data || data.length === 0) break;
-    allEvents.push(...data);
-    if (data.length < PAGE_SIZE) break;
-    offset += PAGE_SIZE;
+    const remaining = MAX_FALLBACK_EVENTS - allEvents.length;
+    allEvents.push(...data.slice(0, remaining));
+    if (data.length < FALLBACK_EVENTS_PAGE_SIZE) break;
+    offset += FALLBACK_EVENTS_PAGE_SIZE;
   }
 
   // Calculate events per day
@@ -496,127 +602,99 @@ export async function GET(request: NextRequest) {
       count: postsMap[date] || 0,
     }));
 
+    let onboardingFunnel = buildEmptyOnboardingFunnel();
+
     // ========================================
     // ONBOARDING FUNNEL (Outcome-Based Contract)
     // Cohort: player agents created in the last 30 days.
     // ========================================
-    const cohortIds = agents.map((agent) => agent.id);
-    const eventActors = await getDistinctEventActorsForCohort(
-      supabase,
-      cohortIds,
-      thirtyDaysAgo.toISOString(),
-      ['speak', 'buy', 'trade', 'craft'],
-    );
+    try {
+      const onboardingCohortAgents =
+        agents.length > MAX_ONBOARDING_COHORT_SIZE
+          ? agents.slice(0, MAX_ONBOARDING_COHORT_SIZE)
+          : agents;
+      const cohortIds = onboardingCohortAgents.map((agent) => agent.id);
+      const eventActors = await getDistinctEventActorsForCohort(
+        supabase,
+        cohortIds,
+        thirtyDaysAgo.toISOString(),
+        ['speak', 'buy', 'trade', 'craft'],
+      );
 
-    const economyEventActors = new Set<string>([
-      ...(eventActors.buy || []),
-      ...(eventActors.trade || []),
-      ...(eventActors.craft || []),
-    ]);
+      const economyEventActors = new Set<string>([
+        ...(eventActors.buy || []),
+        ...(eventActors.trade || []),
+        ...(eventActors.craft || []),
+      ]);
 
-    let activeTournamentId: string | null = null;
-    let activeTournamentName: string | null = null;
-    const competitionActors = new Set<string>();
+      let activeTournamentId: string | null = null;
+      let activeTournamentName: string | null = null;
+      const competitionActors = new Set<string>();
 
-    const { data: activeTournament, error: activeTournamentError } = await supabase
-      .from('tournaments')
-      .select('id, name')
-      .eq('status', 'active')
-      .order('starts_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      const { data: activeTournament, error: activeTournamentError } = await supabase
+        .from('tournaments')
+        .select('id, name')
+        .eq('status', 'active')
+        .order('starts_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    if (activeTournamentError) {
-      console.error('Error fetching active tournament for onboarding funnel:', activeTournamentError);
-    } else if (activeTournament?.id) {
-      activeTournamentId = activeTournament.id;
-      activeTournamentName = activeTournament.name || null;
+      if (activeTournamentError) {
+        console.error('Error fetching active tournament for onboarding funnel:', activeTournamentError);
+      } else if (activeTournament?.id) {
+        activeTournamentId = activeTournament.id;
+        activeTournamentName = activeTournament.name || null;
 
-      const { data: scoredRows, error: scoredRowsError } = await supabase
-        .from('tournament_leaderboard')
-        .select('agent_id, current_score')
-        .eq('tournament_id', activeTournament.id)
-        .gt('current_score', 0)
-        .limit(10000);
+        const { data: scoredRows, error: scoredRowsError } = await supabase
+          .from('tournament_leaderboard')
+          .select('agent_id, current_score')
+          .eq('tournament_id', activeTournament.id)
+          .gt('current_score', 0)
+          .limit(10000);
 
-      if (scoredRowsError) {
-        console.error('Error fetching tournament scores for onboarding funnel:', scoredRowsError);
-      } else {
-        (scoredRows || []).forEach((row) => {
-          if (row.agent_id) competitionActors.add(row.agent_id);
-        });
+        if (scoredRowsError) {
+          console.error('Error fetching tournament scores for onboarding funnel:', scoredRowsError);
+        } else {
+          (scoredRows || []).forEach((row) => {
+            if (row.agent_id) competitionActors.add(row.agent_id);
+          });
+        }
       }
+
+      const onboardingSignals = onboardingCohortAgents.map((agent) => ({
+        id: agent.id,
+        hasMoved: Boolean(agent.last_move_at),
+        hasGathered: Boolean(agent.last_gather_at),
+        hasCommunicated: eventActors.speak?.has(agent.id) || false,
+        hasEconomyAction:
+          Boolean(agent.last_trade_at) ||
+          Boolean(agent.last_craft_at) ||
+          economyEventActors.has(agent.id),
+        hasCompetitionScore: competitionActors.has(agent.id),
+      }));
+
+      const onboardingCohortLabel =
+        agents.length > MAX_ONBOARDING_COHORT_SIZE
+          ? `Most recent ${MAX_ONBOARDING_COHORT_SIZE.toLocaleString()} agents created in last 30 days`
+          : 'Agents created in last 30 days';
+
+      onboardingFunnel = {
+        ...buildOnboardingFunnel(onboardingSignals, onboardingCohortLabel),
+        active_tournament_id: activeTournamentId,
+        active_tournament_name: activeTournamentName,
+      };
+    } catch (onboardingError) {
+      console.error('Error building onboarding funnel analytics:', onboardingError);
     }
 
-    const onboardingSignals = agents.map((agent) => ({
-      id: agent.id,
-      hasMoved: Boolean(agent.last_move_at),
-      hasGathered: Boolean(agent.last_gather_at),
-      hasCommunicated: eventActors.speak?.has(agent.id) || false,
-      hasEconomyAction:
-        Boolean(agent.last_trade_at) ||
-        Boolean(agent.last_craft_at) ||
-        economyEventActors.has(agent.id),
-      hasCompetitionScore: competitionActors.has(agent.id),
-    }));
-
-    const onboardingFunnel: OnboardingFunnelData = {
-      ...buildOnboardingFunnel(onboardingSignals),
-      active_tournament_id: activeTournamentId,
-      active_tournament_name: activeTournamentName,
-    };
-
-    // Calculate retention rates
-    const { data: allAgentsForRetention } = await supabase
-      .from('agents')
-      .select('id, created_at, last_active')
-      .limit(10000);
-
-    const now = Date.now();
-    const oneDayMs = 24 * 60 * 60 * 1000;
-    const sevenDaysMs = 7 * oneDayMs;
-    const thirtyDaysMs = 30 * oneDayMs;
-
-    let day1Total = 0, day1Retained = 0;
-    let day7Total = 0, day7Retained = 0;
-    let day30Total = 0, day30Retained = 0;
-
-    (allAgentsForRetention || []).forEach(agent => {
-      const createdAt = new Date(agent.created_at).getTime();
-      const lastActive = new Date(agent.last_active).getTime();
-      const ageSinceCreation = now - createdAt;
-      const activeWithinPeriod = lastActive - createdAt;
-
-      // Day 1 retention
-      if (ageSinceCreation > oneDayMs) {
-        day1Total++;
-        if (activeWithinPeriod >= oneDayMs || lastActive > createdAt + oneDayMs / 2) {
-          day1Retained++;
-        }
-      }
-
-      // Day 7 retention
-      if (ageSinceCreation > sevenDaysMs) {
-        day7Total++;
-        if (activeWithinPeriod >= sevenDaysMs || lastActive > createdAt + sevenDaysMs) {
-          day7Retained++;
-        }
-      }
-
-      // Day 30 retention
-      if (ageSinceCreation > thirtyDaysMs) {
-        day30Total++;
-        if (activeWithinPeriod >= thirtyDaysMs || lastActive > createdAt + thirtyDaysMs) {
-          day30Retained++;
-        }
-      }
-    });
-
-    const retentionRate = {
-      day1: day1Total > 0 ? Math.round((day1Retained / day1Total) * 100) : 0,
-      day7: day7Total > 0 ? Math.round((day7Retained / day7Total) * 100) : 0,
-      day30: day30Total > 0 ? Math.round((day30Retained / day30Total) * 100) : 0,
-    };
+    let retentionRate = { day1: 0, day7: 0, day30: 0 };
+    try {
+      // Calculate action-based rolling retention rates to avoid passive "online" spikes.
+      const retentionAgents = await fetchRetentionAgents(supabase);
+      retentionRate = calculateActionBasedRollingRetention(retentionAgents, Date.now());
+    } catch (retentionError) {
+      console.error('Error calculating retention metrics:', retentionError);
+    }
 
     const analyticsData: AnalyticsData = {
       newAgentsPerDay,
