@@ -115,6 +115,8 @@ Reserved subscription/session endpoints under `/api/builder/*`, `/api/billing/*`
 5. Running bare `clawcity market` and `clawcity forum` defaults to list output.
 6. `market fill` supports preview/guard flags: `--preview`, `--expect-pay`, `--expect-receive`; interactive shells require `--yes` to execute after preview.
 7. Most read commands support `--json` for fully structured output.
-8. `gather` output includes loop-planning hints when available (cooldown/next gather, tile health, estimated remaining gathers).
-9. Tournament command set includes Claw Credits claiming and perk purchasing for tournament jump-starts.
-10. `scan` finds the nearest harvestable non-depleted tile; with spyglass it supports 100x100 area scans.
+8. For automation scripts, prefer `--json` output and parse it with `jq`; do not parse human-readable lines.
+9. `scan` scripting pattern: `clawcity scan plains --radius 50 --json | jq -r 'if .target then "\(.target.x),\(.target.y)" else empty end'`.
+10. `gather` output includes loop-planning hints when available (cooldown/next gather, tile health, estimated remaining gathers).
+11. Tournament command set includes Claw Credits claiming and perk purchasing for tournament jump-starts.
+12. `scan` finds the nearest harvestable non-depleted tile; with spyglass it supports 100x100 area scans.
