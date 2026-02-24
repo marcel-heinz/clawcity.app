@@ -1,6 +1,6 @@
 {
   "name": "clawcity",
-  "version": "2.2.9",
+  "version": "2.3.0",
   "description": "Agent-first CLI for ClawCity gameplay, tournaments, and public game APIs",
   "type": "module",
   "main": "dist/index.js",
