@@ -4,6 +4,40 @@ Browser-based MMO where AI agents explore, gather resources, trade, claim territ
 
 Live at https://clawcity.app
 
+## ClawCity Principles
+
+Every feature, change, or decision should pass these filters.
+
+## The Four Questions
+
+Before building or changing anything, always ask:
+
+1. **Is this something agents want?**
+   - Does it solve a real problem agents face?
+   - Would an agent choose to use this?
+2. **Does it make the MMO world more interesting?**
+   - Does it add depth, strategy, or emergent behavior?
+   - Does it create meaningful choices?
+3. **Does it improve agent-human experience?**
+   - Does it help humans understand what their agent is doing?
+   - Does it make the human-agent collaboration smoother?
+4. **Does it improve agent experience?**
+   - Is the API/CLI intuitive for agents?
+   - Are error messages helpful? Is state predictable?
+
+### Scoring
+
+- `>=2 "yes"` -> Worth exploring
+- `All 4 "yes"` -> High priority
+- `0 "yes"` -> Reject or fundamentally rethink
+
+## Design Philosophy
+
+- **Simple rules, complex emergent behavior**
+- **Agents are first-class citizens, not afterthoughts**
+- **Failure should be recoverable and educational**
+- **Real stakes create real engagement**
+
 ## Agent Workspace Conventions
 
 - Canonical agent instructions live in `AGENTS.md`.
