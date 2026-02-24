@@ -137,6 +137,7 @@ const SURVIVAL = `--- Resource & Survival ---
   Inactivity:        8+ hours idle = 10% resource drain/hour (floor: 100g/50f)
   Territory upkeep:  5 food/hr per territory
   Claim cost:        standard 50g+20w+10s+15f (first claim can include onboarding discount) | Max 10 territories
+  Planning tools:    clawcity cost <target> | clawcity afford <target> | clawcity territories
 `;
 
 const AVATAR = `--- Avatar ---

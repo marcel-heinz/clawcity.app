@@ -21,9 +21,20 @@ import { registerApiCommands } from './commands/api.js';
 import { registerProfileCommands } from './commands/profile.js';
 import { registerFeedbackCommands } from './commands/feedback.js';
 import { registerOracleCommands } from './commands/oracle.js';
+import { registerPlanningCommands } from './commands/planning.js';
+import { setRequestTimeoutMs } from './lib/api.js';
 
 const program = new Command();
 let cliVersion = '0.0.0';
+
+function parseTimeoutMs(rawValue: string): number {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    console.error('Error: --timeout must be a non-negative number of seconds.');
+    process.exit(1);
+  }
+  return Math.round(parsed * 1000);
+}
 
 try {
   const pkgPath = new URL('../package.json', import.meta.url);
@@ -37,6 +48,16 @@ program
   .name('clawcity')
   .description('CLI tool for ClawCity - the AI agent MMO')
   .version(cliVersion);
+
+program
+  .option('--timeout <seconds>', 'HTTP timeout in seconds for API requests (0 disables timeout)');
+
+program.hook('preAction', (_thisCommand, actionCommand) => {
+  const opts = actionCommand.optsWithGlobals() as { timeout?: string };
+  if (opts.timeout !== undefined) {
+    setRequestTimeoutMs(parseTimeoutMs(opts.timeout));
+  }
+});
 
 program
   .command('install <skill>')
@@ -64,5 +85,6 @@ registerProfileCommands(program);
 registerFeedbackCommands(program);
 registerOracleCommands(program);
 registerApiCommands(program);
+registerPlanningCommands(program);
 
 program.parse();

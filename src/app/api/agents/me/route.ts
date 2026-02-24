@@ -77,20 +77,44 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Fetch agent's buildings (always needed for wealth calc unless only specific fields requested)
-  let agentBuildings: { x: number; y: number; building_type: string; building_built_at: string }[] = [];
+  // Fetch owned tiles (buildings + territories) in one query.
+  let ownedTiles: {
+    x: number;
+    y: number;
+    terrain: string;
+    upgrade_level: number | null;
+    building_type: string | null;
+    building_built_at: string | null;
+  }[] = [];
   let storageCount = 0;
   try {
-    const { data: buildings } = await supabase
+    const { data: tiles } = await supabase
       .from('tiles')
-      .select('x, y, building_type, building_built_at')
-      .eq('owner_id', agent.id)
-      .not('building_type', 'is', null);
-    agentBuildings = (buildings || []) as typeof agentBuildings;
-    storageCount = agentBuildings.filter(b => b.building_type === 'storage').length;
+      .select('x, y, terrain, upgrade_level, building_type, building_built_at')
+      .eq('owner_id', agent.id);
+    ownedTiles = (tiles || []) as typeof ownedTiles;
+    storageCount = ownedTiles.filter((tile) => tile.building_type === 'storage').length;
   } catch {
     // building columns may not exist yet
   }
+
+  const agentBuildings = ownedTiles
+    .filter((tile) => Boolean(tile.building_type))
+    .map((tile) => ({
+      x: tile.x,
+      y: tile.y,
+      building_type: tile.building_type as string,
+      building_built_at: tile.building_built_at || '',
+    }));
+
+  const territories = ownedTiles.map((tile) => ({
+    x: tile.x,
+    y: tile.y,
+    terrain: tile.terrain,
+    upgrade_level: tile.upgrade_level || 1,
+    building_type: tile.building_type,
+    building_built_at: tile.building_built_at,
+  }));
 
   const storageBonusCap = await getActiveStorageBonus(supabase, agent.id);
   const resourceCap = calculateResourceCap(storageCount) + storageBonusCap;
@@ -99,16 +123,19 @@ export async function GET(request: NextRequest) {
   const workshopCount = agentBuildings.filter(b => b.building_type === 'workshop').length;
   const fortificationCount = agentBuildings.filter(b => b.building_type === 'fortification').length;
 
-  // Count total owned territories (including tiles without buildings)
   let territoryCount = 0;
-  try {
-    const { count } = await supabase
-      .from('tiles')
-      .select('*', { count: 'exact', head: true })
-      .eq('owner_id', agent.id);
-    territoryCount = count || 0;
-  } catch {
-    // tiles table may not have owner_id yet
+  if (ownedTiles.length > 0) {
+    territoryCount = ownedTiles.length;
+  } else {
+    try {
+      const { count } = await supabase
+        .from('tiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('owner_id', agent.id);
+      territoryCount = count || 0;
+    } catch {
+      // tiles table may not have owner_id yet
+    }
   }
 
   const wealthBreakdown = calculateWealthBreakdown({
@@ -234,6 +261,9 @@ export async function GET(request: NextRequest) {
       position: { x: b.x, y: b.y },
       built_at: b.building_built_at,
     }));
+  }
+  if (includeField('territories')) {
+    data.territories = territories;
   }
   if (includeField('nearby')) {
     data.nearby_agents = nearbyAgents || [];

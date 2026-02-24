@@ -18,7 +18,9 @@ const FIRST_CLAIM_DISCOUNT_PERCENT = 30;
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
-    return errorResponse('Database not configured. Please set up Supabase.', 503);
+    return errorResponse('Database not configured. Please set up Supabase.', 503, {
+      code: 'database_not_configured',
+    });
   }
 
   // Apply rate limiting (per-IP)
@@ -27,14 +29,20 @@ export async function POST(request: NextRequest) {
     const retryAfter = Math.ceil((rateLimit.retryAfterMs || 1000) / 1000);
     return errorResponse(
       `Rate limit exceeded. Try again in ${retryAfter}s.`,
-      429
+      429,
+      {
+        code: 'rate_limited',
+        retry_after_seconds: retryAfter,
+      }
     );
   }
 
   const auth = await authenticateAgent(request);
   
   if (!auth.success || !auth.agent) {
-    return errorResponse(auth.error || 'Unauthorized', 401);
+    return errorResponse(auth.error || 'Unauthorized', 401, {
+      code: 'unauthorized',
+    });
   }
 
   try {
@@ -67,7 +75,9 @@ export async function POST(request: NextRequest) {
 
     if (claimError) {
       console.error('Atomic claim RPC error:', claimError);
-      return errorResponse('Failed to claim tile', 500);
+      return errorResponse('Failed to claim tile', 500, {
+        code: 'claim_rpc_failed',
+      });
     }
 
     const result = (rawResult || {}) as Record<string, unknown>;
@@ -77,13 +87,19 @@ export async function POST(request: NextRequest) {
 
     if (result.ok !== true) {
       if (code === 'market_tile') {
-        return errorResponse('Markets cannot be claimed - they belong to everyone.', 400);
+        return errorResponse('Markets cannot be claimed - they belong to everyone.', 400, {
+          code,
+        });
       }
       if (code === 'water_tile') {
-        return errorResponse('Water tiles cannot be claimed.', 400);
+        return errorResponse('Water tiles cannot be claimed.', 400, {
+          code,
+        });
       }
       if (code === 'already_owned') {
-        return errorResponse('You already own this tile!', 400);
+        return errorResponse('You already own this tile!', 400, {
+          code,
+        });
       }
       if (code === 'tile_claimed') {
         const ownerId = typeof result.owner_id === 'string' ? result.owner_id : null;
@@ -98,13 +114,26 @@ export async function POST(request: NextRequest) {
         }
         return errorResponse(
           `This tile is already claimed by ${ownerName}. Trade with them to acquire it.`,
-          400
+          400,
+          {
+            code,
+            details: {
+              owner_id: ownerId,
+              owner_name: ownerName,
+            },
+          }
         );
       }
       if (code === 'territory_limit') {
         return errorResponse(
           `You have reached the maximum of ${MAX_TERRITORIES_PER_AGENT} territories. Trade or release tiles to claim more.`,
-          400
+          400,
+          {
+            code,
+            details: {
+              max_territories: MAX_TERRITORIES_PER_AGENT,
+            },
+          }
         );
       }
       if (code === 'insufficient_resources') {
@@ -134,17 +163,64 @@ export async function POST(request: NextRequest) {
             ? ` (with First Claim Boon -${discountPercentApplied}% discount)`
             : '';
         const recoveryOptions = 'Recovery options: rotate forest/mountain gathers, convert via market on market tiles, or direct-trade with another agent.';
+        const requirements = {
+          gold: {
+            need: effectiveGoldCost,
+            have: agent.gold,
+            missing: Math.max(0, effectiveGoldCost - agent.gold),
+          },
+          wood: {
+            need: effectiveWoodCost,
+            have: agent.wood,
+            missing: Math.max(0, effectiveWoodCost - agent.wood),
+          },
+          stone: {
+            need: effectiveStoneCost,
+            have: agent.stone,
+            missing: Math.max(0, effectiveStoneCost - agent.stone),
+          },
+          food: {
+            need: totalFoodCost,
+            have: agent.food,
+            missing: Math.max(0, totalFoodCost - agent.food),
+          },
+        };
         return errorResponse(
           `Not enough resources to claim territory. Missing: ${missingResources.join(', ')}. ` +
           `Full cost: ${effectiveGoldCost} gold, ${effectiveWoodCost} wood, ${effectiveStoneCost} stone, ${totalFoodCost} food${discountNote}. ` +
           recoveryOptions,
-          400
+          400,
+          {
+            code,
+            details: {
+              missing_resources: missingResources,
+              requirements,
+              cost: {
+                gold: effectiveGoldCost,
+                wood: effectiveWoodCost,
+                stone: effectiveStoneCost,
+                food: totalFoodCost,
+                food_claim_cost: toNumber(cost.food_claim_cost, CLAIM_COST_FOOD),
+                stamina_cost: STAMINA_COST_CLAIM,
+              },
+              discounts: {
+                territory_deed_used: territoryDeedUsed,
+                first_claim_discount_used: firstClaimDiscountUsed,
+                discount_percent_applied: discountPercentApplied,
+              },
+            },
+            hint: recoveryOptions,
+          }
         );
       }
       if (code === 'tile_not_found') {
-        return errorResponse('Could not find your current tile', 500);
+        return errorResponse('Could not find your current tile', 500, {
+          code,
+        });
       }
-      return errorResponse('Failed to claim tile', 500);
+      return errorResponse('Failed to claim tile', 500, {
+        code: code === 'unknown' ? 'claim_failed' : code,
+      });
     }
 
     const terrain = typeof result.terrain === 'string' ? result.terrain : 'unknown';
@@ -220,6 +296,8 @@ export async function POST(request: NextRequest) {
     return jsonResponse({ success: true, data: responseData });
   } catch (error) {
     console.error('Claim error:', error);
-    return errorResponse('Internal server error', 500);
+    return errorResponse('Internal server error', 500, {
+      code: 'internal_error',
+    });
   }
 }

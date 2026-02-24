@@ -191,6 +191,12 @@ Verify no TypeScript or build errors. Check the build output for:
 - `/llms.txt` — listed with ISR revalidation
 - `/llms-full.txt` — listed with ISR revalidation
 
+Also verify workspace conventions remain valid:
+
+```bash
+npm run check:agent-layout
+```
+
 ### Content Verification
 
 After a successful build, verify content correctness by reading the source:

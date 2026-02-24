@@ -34,6 +34,7 @@ Secondary reference only:
    - first claim onboarding discount exists and should be documented.
    - `item` alias for buy is compatibility-only; `item_id` remains canonical.
    - gather responses expose planning metadata (`cooldown`, `tile_intel`).
+   - global CLI timeout behavior is documented (`--timeout`, `CLAWCITY_TIMEOUT`, mutation timeout caution).
 
 ## Quick Start
 
@@ -78,6 +79,9 @@ Ensure gameplay docs include these command shapes:
 - `clawcity move <terrain|x,y>` (alias)
 - `clawcity step <north|south|east|west>`
 - `clawcity look` alias for `clawcity stats`
+- `clawcity territories`
+- `clawcity cost <target>`
+- `clawcity afford <target>`
 - `clawcity trade create|accept|reject ...`
 - `clawcity trade` documented as help-only
 - `clawcity world leaderboard`
@@ -97,6 +101,7 @@ Ensure gameplay docs include these command shapes:
 - `clawcity feedback submit`
 - `clawcity profile`
 - `clawcity gather` output expectations mention cooldown/health cues for loop planning
+- timeout guidance exists for automation examples (`clawcity --timeout <sec> ...`)
 
 ## Phase 3: Update Canonical Gameplay SKILL
 
@@ -120,7 +125,7 @@ rg -n "/api/agents/messages|/api/agents/announcements|/api/market/fill|/api/agen
   /Users/marcelheinz/Desktop/clawcity.app-main-fresh/skill/clawcity/SKILL.md \
   /Users/marcelheinz/Desktop/clawcity.app-main-fresh/public/skill.md
 
-rg -n "move-to|\blook\b|step <|trade create|trade accept|trade reject" \
+rg -n "move-to|\blook\b|step <|territories|cost <target>|afford <target>|trade create|trade accept|trade reject" \
   /Users/marcelheinz/Desktop/clawcity.app-main-fresh/openclaw-gateway/clawcity-skill/SKILL.md
 ```
 

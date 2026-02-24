@@ -14,18 +14,25 @@ import {
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
-    return errorResponse('Database not configured. Please set up Supabase.', 503);
+    return errorResponse('Database not configured. Please set up Supabase.', 503, {
+      code: 'database_not_configured',
+    });
   }
 
   const rateLimit = await checkRateLimit(request, GAME_ACTION_RATE_LIMIT);
   if (!rateLimit.success) {
     const retryAfter = Math.ceil((rateLimit.retryAfterMs || 1000) / 1000);
-    return errorResponse(`Rate limit exceeded. Try again in ${retryAfter}s.`, 429);
+    return errorResponse(`Rate limit exceeded. Try again in ${retryAfter}s.`, 429, {
+      code: 'rate_limited',
+      retry_after_seconds: retryAfter,
+    });
   }
 
   const auth = await authenticateAgent(request);
   if (!auth.success || !auth.agent) {
-    return errorResponse(auth.error || 'Unauthorized', 401);
+    return errorResponse(auth.error || 'Unauthorized', 401, {
+      code: 'unauthorized',
+    });
   }
 
   try {
@@ -38,7 +45,13 @@ export async function POST(request: NextRequest) {
     if (!buildingType || !ALL_BUILDING_TYPES.includes(buildingType as BuildingType)) {
       return errorResponse(
         `Invalid building_type. Options: ${ALL_BUILDING_TYPES.join(', ')}`,
-        400
+        400,
+        {
+          code: 'invalid_building_type',
+          details: {
+            options: ALL_BUILDING_TYPES,
+          },
+        }
       );
     }
 
@@ -52,7 +65,11 @@ export async function POST(request: NextRequest) {
         const waitSeconds = Math.ceil((BUILD_COOLDOWN_MS - elapsed) / 1000);
         return errorResponse(
           `Build cooldown active. Wait ${waitSeconds}s before building again.`,
-          429
+          429,
+          {
+            code: 'build_cooldown',
+            retry_after_seconds: waitSeconds,
+          }
         );
       }
     }
@@ -66,14 +83,19 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!tile) {
-      return errorResponse('Could not find your current tile.', 500);
+      return errorResponse('Could not find your current tile.', 500, {
+        code: 'tile_not_found',
+      });
     }
 
     // Must own the tile
     if (tile.owner_id !== agent.id) {
       return errorResponse(
         'You must own this tile (territory) to build here. Claim it first with /api/actions/claim.',
-        400
+        400,
+        {
+          code: 'not_owned',
+        }
       );
     }
 
@@ -81,17 +103,56 @@ export async function POST(request: NextRequest) {
     if (tile.building_type) {
       return errorResponse(
         `This tile already has a ${tile.building_type}. Demolish it first to build something else.`,
-        400
+        400,
+        {
+          code: 'building_exists',
+          details: {
+            building_type: tile.building_type,
+          },
+        }
       );
     }
 
     // Check resources
     const { hasEnough, missing } = hasResourcesForBuilding(agent, buildingType as BuildingType);
     if (!hasEnough) {
+      const cost = buildingDef.build_cost;
+      const requirements = {
+        gold: {
+          need: cost.gold || 0,
+          have: agent.gold,
+          missing: Math.max(0, (cost.gold || 0) - agent.gold),
+        },
+        wood: {
+          need: cost.wood || 0,
+          have: agent.wood,
+          missing: Math.max(0, (cost.wood || 0) - agent.wood),
+        },
+        food: {
+          need: cost.food || 0,
+          have: agent.food,
+          missing: Math.max(0, (cost.food || 0) - agent.food),
+        },
+        stone: {
+          need: cost.stone || 0,
+          have: agent.stone,
+          missing: Math.max(0, (cost.stone || 0) - agent.stone),
+        },
+      };
       return errorResponse(
         `Not enough resources to build ${buildingDef.name}. Missing: ${missing.join(', ')}. ` +
         `Cost: ${formatBuildingCost(buildingDef.build_cost)}.`,
-        400
+        400,
+        {
+          code: 'insufficient_resources',
+          details: {
+            building_type: buildingType,
+            building_name: buildingDef.name,
+            missing_resources: missing,
+            cost: buildingDef.build_cost,
+            requirements,
+          },
+        }
       );
     }
 
@@ -114,7 +175,9 @@ export async function POST(request: NextRequest) {
 
     if (resourceError) {
       console.error('Error deducting resources for build:', resourceError);
-      return errorResponse('Failed to process building payment.', 500);
+      return errorResponse('Failed to process building payment.', 500, {
+        code: 'build_payment_failed',
+      });
     }
 
     // Place building on tile
@@ -135,7 +198,9 @@ export async function POST(request: NextRequest) {
         gold: agent.gold, wood: agent.wood, food: agent.food, stone: agent.stone,
       }).eq('id', agent.id);
       console.error('Error placing building:', tileError);
-      return errorResponse('Failed to place building.', 500);
+      return errorResponse('Failed to place building.', 500, {
+        code: 'build_place_failed',
+      });
     }
 
     // Log build event
@@ -171,6 +236,8 @@ export async function POST(request: NextRequest) {
     return jsonResponse({ success: true, data: responseData });
   } catch (error) {
     console.error('Build error:', error);
-    return errorResponse('Internal server error', 500);
+    return errorResponse('Internal server error', 500, {
+      code: 'internal_error',
+    });
   }
 }

@@ -190,6 +190,12 @@ cd clawcity-cli
 # Bump version to match or follow the main release
 npm version patch  # or minor/major as appropriate
 npm run build
+npm test
+# Quick smoke for planning + timeout helpers
+node dist/index.js --timeout 15 gather --help
+node dist/index.js cost workshop
+node dist/index.js afford workshop --json
+node dist/index.js territories --json
 npm publish
 ```
 

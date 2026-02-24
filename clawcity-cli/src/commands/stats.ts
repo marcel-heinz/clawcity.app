@@ -43,7 +43,7 @@ export function registerStatsCommands(program: Command) {
   program
     .command('status')
     .description('Full agent status with all details')
-    .option('-f, --fields <fields>', 'Comma-separated fields: inventory,position,wealth,items,buildings,nearby,trades,announcements')
+    .option('-f, --fields <fields>', 'Comma-separated fields: inventory,position,wealth,items,buildings,territories,nearby,trades,announcements,avatar')
     .action(async (opts: { fields?: string }) => {
       const path = opts.fields
         ? `/api/agents/me?fields=${opts.fields}`

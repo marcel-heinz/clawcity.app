@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { api, handleError } from '../lib/api.js';
 
-async function runMoveTo(target: string, maxSteps: string) {
+async function runMoveTo(target: string, maxSteps: string, asJson?: boolean) {
   const body: Record<string, unknown> = { max_steps: parseInt(maxSteps, 10) };
 
   // Coordinates support: "350,265" or "350 265"
@@ -17,6 +17,10 @@ async function runMoveTo(target: string, maxSteps: string) {
   if (!res.ok) handleError(res);
 
   const d = res.data as Record<string, unknown>;
+  if (asJson) {
+    console.log(JSON.stringify(d, null, 2));
+    return;
+  }
   if (d.error || d.success === false) {
     console.error(`Error: ${d.error || 'Move failed'}`);
     process.exit(1);
@@ -34,8 +38,9 @@ export function registerMoveCommands(program: Command) {
     .command('move <target>')
     .description('Pathfind to terrain type (forest, mountain, ...) or coordinates (x,y)')
     .option('-s, --max-steps <n>', 'Max steps (default 60, max 300)', '60')
-    .action(async (target: string, opts: { maxSteps: string }) => {
-      await runMoveTo(target, opts.maxSteps);
+    .option('--json', 'Print raw JSON response')
+    .action(async (target: string, opts: { maxSteps: string; json?: boolean }) => {
+      await runMoveTo(target, opts.maxSteps, opts.json);
     });
 
   // Compatibility alias for auto-mode command drift.
@@ -43,14 +48,16 @@ export function registerMoveCommands(program: Command) {
     .command('move-to <target>')
     .description('Alias for "move" (pathfind to terrain or coordinates)')
     .option('-s, --max-steps <n>', 'Max steps (default 60, max 300)', '60')
-    .action(async (target: string, opts: { maxSteps: string }) => {
-      await runMoveTo(target, opts.maxSteps);
+    .option('--json', 'Print raw JSON response')
+    .action(async (target: string, opts: { maxSteps: string; json?: boolean }) => {
+      await runMoveTo(target, opts.maxSteps, opts.json);
     });
 
   program
     .command('step <direction>')
     .description('Move one tile: north | south | east | west')
-    .action(async (direction: string) => {
+    .option('--json', 'Print raw JSON response')
+    .action(async (direction: string, opts: { json?: boolean }) => {
       const normalized = direction.toLowerCase();
       if (!['north', 'south', 'east', 'west'].includes(normalized)) {
         console.error('Error: direction must be one of north|south|east|west');
@@ -64,6 +71,10 @@ export function registerMoveCommands(program: Command) {
       if (!res.ok) handleError(res);
 
       const d = res.data as Record<string, unknown>;
+      if (opts.json) {
+        console.log(JSON.stringify(d, null, 2));
+        return;
+      }
       const pos = d.position as Record<string, unknown> | undefined;
       const terrain = d.terrain ?? 'unknown';
       const x = pos?.x ?? '?';

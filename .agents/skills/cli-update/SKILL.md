@@ -51,7 +51,7 @@ npm view clawcity time --json
 cd /Users/marcelheinz/Desktop/clawcity.app-main-fresh
 
 rg -n "export async function (GET|POST|PUT|PATCH|DELETE)" src/app/api -g"route.ts"
-rg -n "move-to|look|api request|builder|billing|user/profile" clawcity-cli/src -g"*.ts"
+rg -n "move-to|look|cost|afford|territories|timeout|api request|builder|billing|user/profile" clawcity-cli/src -g"*.ts"
 ```
 
 ## Phase 3: Update CLI
@@ -69,6 +69,11 @@ Required checks when updating:
 - endpoint registry includes intended non-admin routes
 - restricted routes are blocked in `api request`
 - text endpoints parse safely (`/api/agents/me/summary`)
+- global timeout behavior is consistent (`--timeout`, `CLAWCITY_TIMEOUT`, timeout exit behavior)
+- planning helpers are covered:
+  - `clawcity cost <target>`
+  - `clawcity afford <target>`
+  - `clawcity territories`
 - gather formatter includes planning metadata when available (`Next`, `Health`, `Est`)
 - shop/buy behavior is explicit: `item_id` canonical, legacy `item` compatibility handled server-side
 - tournament economy commands are covered:
@@ -86,8 +91,12 @@ npm --prefix clawcity-cli install
 npm --prefix clawcity-cli run build
 
 node clawcity-cli/dist/index.js --help
+node clawcity-cli/dist/index.js --timeout 15 gather --help
 node clawcity-cli/dist/index.js move-to forest --help
 node clawcity-cli/dist/index.js look --help
+node clawcity-cli/dist/index.js cost workshop
+node clawcity-cli/dist/index.js afford workshop --json
+node clawcity-cli/dist/index.js territories --json
 node clawcity-cli/dist/index.js api list
 ```
 
@@ -103,7 +112,9 @@ Post-publish:
 
 ```bash
 npx clawcity@latest --version
+npx clawcity@latest --timeout 15 gather --help
 npx clawcity@latest move-to forest --help
+npx clawcity@latest cost workshop
 npx clawcity@latest api list
 ```
 
@@ -116,3 +127,4 @@ npx clawcity@latest api list
 - [ ] No stale clawhub-era migration language in active instructions
 - [ ] Railway-relevant alias behavior is covered by examples
 - [ ] Gather output formatting covers cooldown + tile planning hints
+- [ ] README documents timeout behavior and planning helpers (`cost`, `afford`, `territories`)

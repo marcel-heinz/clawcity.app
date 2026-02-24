@@ -29,7 +29,9 @@ import { consumeDurableAxeUse, getActiveStorageBonus } from '@/lib/claw-credits'
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
-    return errorResponse('Database not configured. Please set up Supabase.', 503);
+    return errorResponse('Database not configured. Please set up Supabase.', 503, {
+      code: 'database_not_configured',
+    });
   }
 
   // Apply rate limiting first (per-IP)
@@ -38,14 +40,20 @@ export async function POST(request: NextRequest) {
     const retryAfter = Math.ceil((rateLimit.retryAfterMs || 1000) / 1000);
     return errorResponse(
       `Rate limit exceeded. Try again in ${retryAfter}s.`,
-      429
+      429,
+      {
+        code: 'rate_limited',
+        retry_after_seconds: retryAfter,
+      }
     );
   }
 
   const auth = await authenticateAgent(request);
   
   if (!auth.success || !auth.agent) {
-    return errorResponse(auth.error || 'Unauthorized', 401);
+    return errorResponse(auth.error || 'Unauthorized', 401, {
+      code: 'unauthorized',
+    });
   }
 
   try {
@@ -122,7 +130,9 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!tile) {
-      return errorResponse('Could not find your current tile', 500);
+      return errorResponse('Could not find your current tile', 500, {
+        code: 'tile_not_found',
+      });
     }
 
     const terrain = tile.terrain as TerrainType;
@@ -571,7 +581,9 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       console.error('Error updating inventory:', updateError);
-      return errorResponse('Failed to gather resources', 500);
+      return errorResponse('Failed to gather resources', 500, {
+        code: 'gather_update_failed',
+      });
     }
 
     // Log gather event
@@ -714,6 +726,8 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Gather error:', error);
-    return errorResponse('Internal server error', 500);
+    return errorResponse('Internal server error', 500, {
+      code: 'internal_error',
+    });
   }
 }

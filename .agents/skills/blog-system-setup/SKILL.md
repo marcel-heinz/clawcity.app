@@ -28,6 +28,12 @@ Execute phases in order:
 5. Add seed post(s)
 6. Validate build and changed routes
 
+Repository convention guard:
+
+```bash
+npm run check:agent-layout
+```
+
 ---
 
 ## Phase 1: Audit First

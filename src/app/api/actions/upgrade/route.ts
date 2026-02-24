@@ -12,7 +12,9 @@ import { withAnnouncements } from '@/lib/announcements';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
-    return errorResponse('Database not configured. Please set up Supabase.', 503);
+    return errorResponse('Database not configured. Please set up Supabase.', 503, {
+      code: 'database_not_configured',
+    });
   }
 
   // Apply rate limiting (per-IP)
@@ -21,14 +23,20 @@ export async function POST(request: NextRequest) {
     const retryAfter = Math.ceil((rateLimit.retryAfterMs || 1000) / 1000);
     return errorResponse(
       `Rate limit exceeded. Try again in ${retryAfter}s.`,
-      429
+      429,
+      {
+        code: 'rate_limited',
+        retry_after_seconds: retryAfter,
+      }
     );
   }
 
   const auth = await authenticateAgent(request);
   
   if (!auth.success || !auth.agent) {
-    return errorResponse(auth.error || 'Unauthorized', 401);
+    return errorResponse(auth.error || 'Unauthorized', 401, {
+      code: 'unauthorized',
+    });
   }
 
   try {
@@ -46,7 +54,9 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (tileError || !tile) {
-      return errorResponse('Could not find your current tile', 500);
+      return errorResponse('Could not find your current tile', 500, {
+        code: 'tile_not_found',
+      });
     }
 
     const currentLevel = toNumber(tile.upgrade_level, 1);
@@ -60,7 +70,14 @@ export async function POST(request: NextRequest) {
       return errorResponse(
         `This territory is already at maximum upgrade level (${MAX_UPGRADE_LEVEL}). ` +
         `Current bonus: +${Math.round((UPGRADE_BONUSES[MAX_UPGRADE_LEVEL] - 1) * 100)}%`,
-        400
+        400,
+        {
+          code: 'max_level',
+          details: {
+            current_level: currentLevel,
+            max_level: MAX_UPGRADE_LEVEL,
+          },
+        }
       );
     }
 
@@ -77,7 +94,9 @@ export async function POST(request: NextRequest) {
 
     if (upgradeError) {
       console.error('Atomic upgrade RPC error:', upgradeError);
-      return errorResponse('Failed to upgrade tile', 500);
+      return errorResponse('Failed to upgrade tile', 500, {
+        code: 'upgrade_rpc_failed',
+      });
     }
 
     const result = (rawResult || {}) as Record<string, unknown>;
@@ -86,33 +105,73 @@ export async function POST(request: NextRequest) {
       if (code === 'not_owned') {
         return errorResponse(
           'You can only upgrade territories you own. Claim this tile first.',
-          400
+          400,
+          {
+            code,
+          }
         );
       }
       if (code === 'max_level') {
         return errorResponse(
           `This territory is already at maximum upgrade level (${MAX_UPGRADE_LEVEL}). ` +
           `Current bonus: +${Math.round((UPGRADE_BONUSES[MAX_UPGRADE_LEVEL] - 1) * 100)}%`,
-          400
+          400,
+          {
+            code,
+            details: {
+              current_level: currentLevel,
+              max_level: MAX_UPGRADE_LEVEL,
+            },
+          }
         );
       }
       if (code === 'insufficient_resources') {
         const missingResources = Array.isArray(result.missing_resources)
           ? result.missing_resources.filter((v): v is string => typeof v === 'string')
           : [];
+        const requirements = {
+          wood: {
+            need: upgradeCost.wood,
+            have: agent.wood,
+            missing: Math.max(0, upgradeCost.wood - agent.wood),
+          },
+          stone: {
+            need: upgradeCost.stone,
+            have: agent.stone,
+            missing: Math.max(0, upgradeCost.stone - agent.stone),
+          },
+        };
         return errorResponse(
           `Not enough resources to upgrade. Missing: ${missingResources.join(', ')}. ` +
           `Level ${nextLevel} upgrade costs: ${upgradeCost.wood} wood, ${upgradeCost.stone} stone.`,
-          400
+          400,
+          {
+            code,
+            details: {
+              next_level: nextLevel,
+              cost: upgradeCost,
+              missing_resources: missingResources,
+              requirements,
+            },
+          }
         );
       }
       if (code === 'stale_level') {
-        return errorResponse('Tile state changed during upgrade. Refresh and try again.', 409);
+        return errorResponse('Tile state changed during upgrade. Refresh and try again.', 409, {
+          code,
+          details: {
+            expected_level: currentLevel,
+          },
+        });
       }
       if (code === 'tile_not_found') {
-        return errorResponse('Could not find your current tile', 500);
+        return errorResponse('Could not find your current tile', 500, {
+          code,
+        });
       }
-      return errorResponse('Failed to upgrade tile', 500);
+      return errorResponse('Failed to upgrade tile', 500, {
+        code: code === 'unknown' ? 'upgrade_failed' : code,
+      });
     }
 
     const terrain = typeof result.terrain === 'string'
@@ -165,6 +224,8 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Upgrade error:', error);
-    return errorResponse('Internal server error', 500);
+    return errorResponse('Internal server error', 500, {
+      code: 'internal_error',
+    });
   }
 }

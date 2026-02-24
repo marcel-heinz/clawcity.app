@@ -10,13 +10,13 @@ This agent maintains the heartbeat checklists used for periodic agent monitoring
 ## Scope
 
 Primary files:
-- `/Users/marcelheinz/Desktop/clawcity.app-main/openclaw-gateway/HEARTBEAT.md`
-- `/Users/marcelheinz/Desktop/clawcity.app-main/public/heartbeat.md`
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/openclaw-gateway/HEARTBEAT.md`
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/public/heartbeat.md`
 
 Related references:
-- `/Users/marcelheinz/Desktop/clawcity.app-main/src/lib/types.ts`
-- `/Users/marcelheinz/Desktop/clawcity.app-main/clawcity-cli/src/commands`
-- `/Users/marcelheinz/Desktop/clawcity.app-main/openclaw-gateway/clawcity-skill/SKILL.md`
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/src/lib/types.ts`
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/clawcity-cli/src/commands`
+- `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/openclaw-gateway/clawcity-skill/SKILL.md`
 
 ## Contract Rules
 
@@ -58,15 +58,15 @@ Verify heartbeat guidance stays aligned with:
 ## Validation Commands
 
 ```bash
-diff -u /Users/marcelheinz/Desktop/clawcity.app-main/openclaw-gateway/HEARTBEAT.md /Users/marcelheinz/Desktop/clawcity.app-main/public/heartbeat.md
+diff -u /Users/marcelheinz/Desktop/clawcity.app-main-fresh/openclaw-gateway/HEARTBEAT.md /Users/marcelheinz/Desktop/clawcity.app-main-fresh/public/heartbeat.md
 
 rg -n "clawcity_status|clawcity_messages|clawcity_market_orders|tool names" \
-  /Users/marcelheinz/Desktop/clawcity.app-main/openclaw-gateway/HEARTBEAT.md \
-  /Users/marcelheinz/Desktop/clawcity.app-main/public/heartbeat.md \
-  /Users/marcelheinz/Desktop/clawcity.app-main/.claude/skills/update-heartbeat/SKILL.md
+  /Users/marcelheinz/Desktop/clawcity.app-main-fresh/openclaw-gateway/HEARTBEAT.md \
+  /Users/marcelheinz/Desktop/clawcity.app-main-fresh/public/heartbeat.md \
+  /Users/marcelheinz/Desktop/clawcity.app-main-fresh/.agents/skills/update-heartbeat/SKILL.md
 
 rg -n "activeHours|06:00|23:00" \
-  /Users/marcelheinz/Desktop/clawcity.app-main/.claude/skills/update-heartbeat/SKILL.md
+  /Users/marcelheinz/Desktop/clawcity.app-main-fresh/.agents/skills/update-heartbeat/SKILL.md
 ```
 
 ## Update Policy
@@ -74,3 +74,4 @@ rg -n "activeHours|06:00|23:00" \
 - Keep heartbeat output protocol explicit (`HEARTBEAT_OK` vs concise alert sections).
 - Keep checks short and operationally useful for autonomous agent play.
 - Prefer actionable alerts over verbose narratives.
+- Include timeout-safe command examples for automation (`clawcity --timeout 30 ...`) when adding new heartbeat scripts.

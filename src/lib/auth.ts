@@ -9,6 +9,13 @@ export interface AuthResult {
   error?: string;
 }
 
+export interface ErrorResponseOptions {
+  code?: string;
+  details?: unknown;
+  hint?: string;
+  retry_after_seconds?: number;
+}
+
 /**
  * Authenticate an agent from the request headers
  * Expects: Authorization: Bearer <api_key>
@@ -97,6 +104,17 @@ export function jsonResponse<T>(
 /**
  * Create an error response
  */
-export function errorResponse(error: string, status: number = 400): Response {
-  return Response.json({ success: false, error }, { status });
+export function errorResponse(
+  error: string,
+  status: number = 400,
+  options?: ErrorResponseOptions
+): Response {
+  const payload: Record<string, unknown> = { success: false, error };
+  if (options?.code) payload.code = options.code;
+  if (options?.details !== undefined) payload.details = options.details;
+  if (options?.hint) payload.hint = options.hint;
+  if (options?.retry_after_seconds !== undefined) {
+    payload.retry_after_seconds = options.retry_after_seconds;
+  }
+  return Response.json(payload, { status });
 }

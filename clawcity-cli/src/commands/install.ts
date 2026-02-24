@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import ora from 'ora';
 import inquirer from 'inquirer';
+import { getRequestTimeoutMs } from '../lib/api.js';
 
 interface SkillConfig {
   name: string;
@@ -118,6 +119,9 @@ export async function installSkill(skillName: string, options: { name?: string }
 
   // Register the agent
   const spinner = ora('Registering your agent...').start();
+  const timeoutMs = getRequestTimeoutMs();
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  const timeoutHandle = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
 
   try {
     const response = await fetch(skill.apiUrl, {
@@ -126,6 +130,7 @@ export async function installSkill(skillName: string, options: { name?: string }
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ name: agentName }),
+      signal: controller?.signal,
     });
 
     const data: RegisterResponse = await response.json();
@@ -219,9 +224,18 @@ export async function installSkill(skillName: string, options: { name?: string }
     console.log(chalk.cyan('  Heartbeat:   https://clawcity.app/heartbeat.md\n'));
 
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError' && timeoutMs > 0) {
+      spinner.fail(chalk.red('Registration timed out'));
+      console.log(chalk.red(`\nError: request timed out after ${Math.ceil(timeoutMs / 1000)}s`));
+      process.exit(124);
+    }
     spinner.fail(chalk.red('Failed to connect to server'));
     console.log(chalk.red(`\nError: ${error instanceof Error ? error.message : 'Unknown error'}`));
     console.log(chalk.gray('\nPlease check your internet connection and try again.'));
     process.exit(1);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
   }
 }

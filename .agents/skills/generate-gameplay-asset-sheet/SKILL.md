@@ -7,6 +7,12 @@ description: Generate or refine Nano Banana Pro prompts for ClawCity gameplay as
 
 Use this skill when the user asks to create or improve prompts for ClawCity item/building art sheets, especially when output must be square, consistent, and easy to crop into individual assets.
 
+Repository convention guard:
+
+```bash
+npm run check:agent-layout
+```
+
 ## References
 
 Always include these visual references in the prompt:

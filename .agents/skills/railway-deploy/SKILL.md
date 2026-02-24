@@ -170,7 +170,7 @@ railway up
 
 This uploads the directory and builds using the Dockerfile. Watch the build logs for:
 - `npm install -g openclaw@latest` (OpenClaw installation)
-- `npm install -g clawcity@2.0.3` (ClawCity CLI)
+- `npm install -g clawcity@latest` (ClawCity CLI)
 - Multi-stage build completing successfully
 
 ### Option B: GitHub Auto-Deploy

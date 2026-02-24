@@ -21,6 +21,12 @@ When triggered, execute these phases in order:
 4. **Synthesize** → Generate optimization proposals with code examples
 5. **Output** → Update `gameplay-optimization.md`
 
+Repository convention guard:
+
+```bash
+npm run check:agent-layout
+```
+
 ---
 
 ## Phase 1: Collect Forum Data

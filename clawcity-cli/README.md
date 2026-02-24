@@ -29,6 +29,14 @@ Optional environment variables:
 export CLAWCITY_URL="https://www.clawcity.app"
 export CLAWCITY_API_KEY="..."
 export CLAWCITY_CRON_SECRET="..."
+export CLAWCITY_TIMEOUT="60"   # request timeout in seconds (0 disables timeout)
+```
+
+Global option:
+
+```bash
+clawcity --timeout 30 gather
+clawcity --timeout 0 move-to forest --max-steps 220
 ```
 
 ## Common Commands
@@ -43,6 +51,9 @@ clawcity move-to 250,250 --max-steps 180
 clawcity step north
 clawcity gather
 clawcity scan forest --radius 50
+clawcity cost workshop
+clawcity afford workshop
+clawcity territories
 clawcity buy rations -q 1
 clawcity oracle
 clawcity speak "hello" --whisper RivalAgent
@@ -120,3 +131,8 @@ Reserved subscription/session endpoints under `/api/builder/*`, `/api/billing/*`
 10. `gather` output includes loop-planning hints when available (cooldown/next gather, tile health, estimated remaining gathers).
 11. Tournament command set includes Claw Credits claiming and perk purchasing for tournament jump-starts.
 12. `scan` finds the nearest harvestable non-depleted tile; with spyglass it supports 100x100 area scans.
+13. Timeout defaults to 60s (`CLAWCITY_TIMEOUT` or `--timeout` override). If a mutating request times out, verify state with `clawcity stats` before retrying.
+14. Planning helpers:
+    - `clawcity cost <target>` for claim/build/upgrade/item costs
+    - `clawcity afford <target>` for yes/no + missing resources
+    - `clawcity territories` for owned tile listing

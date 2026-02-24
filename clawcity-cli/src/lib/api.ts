@@ -11,6 +11,15 @@ const BASE_URL = process.env.CLAWCITY_URL || 'https://www.clawcity.app';
 const API_KEY = process.env.CLAWCITY_API_KEY || '';
 const SESSION_COOKIE = process.env.CLAWCITY_SESSION_COOKIE || '';
 const CRON_SECRET = process.env.CLAWCITY_CRON_SECRET || '';
+const DEFAULT_TIMEOUT_SECONDS = (() => {
+  const raw = process.env.CLAWCITY_TIMEOUT;
+  if (!raw) return 60;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return 60;
+  return parsed;
+})();
+const TIMEOUT_EXIT_CODE = 124;
+let runtimeTimeoutMs = Math.round(DEFAULT_TIMEOUT_SECONDS * 1000);
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 export type AuthProfile = 'agent' | 'session' | 'cron' | 'none';
@@ -22,6 +31,7 @@ interface ApiOptions {
   profile?: AuthProfile;
   query?: Record<string, string | number | boolean | null | undefined>;
   headers?: Record<string, string>;
+  timeoutMs?: number;
 }
 
 interface RawRequestResponse {
@@ -35,6 +45,28 @@ interface ApiResponse {
   ok: boolean;
   status: number;
   data: Record<string, unknown>;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function asNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+export function setRequestTimeoutMs(timeoutMs: number): void {
+  runtimeTimeoutMs = Math.max(0, Math.round(timeoutMs));
+}
+
+export function getRequestTimeoutMs(): number {
+  return runtimeTimeoutMs;
 }
 
 function ensureCredentialOrExit(profile: AuthProfile, headers: Record<string, string>) {
@@ -86,6 +118,8 @@ export async function requestApi(path: string, opts: ApiOptions = {}): Promise<R
   const method = opts.method || 'GET';
   const profile = normalizeProfile(opts);
   const headers: Record<string, string> = { ...(opts.headers || {}) };
+  const timeoutMs = opts.timeoutMs !== undefined ? Math.max(0, Math.round(opts.timeoutMs)) : runtimeTimeoutMs;
+  const isMutation = method !== 'GET';
 
   if (profile === 'agent' && !headers.Authorization && API_KEY) {
     headers.Authorization = `Bearer ${API_KEY}`;
@@ -106,12 +140,17 @@ export async function requestApi(path: string, opts: ApiOptions = {}): Promise<R
 
   const url = toUrl(path);
   appendQuery(url, opts.query);
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  const timeoutHandle = controller
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null;
 
   try {
     const res = await fetch(url, {
       method,
       headers,
       body: bodyText,
+      signal: controller?.signal,
     });
 
     const text = await res.text();
@@ -132,9 +171,22 @@ export async function requestApi(path: string, opts: ApiOptions = {}): Promise<R
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    const isAbort = err instanceof Error && err.name === 'AbortError';
+    if (isAbort && timeoutMs > 0) {
+      console.error(`Error: Request timed out after ${Math.ceil(timeoutMs / 1000)}s (${method} ${url.pathname})`);
+      if (isMutation) {
+        console.error('Outcome may be uncertain for mutating requests. Run clawcity stats before retrying.');
+      }
+      process.exit(TIMEOUT_EXIT_CODE);
+    }
     console.error(`Error: ${msg}`);
     process.exit(1);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
   }
+  throw new Error('Unreachable');
 }
 
 export async function api(path: string, opts: ApiOptions = {}): Promise<ApiResponse> {
@@ -170,7 +222,36 @@ export async function api(path: string, opts: ApiOptions = {}): Promise<ApiRespo
 /** Print error from API response and exit */
 export function handleError(res: ApiResponse): never {
   const msg = res.data.error || res.data.message || `HTTP ${res.status}`;
-  console.error(`Error: ${String(msg)}`);
+  const code = asString(res.data.code);
+  const hint = asString(res.data.hint);
+  const retryAfterSeconds = asNumber(res.data.retry_after_seconds);
+  const details = asRecord(res.data.details);
+
+  console.error(`Error${code ? ` [${code}]` : ''}: ${String(msg)}`);
+  if (details) {
+    const requirements = asRecord(details.requirements);
+    if (requirements) {
+      const missing = Object.entries(requirements)
+        .map(([resource, value]) => {
+          const requirement = asRecord(value);
+          const need = asNumber(requirement?.need);
+          const have = asNumber(requirement?.have);
+          const miss = asNumber(requirement?.missing);
+          if (need === null || have === null || miss === null || miss <= 0) return null;
+          return `${resource} +${miss} (need ${need}, have ${have})`;
+        })
+        .filter((entry): entry is string => Boolean(entry));
+      if (missing.length > 0) {
+        console.error(`Missing: ${missing.join('; ')}`);
+      }
+    }
+  }
+  if (retryAfterSeconds !== null) {
+    console.error(`Retry after: ${retryAfterSeconds}s`);
+  }
+  if (hint) {
+    console.error(`Hint: ${hint}`);
+  }
   process.exit(1);
 }
 
