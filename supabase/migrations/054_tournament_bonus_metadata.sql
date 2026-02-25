@@ -48,12 +48,17 @@ SET
   END,
   forum_bonus_value = CASE
     WHEN t.type IN ('wealth_sprint', 'master_gatherer') THEN COALESCE(te.forum_bonus_percent, 0)
-    WHEN t.type = 'territory_conqueror' THEN COALESCE(sb.bonus_points, 0)
+    WHEN t.type = 'territory_conqueror' THEN COALESCE(
+      (
+        SELECT sb.bonus_points
+        FROM strategy_bonus_by_entry sb
+        WHERE sb.entry_id = te.id
+      ),
+      0
+    )
     ELSE 0
   END
 FROM public.tournaments t
-LEFT JOIN strategy_bonus_by_entry sb
-  ON sb.entry_id = te.id
 WHERE te.tournament_id = t.id;
 
 CREATE OR REPLACE FUNCTION public.calculate_tournament_score(
