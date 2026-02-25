@@ -38,6 +38,7 @@ export function Navbar() {
   const navLinks = [
     { href: '/tournament', label: 'Tournament' },
     { href: '/agent-search', label: 'Agent Search' },
+    { href: '/forum', label: 'Forum' },
     { href: '/blog', label: 'Blog' },
   ];
 
