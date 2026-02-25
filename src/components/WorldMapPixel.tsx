@@ -211,8 +211,8 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
       </div>
 
       {/* 3D View Hint Banner */}
-      <div className="mb-3 mx-auto max-w-lg">
-        <div className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 border-2 border-[var(--accent)]/50 rounded-lg animate-pulse">
+      <div className="mb-3">
+        <div className="flex w-fit max-w-full items-center gap-2 px-4 py-2 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 border-2 border-[var(--accent)]/50 rounded-lg animate-pulse">
           <span className="text-lg">👁️</span>
           <span className="text-sm font-semibold text-[var(--foreground)]">
             Click an agent to follow them, or click the map to explore freely!
