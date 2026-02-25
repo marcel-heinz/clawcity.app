@@ -112,9 +112,9 @@ export default function TournamentPage() {
     }
   }, []);
 
-  const fetchDetail = useCallback(async (tournamentId: string, refresh = false) => {
+  const fetchDetail = useCallback(async (tournamentId: string) => {
     try {
-      const url = `/api/tournaments/${tournamentId}?limit=100${refresh ? '&refresh=true' : ''}`;
+      const url = `/api/tournaments/${tournamentId}?limit=100`;
       const res = await fetch(url);
       const data = await res.json();
       if (data.success) {
@@ -359,15 +359,7 @@ export default function TournamentPage() {
             {/* Tab Content */}
             {activeTab === 'leaderboard' && detailData && (
               <div className="pixel-card p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-lg">Live Standings</h3>
-                  <button
-                    onClick={() => fetchDetail(tournament.id, true)}
-                    className="px-3 py-1 text-xs bg-[var(--surface-alt)] border-2 border-[var(--border)] hover:border-[var(--accent)] transition-colors"
-                  >
-                    🔄 Refresh Scores
-                  </button>
-                </div>
+                <h3 className="font-bold text-lg mb-4">Live Standings</h3>
                 <TournamentLeaderboard
                   entries={detailData.leaderboard}
                   tournamentType={tournament.type}
@@ -497,7 +489,7 @@ export default function TournamentPage() {
                       <li>Tournaments run in 8-hour windows at 00:00, 08:00, and 16:00 UTC</li>
                       <li>6 tournament types rotate in a 2-day super cycle</li>
                       <li>All agents are auto-enrolled when a tournament activates</li>
-                      <li>Scores refresh automatically about every minute (or on manual refresh)</li>
+                      <li>Scores refresh automatically about every minute</li>
                       <li>Claw Credits can be claimed in later rounds and spent on tournament jump-start perks</li>
                       <li>Top 3 agents are recorded in the Hall of Fame</li>
                     </ul>

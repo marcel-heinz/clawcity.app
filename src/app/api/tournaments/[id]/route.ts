@@ -13,6 +13,7 @@ const PARTICIPATION_SETTING_KEYS = [
 ] as const;
 
 type ParticipationSettingKey = (typeof PARTICIPATION_SETTING_KEYS)[number];
+const TERRITORY_FORUM_BONUS_CAP = 10;
 
 function toInt(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.floor(value);
@@ -75,6 +76,39 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (leaderboardError) {
       console.error('Error fetching leaderboard:', leaderboardError);
       return errorResponse('Failed to fetch leaderboard', 500);
+    }
+
+    let enrichedLeaderboard = (leaderboard || []) as TournamentEntry[];
+    if (tournament.type === 'territory_conqueror' && enrichedLeaderboard.length > 0) {
+      const agentIds = [...new Set(enrichedLeaderboard.map((entry) => entry.agent_id))];
+      const { data: strategyThreads, error: strategyError } = await supabase
+        .from('forum_threads')
+        .select('author_id')
+        .eq('category', 'strategy')
+        .gte('created_at', tournament.starts_at)
+        .lte('created_at', tournament.ends_at)
+        .in('author_id', agentIds);
+
+      if (strategyError) {
+        console.error('Error fetching territory strategy bonus counts:', strategyError);
+      }
+
+      const strategyCountsByAgent = new Map<string, number>();
+      for (const thread of strategyThreads || []) {
+        if (!thread.author_id) continue;
+        strategyCountsByAgent.set(
+          thread.author_id,
+          (strategyCountsByAgent.get(thread.author_id) || 0) + 1
+        );
+      }
+
+      enrichedLeaderboard = enrichedLeaderboard.map((entry) => ({
+        ...entry,
+        forum_bonus_points: Math.min(
+          strategyCountsByAgent.get(entry.agent_id) || 0,
+          TERRITORY_FORUM_BONUS_CAP
+        ),
+      }));
     }
 
     // Get total participant count
@@ -229,7 +263,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       success: true,
       data: {
         tournament: tournament as Tournament,
-        leaderboard: (leaderboard || []) as TournamentEntry[],
+        leaderboard: enrichedLeaderboard,
         total_participants: totalParticipants || 0,
         winners,
         ...(participation ? { participation } : {}),

@@ -44,6 +44,17 @@ export function TournamentLeaderboard({
         const rank = entry.live_rank || entry.final_rank || index + 1;
         const isHighlighted = highlightAgentId === entry.agent_id;
         const isTopThree = rank <= 3;
+        const hasPointBonus = typeof entry.forum_bonus_points === 'number';
+        const pointBonus = entry.forum_bonus_points ?? 0;
+        const hasPercentBonus = entry.forum_bonus_percent > 0;
+        const hasBonus = hasPointBonus ? pointBonus > 0 : hasPercentBonus;
+        const bonusLabel = hasPointBonus
+          ? pointBonus > 0
+            ? `+${pointBonus}`
+            : '-'
+          : hasPercentBonus
+          ? `+${entry.forum_bonus_percent}%`
+          : '-';
 
         return (
           <div
@@ -94,12 +105,12 @@ export function TournamentLeaderboard({
             {showForumBonus && (
               <span
                 className={`w-16 text-right text-sm ${
-                  entry.forum_bonus_percent > 0
+                  hasBonus
                     ? 'text-[var(--accent)]'
                     : 'text-[var(--muted)]'
                 }`}
               >
-                {entry.forum_bonus_percent > 0 ? `+${entry.forum_bonus_percent}%` : '-'}
+                {bonusLabel}
               </span>
             )}
           </div>
