@@ -64,9 +64,6 @@ function DesktopBadge({ zone, className = '' }: { zone: ZoneData; className?: st
         <span className="text-xs">👥</span>
         <span className="text-[var(--foreground)] font-bold">{zone.agentCount}</span>
       </div>
-      {zone.totalTerritories > 0 && (
-        <div className="text-[8px] text-[var(--muted)] mt-0.5">🏴 {zone.totalTerritories}</div>
-      )}
     </div>
   );
 }
@@ -186,8 +183,8 @@ export function WorldOverview({ agents, onAgentClick }: WorldOverviewProps) {
     return agents.filter(agent => isActiveAgent(agent));
   }, [agents]);
 
-  const totalAgents = activeAgents.length;
-  const totalTerritories = tiles.filter(t => t.owner_id).length;
+  const activeAgentCount = activeAgents.length;
+  const totalAgents = agents.length;
 
   // Group active agents by zone for crab rendering
   const agentsByZone = useMemo(() => {
@@ -251,13 +248,13 @@ export function WorldOverview({ agents, onAgentClick }: WorldOverviewProps) {
         <div className="flex items-center gap-2 md:gap-3">
           <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
             <span>👥</span>
-            <span className="font-bold text-[var(--accent)]">{totalAgents}</span>
-            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">active</span>
+            <span className="font-bold text-[var(--accent)]">{activeAgentCount}</span>
+            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">active agents</span>
           </div>
           <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
-            <span>🏴</span>
-            <span className="font-bold text-[var(--gold)]">{totalTerritories}</span>
-            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">territories</span>
+            <span>🦀</span>
+            <span className="font-bold text-[var(--gold)]">{totalAgents}</span>
+            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">total agents</span>
           </div>
         </div>
         
