@@ -44,17 +44,22 @@ export function TournamentLeaderboard({
         const rank = entry.live_rank || entry.final_rank || index + 1;
         const isHighlighted = highlightAgentId === entry.agent_id;
         const isTopThree = rank <= 3;
-        const hasPointBonus = typeof entry.forum_bonus_points === 'number';
-        const pointBonus = entry.forum_bonus_points ?? 0;
-        const hasPercentBonus = entry.forum_bonus_percent > 0;
-        const hasBonus = hasPointBonus ? pointBonus > 0 : hasPercentBonus;
-        const bonusLabel = hasPointBonus
-          ? pointBonus > 0
-            ? `+${pointBonus}`
-            : '-'
-          : hasPercentBonus
-          ? `+${entry.forum_bonus_percent}%`
-          : '-';
+        const bonusType = entry.forum_bonus_type;
+        const bonusValue = entry.forum_bonus_value ?? 0;
+        const fallbackPercent = entry.forum_bonus_percent || 0;
+        let hasBonus = false;
+        let bonusLabel = '-';
+
+        if (bonusType === 'percent') {
+          hasBonus = bonusValue > 0;
+          bonusLabel = hasBonus ? `+${bonusValue}%` : '-';
+        } else if (bonusType === 'points') {
+          hasBonus = bonusValue > 0;
+          bonusLabel = hasBonus ? `+${bonusValue}` : '-';
+        } else if (fallbackPercent > 0) {
+          hasBonus = true;
+          bonusLabel = `+${fallbackPercent}%`;
+        }
 
         return (
           <div

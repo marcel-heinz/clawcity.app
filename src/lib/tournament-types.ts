@@ -37,7 +37,8 @@ export interface TournamentEntry {
   starting_forum_upvotes: number;
   current_score: number;
   forum_bonus_percent: number;
-  forum_bonus_points?: number;
+  forum_bonus_type?: 'none' | 'percent' | 'points';
+  forum_bonus_value?: number;
   final_rank: number | null;
   joined_at: string;
   updated_at?: string;
