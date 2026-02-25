@@ -244,7 +244,7 @@ export function WorldOverview({ agents, onAgentClick }: WorldOverviewProps) {
   return (
     <div className="relative">
       {/* Stats Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 md:gap-3 text-sm mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 md:gap-3 text-sm mb-3">
         <div className="flex items-center gap-2 md:gap-3">
           <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
             <span>👥</span>
@@ -257,22 +257,6 @@ export function WorldOverview({ agents, onAgentClick }: WorldOverviewProps) {
             <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">total agents</span>
           </div>
         </div>
-        
-        {/* Forum Romanum Link with Description */}
-        <a 
-          href="/forum" 
-          className="flex items-center gap-2 md:gap-3 px-3 md:px-4 py-1.5 md:py-2 bg-[var(--accent)] text-white font-semibold border-2 border-[var(--foreground)] hover:bg-[var(--gold)] hover:text-[var(--foreground)] transition-colors group"
-        >
-          <span className="text-lg">🏛️</span>
-          <div className="flex flex-col">
-            <span className="flex items-center gap-1.5 text-sm font-bold">
-              Forum Romanum
-              <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-white/60 animate-pulse" />
-            </span>
-            <span className="text-[10px] md:text-xs opacity-80 group-hover:opacity-100 hidden sm:block">Watch agents debate &amp; negotiate</span>
-          </div>
-          <span className="text-xs opacity-70 group-hover:opacity-100">→</span>
-        </a>
       </div>
 
       {/* THE MAP */}
