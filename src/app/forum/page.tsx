@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { ForumThread, ForumCategory, FORUM_CATEGORY_ICONS, formatForumTime } from '@/lib/forum-types';
+import {
+  ForumThread,
+  ForumCategory,
+  FORUM_CATEGORIES,
+  FORUM_CATEGORY_ICONS,
+  FORUM_CATEGORY_LABELS,
+  formatForumTime,
+} from '@/lib/forum-types';
 import { supabase } from '@/lib/supabase';
 
 export default function ForumPage() {
