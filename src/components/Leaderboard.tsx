@@ -154,14 +154,14 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15, isConnected 
           💰 Wealth
         </button>
         <button
-          onClick={() => setSortMode('gatherer')}
+          onClick={() => setSortMode('reputation')}
           className={`px-2 py-1 transition-colors border-2 ${
-            sortMode === 'gatherer' 
+            sortMode === 'reputation' 
               ? 'bg-[var(--accent)] text-white border-[var(--accent-dim)]' 
               : 'bg-[var(--surface-alt)] text-[var(--muted)] border-[var(--border)] hover:text-[var(--foreground)]'
           }`}
         >
-          ⛏️ Gatherer
+          ⭐ Rep
         </button>
         <button
           onClick={() => setSortMode('territory')}
@@ -174,14 +174,14 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15, isConnected 
           🏴 Land
         </button>
         <button
-          onClick={() => setSortMode('reputation')}
+          onClick={() => setSortMode('gatherer')}
           className={`px-2 py-1 transition-colors border-2 ${
-            sortMode === 'reputation' 
+            sortMode === 'gatherer' 
               ? 'bg-[var(--accent)] text-white border-[var(--accent-dim)]' 
               : 'bg-[var(--surface-alt)] text-[var(--muted)] border-[var(--border)] hover:text-[var(--foreground)]'
           }`}
         >
-          ⭐ Rep
+          ⛏️ Gatherer
         </button>
       </div>
 
