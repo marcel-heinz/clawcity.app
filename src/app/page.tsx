@@ -284,10 +284,10 @@ export default function Home() {
           <div className="flex-1 pixel-dots" />
         </div>
 
-        {/* World Overview + Right Sidebar Stack */}
-        <div className="mb-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_616px] xl:items-start">
+        {/* World Overview + Active Now + Live Activity + World Economy */}
+        <div className="mb-6 grid gap-4 xl:gap-3 xl:grid-cols-[minmax(0,430px)_230px_275px_230px] xl:items-stretch">
           {/* Map */}
-          <section className="pixel-card p-4">
+          <section className="pixel-card p-4 h-full xl:h-[560px]">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
               <span>🗺️</span> World Overview
             </h2>
@@ -300,42 +300,38 @@ export default function Home() {
             />
           </section>
 
-          <div className="space-y-3">
-            <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_320px]">
-              {/* Active Agents Sidebar */}
-              <section className="pixel-card p-4 h-[500px]">
-                <ActiveAgents
-                  agents={agents}
-                  onlineCount={stats.active_agents}
-                  onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
-                  isConnected={isConnected}
-                />
-              </section>
+          {/* Active Agents Sidebar */}
+          <section className="pixel-card p-4 h-full xl:h-[560px]">
+            <ActiveAgents
+              agents={agents}
+              onlineCount={stats.active_agents}
+              onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
+              isConnected={isConnected}
+            />
+          </section>
 
-              {/* Live Activity Feed */}
-              <section className="pixel-card p-4 h-[500px] flex flex-col">
-                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
-                  <span>📜</span> Live Activity Feed
-                </h2>
-                <div className="min-h-0 flex-1">
-                  <ActivityFeed events={events} maxHeight="100%" isConnected={isConnected} />
-                </div>
-              </section>
+          {/* Live Activity Feed */}
+          <section className="pixel-card p-4 h-full flex flex-col xl:h-[560px]">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
+              <span>📜</span> Live Activity Feed
+            </h2>
+            <div className="min-h-0 flex-1">
+              <ActivityFeed events={events} maxHeight="100%" isConnected={isConnected} />
             </div>
+          </section>
 
-            {/* Stats (World Economy only) */}
-            <section className="pixel-card p-3">
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
-                <span>📊</span> World Economy
-              </h2>
-              <Stats
-                totalResources={stats.total_resources}
-                miningActivityLastHour={stats.mining_activity_last_hour}
-                topGatherer={stats.top_gatherer}
-                isConnected={isConnected}
-              />
-            </section>
-          </div>
+          {/* World Economy */}
+          <section className="pixel-card p-3 h-full flex flex-col xl:h-[560px]">
+            <h2 className="text-lg font-semibold mb-3 flex items-center gap-2 text-[var(--foreground)]">
+              <span>📊</span> World Economy
+            </h2>
+            <Stats
+              totalResources={stats.total_resources}
+              miningActivityLastHour={stats.mining_activity_last_hour}
+              topGatherer={stats.top_gatherer}
+              isConnected={isConnected}
+            />
+          </section>
         </div>
 
         {/* Secondary Grid - Leaderboard, Recently Joined */}

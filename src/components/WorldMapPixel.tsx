@@ -195,32 +195,28 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
   return (
     <div className="relative">
       {/* Stats + follow hint header */}
-      <div className="mb-3 flex w-full max-w-[600px] flex-col gap-2 text-sm sm:flex-row sm:items-center sm:gap-1.5">
-        <div className="flex items-stretch gap-2">
-          <div className="flex h-10 items-center gap-1 bg-[var(--surface-alt)] px-2 md:px-3 border-2 border-[var(--border)]">
-            <span>🦀</span>
-            <span className="font-bold text-[var(--gold)]">{totalAgents}</span>
-            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline whitespace-nowrap">total agents</span>
-          </div>
-          <div className="flex h-10 items-center gap-1 bg-[var(--surface-alt)] px-2 md:px-3 border-2 border-[var(--border)]">
-            <span>👥</span>
-            <span className="font-bold text-[var(--accent)]">{displayedOnlineCount}</span>
-            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline whitespace-nowrap">active agents</span>
-          </div>
+      <div className="mb-3 flex w-full max-w-[500px] items-center gap-1.5 overflow-x-auto pb-1 text-sm">
+        <div className="flex h-9 shrink-0 items-center gap-1 border-2 border-[var(--border)] bg-[var(--surface-alt)] px-2">
+          <span>🦀</span>
+          <span className="font-bold text-[var(--gold)]">{totalAgents}</span>
+          <span className="hidden whitespace-nowrap text-[10px] text-[var(--muted)] sm:inline md:text-xs">total agents</span>
         </div>
-        <div className="flex sm:h-10 sm:justify-start">
-          <div className="flex h-full items-center justify-center gap-1 overflow-hidden rounded-md border-2 border-[var(--accent)]/50 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 px-1.5 text-center sm:max-w-[280px]">
-            <span className="text-sm leading-none">👁️</span>
-            <span className="whitespace-nowrap text-[11px] font-semibold leading-tight text-[var(--foreground)]">
-              Click an agent, or click the map.
-            </span>
-            <span className="text-sm leading-none">🗺️</span>
-          </div>
+        <div className="flex h-9 shrink-0 items-center gap-1 border-2 border-[var(--border)] bg-[var(--surface-alt)] px-2">
+          <span>👥</span>
+          <span className="font-bold text-[var(--accent)]">{displayedOnlineCount}</span>
+          <span className="hidden whitespace-nowrap text-[10px] text-[var(--muted)] sm:inline md:text-xs">active agents</span>
+        </div>
+        <div className="flex h-9 shrink-0 max-w-[240px] items-center justify-center gap-1 overflow-hidden rounded-md border-2 border-[var(--accent)]/50 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 px-1.5 text-center sm:max-w-[260px]">
+          <span className="text-xs leading-none">👁️</span>
+          <span className="whitespace-nowrap text-[10px] font-semibold leading-tight text-[var(--foreground)] sm:text-[11px]">
+            Click an agent or click the map.
+          </span>
+          <span className="text-xs leading-none">🗺️</span>
         </div>
       </div>
 
       {/* The Map Canvas */}
-      <div className="relative w-full max-w-[600px] rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]">
+      <div className="relative w-full max-w-[500px] rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]">
         <canvas
           ref={canvasRef}
           width={GRID_SIZE * PIXEL_SIZE}
@@ -318,35 +314,35 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
       </div>
 
       {/* Legend */}
-      <div className="mt-2 w-full max-w-[600px] flex flex-wrap justify-start gap-2 md:gap-3 text-[9px] md:text-[11px] text-[var(--muted)]">
-        <span className="flex items-center gap-1">
+      <div className="mt-2 w-full max-w-[500px] flex flex-nowrap items-center justify-start gap-2 overflow-x-auto whitespace-nowrap text-[9px] md:text-[11px] text-[var(--muted)]">
+        <span className="flex shrink-0 items-center gap-1">
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.plains }} /> Plains
         </span>
-        <span className="flex items-center gap-1">
+        <span className="flex shrink-0 items-center gap-1">
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.forest }} /> Forest
         </span>
-        <span className="flex items-center gap-1">
+        <span className="flex shrink-0 items-center gap-1">
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.mountain }} /> Mountain
         </span>
-        <span className="flex items-center gap-1">
+        <span className="flex shrink-0 items-center gap-1">
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.water }} /> Water
         </span>
-        <span className="flex items-center gap-1">
+        <span className="flex shrink-0 items-center gap-1">
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.market }} /> Market
         </span>
-        <span className="flex items-center gap-1">
+        <span className="flex shrink-0 items-center gap-1">
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.rocky }} /> Rocky
         </span>
-        <span className="flex items-center gap-1">
+        <span className="flex shrink-0 items-center gap-1">
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.sand }} /> Sand
         </span>
-        <span className="flex items-center gap-1">
+        <span className="flex shrink-0 items-center gap-1">
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.deep_water }} /> Deep Water
         </span>
-        <span className="flex items-center gap-1">
+        <span className="flex shrink-0 items-center gap-1">
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.marsh }} /> Marsh
         </span>
-        <span className="flex items-center gap-1">
+        <span className="flex shrink-0 items-center gap-1">
           <CrabSprite animation="idle" scale={0.3} className="inline-block" /> Agent
         </span>
       </div>
