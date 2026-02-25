@@ -46,61 +46,64 @@ export function Stats({
   const metricValue = (value: number) => (showConnectingState ? '—' : value.toString());
   const compactMetricValue = (value: number) => (showConnectingState ? '—' : formatNumber(value));
   const topGathererLabel = showConnectingState ? 'syncing' : topGatherer || '—';
+  const resourceBreakdown = totalResources
+    ? [
+      { icon: '🪙', value: totalResources.gold, className: 'text-yellow-600' },
+      { icon: '🪵', value: totalResources.wood, className: 'text-amber-700' },
+      { icon: '🪨', value: totalResources.stone, className: 'text-gray-500' },
+      { icon: '🍎', value: totalResources.food, className: 'text-red-500' },
+    ]
+    : [];
 
   return (
-    <div className="space-y-3">
-      {/* Connection status */}
-      <div className="flex items-center gap-2 text-xs">
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5 text-[11px]">
         <span
-          className={`w-2 h-2 rounded-full ${statusDotClass}`}
+          className={`h-2 w-2 rounded-full ${statusDotClass}`}
         />
         <span className={statusColorClass}>
           {statusText}
         </span>
       </div>
 
-      {/* Resource Economy Section */}
-      <div className="border-t-2 border-[var(--border)] pt-3">
-        <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider mb-2">
-          World Economy
-        </div>
-        
-        {/* Total Resources */}
-        <div className="bg-[var(--surface-alt)] p-3 border-2 border-[var(--border)] mb-2">
-          <div className="text-lg font-bold text-orange-500">
-            {compactMetricValue(totalResourceValue)}
-          </div>
-          <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider">
-            Total Resources
+      <div className="bg-[var(--surface-alt)] border-2 border-[var(--border)] p-2">
+        <div className="flex items-end justify-between gap-2">
+          <div>
+            <div className="text-xl font-bold text-orange-500 leading-none">
+              {compactMetricValue(totalResourceValue)}
+            </div>
+            <div className="mt-1 text-[10px] text-[var(--muted)] uppercase tracking-wider">
+              Total Resources
+            </div>
           </div>
           {totalResources && !showConnectingState && (
-            <div className="flex flex-wrap gap-2 mt-2 text-[10px]">
-              <span className="text-yellow-600" title="Gold">🪙 {formatNumber(totalResources.gold)}</span>
-              <span className="text-amber-700" title="Wood">🪵 {formatNumber(totalResources.wood)}</span>
-              <span className="text-gray-500" title="Stone">🪨 {formatNumber(totalResources.stone)}</span>
-              <span className="text-red-500" title="Food">🍎 {formatNumber(totalResources.food)}</span>
+            <div className="flex flex-wrap items-center justify-end gap-1 text-[10px]">
+              {resourceBreakdown.map((resource) => (
+                <span key={resource.icon} className={resource.className}>
+                  {resource.icon} {formatNumber(resource.value)}
+                </span>
+              ))}
             </div>
           )}
         </div>
+      </div>
 
-        {/* Mining Activity */}
-        <div className="grid grid-cols-2 gap-2">
-          <div className="bg-[var(--surface-alt)] p-2 border-2 border-[var(--border)]">
-            <div className="text-lg font-bold text-cyan-600">
-              {metricValue(miningActivityLastHour)}
-            </div>
-            <div className="text-[9px] text-[var(--muted)] uppercase tracking-wider">
-              Gathers (1h)
-            </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="bg-[var(--surface-alt)] border-2 border-[var(--border)] p-2">
+          <div className="text-lg font-bold text-cyan-600 leading-none">
+            {metricValue(miningActivityLastHour)}
           </div>
+          <div className="mt-1 text-[9px] text-[var(--muted)] uppercase tracking-wider">
+            Gathers (1h)
+          </div>
+        </div>
 
-          <div className="bg-[var(--surface-alt)] p-2 border-2 border-[var(--border)]">
-            <div className="text-sm font-bold text-pink-600 truncate" title={topGathererLabel}>
-              {topGathererLabel}
-            </div>
-            <div className="text-[9px] text-[var(--muted)] uppercase tracking-wider">
-              Top Gatherer
-            </div>
+        <div className="bg-[var(--surface-alt)] border-2 border-[var(--border)] p-2">
+          <div className="text-sm font-bold text-pink-600 truncate leading-none" title={topGathererLabel}>
+            {topGathererLabel}
+          </div>
+          <div className="mt-1 text-[9px] text-[var(--muted)] uppercase tracking-wider">
+            Top Gatherer
           </div>
         </div>
       </div>

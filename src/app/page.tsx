@@ -300,7 +300,7 @@ export default function Home() {
             />
           </section>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_320px]">
               {/* Active Agents Sidebar */}
               <section className="pixel-card p-4 h-[500px]">
@@ -324,7 +324,7 @@ export default function Home() {
             </div>
 
             {/* Stats (World Economy only) */}
-            <section className="pixel-card p-4">
+            <section className="pixel-card p-3">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
                 <span>📊</span> World Economy
               </h2>

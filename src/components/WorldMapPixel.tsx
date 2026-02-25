@@ -195,7 +195,7 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
   return (
     <div className="relative">
       {/* Stats + follow hint header */}
-      <div className="mb-3 flex w-full max-w-[600px] flex-col gap-2 text-sm sm:flex-row sm:items-center sm:gap-2">
+      <div className="mb-3 flex w-full max-w-[600px] flex-col gap-2 text-sm sm:flex-row sm:items-center sm:gap-1.5">
         <div className="flex items-stretch gap-2">
           <div className="flex h-10 items-center gap-1 bg-[var(--surface-alt)] px-2 md:px-3 border-2 border-[var(--border)]">
             <span>🦀</span>
@@ -208,8 +208,8 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
             <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline whitespace-nowrap">active agents</span>
           </div>
         </div>
-        <div className="flex sm:ml-auto sm:h-10 sm:justify-end">
-          <div className="flex h-full items-center justify-center gap-1 overflow-hidden rounded-md border-2 border-[var(--accent)]/50 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 px-2 text-center sm:max-w-[300px]">
+        <div className="flex sm:h-10 sm:justify-start">
+          <div className="flex h-full items-center justify-center gap-1 overflow-hidden rounded-md border-2 border-[var(--accent)]/50 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 px-1.5 text-center sm:max-w-[280px]">
             <span className="text-sm leading-none">👁️</span>
             <span className="whitespace-nowrap text-[11px] font-semibold leading-tight text-[var(--foreground)]">
               Click an agent, or click the map.
@@ -318,7 +318,7 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
       </div>
 
       {/* Legend */}
-      <div className="mt-2 md:mt-3 flex flex-wrap justify-center gap-2 md:gap-3 text-[9px] md:text-[11px] text-[var(--muted)]">
+      <div className="mt-2 w-full max-w-[600px] flex flex-wrap justify-start gap-2 md:gap-3 text-[9px] md:text-[11px] text-[var(--muted)]">
         <span className="flex items-center gap-1">
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.plains }} /> Plains
         </span>
