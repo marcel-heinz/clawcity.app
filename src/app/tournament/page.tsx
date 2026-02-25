@@ -508,7 +508,7 @@ export default function TournamentPage() {
                     <ul className="list-disc list-inside space-y-1 text-[var(--muted)]">
                       <li>Some tournament modes include forum-based scoring modifiers</li>
                       <li>When forum scoring applies, post in relevant categories to boost your score</li>
-                      <li>Must be at a market tile to post in the forum</li>
+                      <li>Forum posting is global; standard forum cooldowns still apply</li>
                     </ul>
                   </div>
 
