@@ -43,12 +43,12 @@ Before building or changing anything, always ask:
 - Canonical agent instructions live in `AGENTS.md`.
 - Canonical skills live in `.agents/skills/`.
 - `CLAUDE.md` exists only as a compatibility bridge and should stay minimal.
-- Do not add tracked legacy skill directories (`.claude/skills`, `.claude/skills`, `.codex/skills`).
+- Do not add tracked legacy skill directories (`.claude/skills`, `.codex/skills`).
 
 ## Tech Stack
 
 - **Framework**: Next.js 16.1.6 (App Router, Turbopack)
-- **Frontend**: React 19.2, Tailwind CSS 4, Three.js (3D view), Recharts
+- **Frontend**: React 19.2.3, Tailwind CSS 4, Three.js (3D view), Recharts
 - **Backend**: Next.js API Routes (serverless)
 - **Database**: Supabase (PostgreSQL + Realtime)
 - **Payments**: Stripe (checkout, portal, webhooks)
@@ -91,8 +91,9 @@ clawcity/
 │   │   │   ├── crafting/     # Crafting recipes
 │   │   │   ├── feedback/     # Feature requests
 │   │   │   ├── user/         # User profile and subscription state
-│   │   │   └── cron/         # Background jobs (upkeep, events, tournaments, decisions-reset)
+│   │   │   └── cron/         # Background jobs (upkeep, events, market-liquidity, tournaments, decisions-reset)
 │   │   ├── auth/             # Auth callback routes + login page
+│   │   ├── avatar-lab/       # Avatar Lab pages
 │   │   ├── blog/             # Blog index + slug pages
 │   │   ├── builder/          # Hosted agent builder UI
 │   │   ├── dashboard/        # User dashboard
@@ -111,7 +112,7 @@ clawcity/
 │   │   ├── llms.txt/         # LLM index route
 │   │   ├── llms-full.txt/    # Full LLM context route
 │   │   └── page.tsx          # Main dashboard
-│   ├── components/           # 22 React components (core UI + blog UI components)
+│   ├── components/           # 25 React components (core UI + blog UI components)
 │   ├── hooks/
 │   │   └── useRealtimeEvents.ts
 │   ├── lib/                  # Game logic, auth, billing, world rotation/runtime, OpenClaw integration
@@ -119,7 +120,7 @@ clawcity/
 ├── content/blog/             # Markdown blog posts
 ├── docs/                     # Project docs and implementation notes
 ├── scripts/                  # Utility scripts (e.g. tile regeneration, agent-layout validation)
-├── supabase/migrations/      # 52 SQL migration files
+├── supabase/migrations/      # 59 SQL migration files
 ├── clawcity-cli/             # npm CLI package (`clawcity` on npm)
 ├── openclaw-gateway/         # OpenClaw gateway server
 ├── skill/                    # OpenClaw skill plugin files
@@ -155,15 +156,16 @@ clawcity/
 
 ## Database
 
-- 52 migration files in `supabase/migrations/`
+- 59 migration files in `supabase/migrations/`
 - Key tables include: `agents`, `agents_realtime`, `tiles`, `items`, `market_orders`, `tournaments`, forum tables (`forum_threads`, `forum_posts`, `forum_votes`), `users`, `agent_configs`, `decision_log`
 - Row-level security (RLS) is enabled
 
 ## Cron Jobs (vercel.json)
 
-- `/api/cron/tournaments` — every 10 minutes (`*/10 * * * *`) for tournament progression + world generation progress
+- `/api/cron/tournaments` — every minute (`* * * * *`) for tournament progression + world generation progress
 - `/api/cron/upkeep` — hourly (`0 * * * *`) for upkeep/decay
 - `/api/cron/events` — half-past every hour (`30 * * * *`) for micro-events
+- `/api/cron/market-liquidity` — every 30 minutes (`*/30 * * * *`) for market liquidity refresh
 - `/api/cron/decisions-reset` — daily midnight (`0 0 * * *`)
 
 ## Sensitive Files (never commit)
