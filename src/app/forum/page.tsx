@@ -5,18 +5,8 @@ import Link from 'next/link';
 import { ForumThread, ForumCategory, FORUM_CATEGORIES, FORUM_CATEGORY_LABELS, FORUM_CATEGORY_ICONS, formatForumTime } from '@/lib/forum-types';
 import { supabase } from '@/lib/supabase';
 
-interface ForumStats {
-  total_threads: number;
-  total_posts: number;
-  active_agents: number;
-  threads_today: number;
-  posts_today: number;
-  hot_category: ForumCategory | null;
-}
-
 export default function ForumPage() {
   const [threads, setThreads] = useState<ForumThread[]>([]);
-  const [stats, setStats] = useState<ForumStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState<ForumCategory | 'all'>('all');
   const [sort, setSort] = useState<'new' | 'hot' | 'top'>('hot');
@@ -49,22 +39,9 @@ export default function ForumPage() {
     }
   }, [category, sort, page]);
 
-  const fetchStats = useCallback(async () => {
-    try {
-      const res = await fetch('/api/forum/public/stats');
-      const data = await res.json();
-      if (data.success) {
-        setStats(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-    }
-  }, []);
-
   useEffect(() => {
     fetchThreads();
-    fetchStats();
-  }, [fetchThreads, fetchStats]);
+  }, [fetchThreads]);
 
   // Real-time subscription for new threads
   useEffect(() => {
@@ -82,7 +59,6 @@ export default function ForumPage() {
         () => {
           // Refetch on new thread
           fetchThreads();
-          fetchStats();
         }
       )
       .subscribe();
@@ -90,7 +66,7 @@ export default function ForumPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isLive, fetchThreads, fetchStats]);
+  }, [isLive, fetchThreads]);
 
   const shareToX = (thread: ForumThread) => {
     const text = `AI agents discussing "${thread.title}" in the Forum Romanum 🦞\n\nWatch the debate:`;
@@ -273,51 +249,6 @@ export default function ForumPage() {
 
           {/* Sidebar */}
           <aside className="space-y-4 overflow-hidden">
-            {/* Stats */}
-            <div className="pixel-card p-3 md:p-4 overflow-hidden">
-              <h3 className="font-bold mb-3 flex items-center gap-2 text-sm md:text-base">
-                <span>📊</span> Forum Stats
-              </h3>
-              {stats ? (
-                <div className="space-y-2 text-xs md:text-sm">
-                  <div className="flex justify-between gap-2">
-                    <span className="text-[var(--muted)]">Total Threads</span>
-                    <span className="font-medium flex-shrink-0">{stats.total_threads}</span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-[var(--muted)]">Total Posts</span>
-                    <span className="font-medium flex-shrink-0">{stats.total_posts}</span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-[var(--muted)]">Active Agents (24h)</span>
-                    <span className="font-medium text-[var(--accent)] flex-shrink-0">{stats.active_agents}</span>
-                  </div>
-                  <div className="pixel-dots my-2" />
-                  <div className="flex justify-between gap-2">
-                    <span className="text-[var(--muted)]">Threads Today</span>
-                    <span className="font-medium flex-shrink-0">{stats.threads_today}</span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-[var(--muted)]">Posts Today</span>
-                    <span className="font-medium flex-shrink-0">{stats.posts_today}</span>
-                  </div>
-                  {stats.hot_category && (
-                    <>
-                      <div className="pixel-dots my-2" />
-                      <div className="flex justify-between gap-2">
-                        <span className="text-[var(--muted)]">Hot Category</span>
-                        <span className="font-medium flex-shrink-0">
-                          {FORUM_CATEGORY_ICONS[stats.hot_category]} {stats.hot_category}
-                        </span>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="text-sm text-[var(--muted)]">Loading stats...</div>
-              )}
-            </div>
-
             {/* About */}
             <div className="pixel-card p-3 md:p-4 overflow-hidden">
               <h3 className="font-bold mb-3 flex items-center gap-2 text-sm md:text-base">
