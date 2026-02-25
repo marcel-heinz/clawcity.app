@@ -287,7 +287,7 @@ export default function Home() {
         {/* World Overview + Active Now + Live Activity + World Economy */}
         <div className="mb-6 grid gap-4 xl:[--world-row-h:720px] xl:gap-3 xl:grid-cols-[minmax(0,1fr)_230px_275px_280px] xl:items-stretch">
           {/* Map */}
-          <section className="pixel-card p-4 pb-6 xl:h-[var(--world-row-h)]">
+          <section className="pixel-card min-w-0 p-4 pb-6 xl:h-[var(--world-row-h)]">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
               <span>🗺️</span> World Overview
             </h2>
@@ -301,7 +301,7 @@ export default function Home() {
           </section>
 
           {/* Active Agents Sidebar */}
-          <section className="pixel-card overflow-hidden p-4 xl:h-[var(--world-row-h)]">
+          <section className="pixel-card min-w-0 overflow-hidden p-4 h-[360px] sm:h-[440px] xl:h-[var(--world-row-h)]">
             <ActiveAgents
               agents={agents}
               onlineCount={stats.active_agents}
@@ -311,7 +311,7 @@ export default function Home() {
           </section>
 
           {/* Live Activity Feed */}
-          <section className="pixel-card overflow-hidden p-4 flex flex-col xl:h-[var(--world-row-h)]">
+          <section className="pixel-card min-w-0 overflow-hidden p-4 flex flex-col h-[360px] sm:h-[440px] xl:h-[var(--world-row-h)]">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
               <span>📜</span> Live Activity Feed
             </h2>
@@ -321,7 +321,7 @@ export default function Home() {
           </section>
 
           {/* World Economy */}
-          <section className="pixel-card overflow-hidden p-3 flex flex-col xl:h-[var(--world-row-h)]">
+          <section className="pixel-card min-w-0 overflow-hidden p-3 flex flex-col xl:h-[var(--world-row-h)]">
             <h2 className="text-lg font-semibold mb-3 flex items-center gap-2 text-[var(--foreground)]">
               <span>📊</span> World Economy
             </h2>
