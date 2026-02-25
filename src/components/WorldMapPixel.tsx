@@ -195,23 +195,23 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
   return (
     <div className="relative">
       {/* Stats + follow hint header */}
-      <div className="mx-auto mb-3 flex w-full max-w-[650px] flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-3 flex w-full max-w-[600px] flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 md:gap-3">
-          <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
+          <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)] sm:h-11">
             <span>🦀</span>
             <span className="font-bold text-[var(--gold)]">{totalAgents}</span>
             <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">total agents</span>
           </div>
-          <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
+          <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)] sm:h-11">
             <span>👥</span>
             <span className="font-bold text-[var(--accent)]">{displayedOnlineCount}</span>
             <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">active agents</span>
           </div>
         </div>
-        <div className="flex sm:-translate-y-1 sm:justify-end">
-          <div className="flex w-fit max-w-full items-center justify-center gap-2 rounded-lg border-2 border-[var(--accent)]/50 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 px-4 py-2 text-center animate-pulse">
+        <div className="flex sm:h-11 sm:-translate-y-1 sm:justify-end">
+          <div className="flex h-full w-fit max-w-full items-center justify-center gap-2 rounded-lg border-2 border-[var(--accent)]/50 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 px-4 py-2 text-center animate-pulse">
             <span className="text-lg leading-none">👁️</span>
-            <span className="text-sm font-semibold leading-tight text-[var(--foreground)]">
+            <span className="text-sm font-semibold leading-tight text-[var(--foreground)] sm:whitespace-nowrap">
               Click an agent to follow them, or click the map to explore freely!
             </span>
             <span className="text-lg leading-none">🗺️</span>
@@ -220,7 +220,7 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
       </div>
 
       {/* The Map Canvas */}
-      <div className="relative mx-auto rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]" style={{ maxWidth: '650px' }}>
+      <div className="relative rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]" style={{ maxWidth: '600px' }}>
         <canvas
           ref={canvasRef}
           width={GRID_SIZE * PIXEL_SIZE}

@@ -282,16 +282,10 @@ export default function Home() {
         <div className="mb-4 flex items-center gap-3">
           <h2 className="text-lg md:text-xl font-bold text-[var(--foreground)] whitespace-nowrap">Explore the World</h2>
           <div className="flex-1 pixel-dots" />
-          <button
-            onClick={() => setSpectatorPos({ x: 250, y: 250 })}
-            className="px-4 py-2 bg-[var(--surface)] border-2 border-[var(--border)] hover:border-[var(--accent)] hover:bg-[var(--surface-alt)] text-[var(--foreground)] text-sm font-semibold transition-colors flex items-center gap-2 pixel-btn"
-          >
-            <span>👁️</span> Explore in 3D
-          </button>
         </div>
 
-        {/* World Map + Active Agents Sidebar */}
-        <div className="grid lg:grid-cols-[1fr_280px] gap-4 mb-6">
+        {/* World Overview + Active Agents + Live Activity */}
+        <div className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_280px_320px]">
           {/* Map */}
           <section className="pixel-card p-4">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
@@ -315,24 +309,18 @@ export default function Home() {
               isConnected={isConnected}
             />
           </section>
-        </div>
 
-        {/* Section: Live Activity */}
-        <div className="mb-4 flex items-center gap-3">
-          <h2 className="text-lg md:text-xl font-bold text-[var(--foreground)] whitespace-nowrap">Live Activity</h2>
-          <div className="flex-1 pixel-dots" />
-        </div>
-
-        {/* Secondary Grid - Activity, Stats, Leaderboard */}
-        <div className="grid lg:grid-cols-[1fr_320px_280px] gap-4">
-          {/* Activity Feed */}
-          <section className="pixel-card p-4">
+          {/* Live Activity Feed */}
+          <section className="pixel-card p-4 lg:col-span-2 xl:col-span-1">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
-              <span>📜</span> Activity Feed
+              <span>📜</span> Live Activity Feed
             </h2>
-            <ActivityFeed events={events} maxHeight="400px" isConnected={isConnected} />
+            <ActivityFeed events={events} maxHeight="500px" isConnected={isConnected} />
           </section>
+        </div>
 
+        {/* Secondary Grid - Stats, Leaderboard */}
+        <div className="grid lg:grid-cols-[1fr_280px] gap-4">
           {/* Stats */}
           <section className="pixel-card p-4">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
