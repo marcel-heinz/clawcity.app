@@ -195,7 +195,7 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
   return (
     <div className="relative">
       {/* Stats + follow hint header */}
-      <div className="mb-3 flex w-full max-w-[560px] items-center gap-1.5 text-sm">
+      <div className="mb-3 flex w-full max-w-[580px] items-center gap-1.5 text-sm">
         <div className="flex h-9 shrink-0 items-center gap-1 border-2 border-[var(--border)] bg-[var(--surface-alt)] px-2">
           <span>🦀</span>
           <span className="font-bold text-[var(--gold)]">{totalAgents}</span>
@@ -216,7 +216,7 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
       </div>
 
       {/* The Map Canvas */}
-      <div className="relative w-full max-w-[560px] rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]">
+      <div className="relative w-full max-w-[580px] rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]">
         <canvas
           ref={canvasRef}
           width={GRID_SIZE * PIXEL_SIZE}
@@ -314,7 +314,7 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
       </div>
 
       {/* Legend */}
-      <div className="mt-2 w-full max-w-[560px] flex flex-nowrap items-center justify-start gap-1.5 whitespace-nowrap text-[8px] sm:text-[9px] md:text-[11px] text-[var(--muted)]">
+      <div className="mt-2 w-full max-w-[580px] flex flex-nowrap items-center justify-start gap-1.5 whitespace-nowrap text-[8px] sm:text-[9px] md:text-[11px] text-[var(--muted)]">
         <span className="flex shrink-0 items-center gap-1">
           <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.plains }} />
           <span className="sm:hidden">Pl</span>
