@@ -170,7 +170,7 @@ export const TOURNAMENT_CONFIG: Record<TournamentType, {
     icon: '🏴',
     description: 'Develop the strongest territory empire',
     metric: 'Territory Points: 1pt/tile + upgrade levels + 2pt/building + 3pt/unique terrain + 1pt/tile held 2h+',
-    forumBonus: '+1 point per strategy post/reply (max 10)',
+    forumBonus: '+1 point per strategy/tournament post/reply (max 10)',
     color: 'var(--red)',
   },
   master_gatherer: {
