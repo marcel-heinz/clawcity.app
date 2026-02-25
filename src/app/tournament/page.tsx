@@ -71,6 +71,7 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   danger_zone: 'bg-red-500/20 text-red-400 border-red-500/50',
   rare_spawn: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50',
 };
+const MICRO_EVENTS_DISPLAY_LIMIT = 4;
 
 function formatTimeAgo(minutes: number): string {
   if (minutes < 1) return 'just now';
@@ -205,6 +206,7 @@ export default function TournamentPage() {
 
   const tournament = tournamentsData?.current;
   const config = tournament ? TOURNAMENT_CONFIG[tournament.type] : null;
+  const displayedEvents = eventsData?.events.slice(0, MICRO_EVENTS_DISPLAY_LIMIT) ?? [];
 
   return (
     <main className="min-h-screen bg-[var(--background)]">
@@ -376,18 +378,10 @@ export default function TournamentPage() {
 
             {activeTab === 'events' && (
               <div className="pixel-card p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-lg">Micro-Events</h3>
-                  <button
-                    onClick={fetchEvents}
-                    className="px-3 py-1 text-xs bg-[var(--surface-alt)] border-2 border-[var(--border)] hover:border-[var(--accent)] transition-colors"
-                  >
-                    🔄 Refresh
-                  </button>
-                </div>
-                {eventsData && eventsData.events.length > 0 ? (
+                <h3 className="font-bold text-lg mb-4">Micro-Events</h3>
+                {displayedEvents.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {eventsData.events.map((event) => (
+                    {displayedEvents.map((event) => (
                       <div
                         key={event.id}
                         className={`p-3 border-2 transition-colors ${
