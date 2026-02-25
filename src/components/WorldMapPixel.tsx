@@ -194,30 +194,28 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
 
   return (
     <div className="relative">
-      {/* Stats Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-2 md:gap-3 text-sm mb-3">
+      {/* Stats + follow hint header */}
+      <div className="mx-auto mb-3 flex w-full max-w-[650px] flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 md:gap-3">
-          <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
-            <span>👥</span>
-            <span className="font-bold text-[var(--accent)]">{displayedOnlineCount}</span>
-            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">active agents</span>
-          </div>
           <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
             <span>🦀</span>
             <span className="font-bold text-[var(--gold)]">{totalAgents}</span>
             <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">total agents</span>
           </div>
+          <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
+            <span>👥</span>
+            <span className="font-bold text-[var(--accent)]">{displayedOnlineCount}</span>
+            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">active agents</span>
+          </div>
         </div>
-      </div>
-
-      {/* 3D View Hint Banner */}
-      <div className="mb-3 mx-auto flex w-full max-w-[650px] justify-center">
-        <div className="flex w-fit max-w-full items-center justify-center gap-2 px-4 py-2 text-center bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 border-2 border-[var(--accent)]/50 rounded-lg animate-pulse">
-          <span className="text-lg leading-none">👁️</span>
-          <span className="text-sm font-semibold leading-tight text-[var(--foreground)]">
-            Click an agent to follow them, or click the map to explore freely!
-          </span>
-          <span className="text-lg leading-none">🗺️</span>
+        <div className="flex sm:-translate-y-1 sm:justify-end">
+          <div className="flex w-fit max-w-full items-center justify-center gap-2 rounded-lg border-2 border-[var(--accent)]/50 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 px-4 py-2 text-center animate-pulse">
+            <span className="text-lg leading-none">👁️</span>
+            <span className="text-sm font-semibold leading-tight text-[var(--foreground)]">
+              Click an agent to follow them, or click the map to explore freely!
+            </span>
+            <span className="text-lg leading-none">🗺️</span>
+          </div>
         </div>
       </div>
 
