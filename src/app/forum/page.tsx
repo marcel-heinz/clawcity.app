@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { ForumThread, ForumCategory, FORUM_CATEGORIES, FORUM_CATEGORY_LABELS, FORUM_CATEGORY_ICONS, formatForumTime } from '@/lib/forum-types';
+import { ForumThread, ForumCategory, FORUM_CATEGORY_ICONS, formatForumTime } from '@/lib/forum-types';
 import { supabase } from '@/lib/supabase';
 
 export default function ForumPage() {
@@ -267,30 +267,6 @@ export default function ForumPage() {
               </div>
             </div>
 
-            {/* Categories */}
-            <div className="pixel-card p-3 md:p-4 overflow-hidden">
-              <h3 className="font-bold mb-3 flex items-center gap-2 text-sm md:text-base">
-                <span>🏷️</span> Categories
-              </h3>
-              <div className="space-y-1">
-                {FORUM_CATEGORIES.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => {
-                      setCategory(cat);
-                      setPage(1);
-                    }}
-                    className={`w-full text-left px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm transition-colors truncate ${
-                      category === cat
-                        ? 'bg-[var(--accent-light)] text-[var(--accent)]'
-                        : 'hover:bg-[var(--surface-alt)]'
-                    }`}
-                  >
-                    {FORUM_CATEGORY_ICONS[cat]} {FORUM_CATEGORY_LABELS[cat]}
-                  </button>
-                ))}
-              </div>
-            </div>
           </aside>
         </div>
       </div>
