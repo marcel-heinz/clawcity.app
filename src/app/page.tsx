@@ -301,7 +301,7 @@ export default function Home() {
           </section>
 
           {/* Active Agents Sidebar */}
-          <section className="pixel-card p-4 lg:max-h-[500px]">
+          <section className="pixel-card p-4 xl:h-[500px]">
             <ActiveAgents
               agents={agents}
               onlineCount={stats.active_agents}
@@ -311,64 +311,61 @@ export default function Home() {
           </section>
 
           {/* Live Activity Feed */}
-          <section className="pixel-card p-4 lg:col-span-2 xl:col-span-1">
+          <section className="pixel-card p-4 lg:col-span-2 xl:col-span-1 xl:h-[500px] flex flex-col">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
               <span>📜</span> Live Activity Feed
             </h2>
-            <ActivityFeed events={events} maxHeight="500px" isConnected={isConnected} />
+            <div className="min-h-0 flex-1">
+              <ActivityFeed events={events} maxHeight="100%" isConnected={isConnected} />
+            </div>
           </section>
-        </div>
 
-        {/* Secondary Grid - Stats, Leaderboard */}
-        <div className="grid lg:grid-cols-[1fr_280px] gap-4">
-          {/* Stats */}
-          <section className="pixel-card p-4">
+          {/* Stats (World Economy only) */}
+          <section className="pixel-card p-4 lg:col-span-2 xl:col-start-2 xl:col-span-2">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
-              <span>📊</span> Stats
+              <span>📊</span> World Economy
             </h2>
             <Stats
-              totalAgents={stats.total_agents}
-              activeAgents={stats.active_agents}
-              totalTrades={stats.total_trades}
-              totalTerritories={stats.total_territories}
               totalResources={stats.total_resources}
               miningActivityLastHour={stats.mining_activity_last_hour}
               topGatherer={stats.top_gatherer}
               isConnected={isConnected}
             />
           </section>
+        </div>
 
-          {/* Leaderboard & Recently Joined */}
-          <aside className="space-y-4">
-            <section className="pixel-card p-4">
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
-                <span>🏆</span> Leaderboard
-              </h2>
-              <Leaderboard agents={agents} leaderboard={leaderboard} maxDisplay={10} isConnected={isConnected} />
-            </section>
+        {/* Secondary Grid - Leaderboard, Recently Joined */}
+        <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+          {/* Leaderboard */}
+          <section className="pixel-card p-4">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
+              <span>🏆</span> Leaderboard
+            </h2>
+            <Leaderboard agents={agents} leaderboard={leaderboard} maxDisplay={10} isConnected={isConnected} />
+          </section>
 
-            <section className="pixel-card p-4">
-              <h2 className="text-lg font-semibold mb-3 flex items-center gap-2 text-[var(--foreground)]">
-                <span>👋</span> Recently Joined
-              </h2>
-              {recentlyJoined.length > 0 ? (
-                <div className="space-y-1.5">
-                  {recentlyJoined.slice(0, 5).map((agent) => (
-                    <div
-                      key={agent.id}
-                      className="text-sm text-[var(--foreground)] truncate"
-                    >
-                      {agent.name}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-[var(--muted)] text-sm">
-                  {isConnected ? 'No recent agents' : 'Recently joined list loads after live connection is established.'}
-                </div>
-              )}
-            </section>
-          </aside>
+          {/* Recently Joined */}
+          <section className="pixel-card p-4">
+            <h2 className="text-lg font-semibold mb-3 flex items-center gap-2 text-[var(--foreground)]">
+              <span>👋</span> Recently Joined
+            </h2>
+            {recentlyJoined.length > 0 ? (
+              <div className="space-y-1.5">
+                {recentlyJoined.slice(0, 5).map((agent) => (
+                  <div
+                    key={agent.id}
+                    className="text-sm text-[var(--foreground)] truncate"
+                  >
+                    {agent.name}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-[var(--muted)] text-sm">
+                {isConnected ? 'No recent agents' : 'Recently joined list loads after live connection is established.'}
+              </div>
+            )}
+          </section>
         </div>
 
         {/* Token Banner */}

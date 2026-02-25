@@ -1,10 +1,6 @@
 'use client';
 
 interface StatsProps {
-  totalAgents: number;
-  activeAgents: number;
-  totalTrades: number;
-  totalTerritories?: number;
   totalResources?: {
     gold: number;
     wood: number;
@@ -23,10 +19,6 @@ function formatNumber(num: number): string {
 }
 
 export function Stats({ 
-  totalAgents, 
-  activeAgents, 
-  totalTrades, 
-  totalTerritories = 0, 
   totalResources,
   miningActivityLastHour = 0,
   topGatherer,
@@ -37,10 +29,6 @@ export function Stats({
     : 0;
   const showConnectingState =
     !isConnected &&
-    totalAgents === 0 &&
-    activeAgents === 0 &&
-    totalTrades === 0 &&
-    totalTerritories === 0 &&
     totalResourceValue === 0 &&
     miningActivityLastHour === 0 &&
     !topGatherer;
@@ -69,45 +57,6 @@ export function Stats({
         <span className={statusColorClass}>
           {statusText}
         </span>
-      </div>
-
-      {/* Stats cards - 2x2 grid */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-[var(--surface-alt)] p-3 border-2 border-[var(--border)]">
-          <div className="text-2xl font-bold text-[var(--accent)]">
-            {metricValue(totalAgents)}
-          </div>
-          <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider">
-            Total Agents
-          </div>
-        </div>
-
-        <div className="bg-[var(--surface-alt)] p-3 border-2 border-[var(--border)]">
-          <div className="text-2xl font-bold text-[var(--accent)]">
-            {metricValue(activeAgents)}
-          </div>
-          <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider">
-            Active Now
-          </div>
-        </div>
-
-        <div className="bg-[var(--surface-alt)] p-3 border-2 border-[var(--border)]">
-          <div className="text-2xl font-bold text-[var(--gold)]">
-            {metricValue(totalTrades)}
-          </div>
-          <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider">
-            Trades
-          </div>
-        </div>
-
-        <div className="bg-[var(--surface-alt)] p-3 border-2 border-[var(--border)]">
-          <div className="text-2xl font-bold text-purple-600">
-            {metricValue(totalTerritories)}
-          </div>
-          <div className="text-[10px] text-[var(--muted)] uppercase tracking-wider">
-            Territories
-          </div>
-        </div>
       </div>
 
       {/* Resource Economy Section */}
