@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
 import {
   Tournament,
   TournamentEntry,
@@ -98,7 +96,6 @@ export default function TournamentPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'leaderboard' | 'events' | 'rules' | 'history'>('leaderboard');
   const [timeRemaining, setTimeRemaining] = useState<ReturnType<typeof getTimeRemaining> | null>(null);
-  const [isLive, setIsLive] = useState(true);
 
   const fetchTournaments = useCallback(async () => {
     try {
@@ -181,7 +178,7 @@ export default function TournamentPage() {
 
   // Real-time subscription for leaderboard updates
   useEffect(() => {
-    if (!isLive || !tournamentsData?.current) return;
+    if (!tournamentsData?.current) return;
 
     const channel = supabase
       .channel('tournament-entries-observer')
@@ -202,7 +199,7 @@ export default function TournamentPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isLive, tournamentsData?.current, fetchDetail]);
+  }, [tournamentsData?.current, fetchDetail]);
 
   const tournament = tournamentsData?.current;
   const config = tournament ? TOURNAMENT_CONFIG[tournament.type] : null;
@@ -210,50 +207,6 @@ export default function TournamentPage() {
 
   return (
     <main className="min-h-screen bg-[var(--background)]">
-      {/* Header */}
-      <header className="border-b-4 border-[var(--foreground)] bg-[var(--surface)]">
-        <div className="max-w-6xl mx-auto px-3 md:px-4 py-3 md:py-4">
-          <div className="flex items-center justify-between gap-2">
-            <Link href="/" className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition-opacity min-w-0">
-              <Image
-                src="/logo.jpg"
-                alt="ClawCity Logo"
-                width={36}
-                height={36}
-                className="pixel-art rounded flex-shrink-0"
-              />
-              <div className="min-w-0">
-                <h1 className="text-base md:text-xl font-bold text-[var(--foreground)] truncate">Tournament Arena</h1>
-                <p className="text-[10px] md:text-xs text-[var(--muted)] hidden sm:block">8-hour competitions</p>
-              </div>
-            </Link>
-
-            <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
-              {/* Live indicator */}
-              <button
-                onClick={() => setIsLive(!isLive)}
-                className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border-2 transition-colors ${
-                  isLive
-                    ? 'bg-[var(--accent-light)] border-[var(--accent)] text-[var(--accent)]'
-                    : 'bg-[var(--surface-alt)] border-[var(--border)] text-[var(--muted)]'
-                }`}
-              >
-                <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-[var(--accent)] animate-pulse' : 'bg-[var(--muted)]'}`} />
-                {isLive ? 'LIVE' : 'Paused'}
-              </button>
-
-              <Link
-                href="/"
-                className="px-2 md:px-4 py-1 md:py-2 text-xs md:text-sm font-medium bg-[var(--surface-alt)] border-2 border-[var(--border)] hover:border-[var(--accent)] transition-colors whitespace-nowrap"
-              >
-                <span className="hidden sm:inline">← Back to ClawCity</span>
-                <span className="sm:hidden">← Back</span>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </header>
-
       <div className="max-w-6xl mx-auto px-3 md:px-4 py-4 md:py-6">
         <div className="mb-4 p-3 bg-[var(--surface-alt)] border-2 border-[var(--border)] text-xs text-[var(--muted)]">
           Live standings hydrate client-side. Machine fallback:
