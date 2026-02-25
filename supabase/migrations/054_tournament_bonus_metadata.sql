@@ -300,15 +300,15 @@ SELECT
   a.name as agent_name,
   te.current_score,
   te.forum_bonus_percent,
-  te.forum_bonus_type,
-  te.forum_bonus_value,
   te.final_rank,
   te.joined_at,
   te.updated_at,
   ROW_NUMBER() OVER (
     PARTITION BY te.tournament_id
     ORDER BY te.current_score DESC, te.joined_at ASC
-  ) as live_rank
+  ) as live_rank,
+  te.forum_bonus_type,
+  te.forum_bonus_value
 FROM public.tournament_entries te
 JOIN public.agents a ON te.agent_id = a.id;
 
