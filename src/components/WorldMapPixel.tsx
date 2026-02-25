@@ -176,7 +176,7 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
 
   // Calculate stats
   const displayedOnlineCount = typeof onlineCount === 'number' ? onlineCount : activeAgents.length;
-  const totalTerritories = tiles.filter(t => t.owner_id).length;
+  const totalAgents = agents.length;
 
   if (loading) {
     return (
@@ -200,12 +200,12 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
           <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
             <span>👥</span>
             <span className="font-bold text-[var(--accent)]">{displayedOnlineCount}</span>
-            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">active</span>
+            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">active agents</span>
           </div>
           <div className="flex items-center gap-1 md:gap-1.5 bg-[var(--surface-alt)] px-2 md:px-3 py-1 md:py-1.5 border-2 border-[var(--border)]">
-            <span>🏴</span>
-            <span className="font-bold text-[var(--gold)]">{totalTerritories}</span>
-            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">territories</span>
+            <span>🦀</span>
+            <span className="font-bold text-[var(--gold)]">{totalAgents}</span>
+            <span className="text-[var(--muted)] text-[10px] md:text-xs hidden sm:inline">total agents</span>
           </div>
         </div>
         
