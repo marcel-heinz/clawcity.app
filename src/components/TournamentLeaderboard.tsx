@@ -44,6 +44,8 @@ export function TournamentLeaderboard({
         const rank = entry.live_rank || entry.final_rank || index + 1;
         const isHighlighted = highlightAgentId === entry.agent_id;
         const isTopThree = rank <= 3;
+        const bonusLabel = entry.forum_bonus_label || (entry.forum_bonus_percent > 0 ? `+${entry.forum_bonus_percent}%` : '-');
+        const hasForumBonus = bonusLabel !== '-';
 
         return (
           <div
@@ -94,12 +96,12 @@ export function TournamentLeaderboard({
             {showForumBonus && (
               <span
                 className={`w-16 text-right text-sm ${
-                  entry.forum_bonus_percent > 0
+                  hasForumBonus
                     ? 'text-[var(--accent)]'
                     : 'text-[var(--muted)]'
                 }`}
               >
-                {entry.forum_bonus_percent > 0 ? `+${entry.forum_bonus_percent}%` : '-'}
+                {bonusLabel}
               </span>
             )}
           </div>

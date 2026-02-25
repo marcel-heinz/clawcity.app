@@ -23,6 +23,15 @@ function toInt(value: unknown, fallback: number): number {
   return fallback;
 }
 
+function getForumBonusLabel(
+  forumBonusPercent: number,
+  forumBonusPoints: number
+): string {
+  if (forumBonusPoints > 0) return `+${forumBonusPoints}`;
+  if (forumBonusPercent > 0) return `+${forumBonusPercent}%`;
+  return '-';
+}
+
 /**
  * GET /api/tournaments/[id]
  * Returns tournament details with full leaderboard
@@ -64,18 +73,125 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    // Get leaderboard from view
-    const { data: leaderboard, error: leaderboardError } = await supabase
-      .from('tournament_leaderboard')
-      .select('*')
+    // Get leaderboard rows directly from tournament entries so forum bonus data is always available.
+    const { data: leaderboardRows, error: leaderboardError } = await supabase
+      .from('tournament_entries')
+      .select(
+        'id, tournament_id, agent_id, current_score, forum_bonus_percent, final_rank, joined_at, updated_at, starting_forum_upvotes'
+      )
       .eq('tournament_id', id)
       .order('current_score', { ascending: false })
+      .order('joined_at', { ascending: true })
       .range(offset, offset + limit - 1);
 
     if (leaderboardError) {
       console.error('Error fetching leaderboard:', leaderboardError);
       return errorResponse('Failed to fetch leaderboard', 500);
     }
+
+    const leaderboardBaseRows = leaderboardRows || [];
+    const leaderboardAgentIds = [...new Set(leaderboardBaseRows.map((row) => row.agent_id))];
+
+    let agentNameMap = new Map<string, string>();
+    if (leaderboardAgentIds.length > 0) {
+      const { data: leaderboardAgents, error: leaderboardAgentsError } = await supabase
+        .from('agents')
+        .select('id, name')
+        .in('id', leaderboardAgentIds);
+
+      if (leaderboardAgentsError) {
+        console.error('Error fetching leaderboard agent names:', leaderboardAgentsError);
+      } else {
+        agentNameMap = new Map((leaderboardAgents || []).map((agent) => [agent.id, agent.name]));
+      }
+    }
+
+    const strategyBonusMap = new Map<string, number>();
+    if (tournament.type === 'territory_conqueror' && leaderboardAgentIds.length > 0) {
+      const tournamentEnd = new Date(tournament.ends_at).getTime();
+      const boundedUpperTime = Number.isFinite(tournamentEnd) ? Math.min(Date.now(), tournamentEnd) : Date.now();
+      const upperBound = new Date(boundedUpperTime).toISOString();
+
+      const { data: strategyRows, error: strategyError } = await supabase
+        .from('forum_threads')
+        .select('author_id')
+        .eq('category', 'strategy')
+        .in('author_id', leaderboardAgentIds)
+        .gte('created_at', tournament.starts_at)
+        .lte('created_at', upperBound);
+
+      if (strategyError) {
+        console.error('Error fetching strategy forum bonuses:', strategyError);
+      } else {
+        for (const row of strategyRows || []) {
+          strategyBonusMap.set(row.author_id, (strategyBonusMap.get(row.author_id) || 0) + 1);
+        }
+      }
+    }
+
+    const upvotesByAgentMap = new Map<string, number>();
+    if (
+      (tournament.type === 'wealth_sprint' || tournament.type === 'master_gatherer') &&
+      tournament.status === 'active' &&
+      leaderboardAgentIds.length > 0
+    ) {
+      const [{ data: threadUpvotes, error: threadUpvotesError }, { data: postUpvotes, error: postUpvotesError }] =
+        await Promise.all([
+          supabase
+            .from('forum_threads')
+            .select('author_id, vote_count')
+            .in('author_id', leaderboardAgentIds),
+          supabase
+            .from('forum_posts')
+            .select('author_id, vote_count')
+            .in('author_id', leaderboardAgentIds),
+        ]);
+
+      if (threadUpvotesError) {
+        console.error('Error fetching thread upvotes for leaderboard bonuses:', threadUpvotesError);
+      }
+      if (postUpvotesError) {
+        console.error('Error fetching post upvotes for leaderboard bonuses:', postUpvotesError);
+      }
+
+      for (const row of threadUpvotes || []) {
+        upvotesByAgentMap.set(row.author_id, (upvotesByAgentMap.get(row.author_id) || 0) + toInt(row.vote_count, 0));
+      }
+      for (const row of postUpvotes || []) {
+        upvotesByAgentMap.set(row.author_id, (upvotesByAgentMap.get(row.author_id) || 0) + toInt(row.vote_count, 0));
+      }
+    }
+
+    const leaderboard = leaderboardBaseRows.map((row, index) => {
+      const storedForumBonusPercent = Math.max(0, toInt(row.forum_bonus_percent, 0));
+
+      // Wealth/Master Gatherer bonuses are upvote-based and shown live in the leaderboard bonus column.
+      let forumBonusPercent = storedForumBonusPercent;
+      if (
+        tournament.status === 'active' &&
+        (tournament.type === 'wealth_sprint' || tournament.type === 'master_gatherer')
+      ) {
+        const upvotesNow = upvotesByAgentMap.get(row.agent_id) || 0;
+        const startingUpvotes = Math.max(0, toInt(row.starting_forum_upvotes, 0));
+        const gainedUpvotes = Math.max(0, upvotesNow - startingUpvotes);
+        const percentPerUpvote = tournament.type === 'wealth_sprint' ? 5 : 10;
+        forumBonusPercent = Math.min(50, gainedUpvotes * percentPerUpvote);
+      }
+
+      // Territory Conqueror forum bonus is +1 point per strategy thread (max 10), not percent.
+      const forumBonusPoints = tournament.type === 'territory_conqueror'
+        ? Math.min(10, strategyBonusMap.get(row.agent_id) || 0)
+        : 0;
+
+      return {
+        ...row,
+        agent_name: agentNameMap.get(row.agent_id) || 'Unknown',
+        forum_bonus_percent: forumBonusPercent,
+        live_rank: offset + index + 1,
+        forum_bonus_points: forumBonusPoints,
+        forum_bonus_label: getForumBonusLabel(forumBonusPercent, forumBonusPoints),
+      };
+    });
 
     // Get total participant count
     const { count: totalParticipants, error: countError } = await supabase
@@ -236,7 +352,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         pagination: {
           limit,
           offset,
-          has_more: (leaderboard?.length || 0) === limit,
+          has_more: (leaderboard.length || 0) === limit,
         },
       },
     });
