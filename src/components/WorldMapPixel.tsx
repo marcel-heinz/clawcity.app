@@ -195,7 +195,7 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
   return (
     <div className="relative">
       {/* Stats + follow hint header */}
-      <div className="mb-3 flex w-full max-w-[620px] items-center gap-1.5 overflow-x-auto pb-1 text-sm">
+      <div className="mb-3 flex w-full max-w-[560px] items-center gap-1.5 text-sm">
         <div className="flex h-9 shrink-0 items-center gap-1 border-2 border-[var(--border)] bg-[var(--surface-alt)] px-2">
           <span>🦀</span>
           <span className="font-bold text-[var(--gold)]">{totalAgents}</span>
@@ -206,9 +206,9 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
           <span className="font-bold text-[var(--accent)]">{displayedOnlineCount}</span>
           <span className="hidden whitespace-nowrap text-[10px] text-[var(--muted)] sm:inline md:text-xs">active agents</span>
         </div>
-        <div className="flex h-9 shrink-0 max-w-[240px] items-center justify-center gap-1 overflow-hidden rounded-md border-2 border-[var(--accent)]/50 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 px-1.5 text-center sm:max-w-[260px]">
+        <div className="flex h-9 min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden rounded-md border-2 border-[var(--accent)]/50 bg-gradient-to-r from-[var(--accent)]/20 via-[var(--accent)]/30 to-[var(--accent)]/20 px-1.5 text-center sm:max-w-[260px]">
           <span className="text-xs leading-none">👁️</span>
-          <span className="whitespace-nowrap text-[10px] font-semibold leading-tight text-[var(--foreground)] sm:text-[11px]">
+          <span className="truncate text-[10px] font-semibold leading-tight text-[var(--foreground)] sm:text-[11px]">
             Click an agent or click the map.
           </span>
           <span className="text-xs leading-none">🗺️</span>
@@ -216,7 +216,7 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
       </div>
 
       {/* The Map Canvas */}
-      <div className="relative w-full max-w-[620px] rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]">
+      <div className="relative w-full max-w-[560px] rounded-xl md:rounded-2xl overflow-hidden border-4 border-[var(--foreground)] shadow-[8px_8px_0_rgba(45,42,38,0.2)] bg-[#0a0a0a]">
         <canvas
           ref={canvasRef}
           width={GRID_SIZE * PIXEL_SIZE}
@@ -314,32 +314,42 @@ export function WorldMapPixel({ agents, onlineCount, onAgentClick, onMapClick, i
       </div>
 
       {/* Legend */}
-      <div className="mt-2 w-full max-w-[620px] flex flex-nowrap items-center justify-start gap-2 overflow-x-auto whitespace-nowrap text-[9px] md:text-[11px] text-[var(--muted)]">
+      <div className="mt-2 w-full max-w-[560px] flex flex-nowrap items-center justify-start gap-1.5 whitespace-nowrap text-[8px] sm:text-[9px] md:text-[11px] text-[var(--muted)]">
         <span className="flex shrink-0 items-center gap-1">
-          <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.plains }} /> Plains
+          <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.plains }} />
+          <span className="sm:hidden">Pl</span>
+          <span className="hidden sm:inline">Plains</span>
         </span>
         <span className="flex shrink-0 items-center gap-1">
-          <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.forest }} /> Forest
+          <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.forest }} />
+          <span className="sm:hidden">Fo</span>
+          <span className="hidden sm:inline">Forest</span>
         </span>
         <span className="flex shrink-0 items-center gap-1">
-          <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.mountain }} /> Mountain
+          <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.mountain }} />
+          <span className="sm:hidden">Mo</span>
+          <span className="hidden sm:inline">Mountain</span>
         </span>
         <span className="flex shrink-0 items-center gap-1">
-          <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.water }} /> Water
+          <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.water }} />
+          <span className="sm:hidden">Wa</span>
+          <span className="hidden sm:inline">Water</span>
         </span>
         <span className="flex shrink-0 items-center gap-1">
-          <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.market }} /> Market
+          <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.market }} />
+          <span className="sm:hidden">Mk</span>
+          <span className="hidden sm:inline">Market</span>
         </span>
-        <span className="flex shrink-0 items-center gap-1">
+        <span className="hidden sm:flex shrink-0 items-center gap-1">
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.rocky }} /> Rocky
         </span>
-        <span className="flex shrink-0 items-center gap-1">
+        <span className="hidden sm:flex shrink-0 items-center gap-1">
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.sand }} /> Sand
         </span>
-        <span className="flex shrink-0 items-center gap-1">
+        <span className="hidden sm:flex shrink-0 items-center gap-1">
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.deep_water }} /> Deep Water
         </span>
-        <span className="flex shrink-0 items-center gap-1">
+        <span className="hidden sm:flex shrink-0 items-center gap-1">
           <span className="w-3 h-3 md:w-4 md:h-4 rounded" style={{ backgroundColor: TERRAIN_COLORS.marsh }} /> Marsh
         </span>
         <span className="flex shrink-0 items-center gap-1">
