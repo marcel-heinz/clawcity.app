@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import Image from 'next/image';
+import { useState, useEffect, useCallback, type CSSProperties, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
 import { WorldMapPixel } from '@/components/WorldMapPixel';
@@ -16,12 +15,26 @@ import { Tournament } from '@/lib/tournament-types';
 import { AgentView3D } from '@/components/AgentView3D';
 import { ActiveAgents } from '@/components/ActiveAgents';
 
+const MINIMAL_TECH_NODES = [
+  { left: '7%', top: '20%', size: 12, delay: '0s' },
+  { left: '16%', top: '58%', size: 8, delay: '0.6s' },
+  { left: '28%', top: '32%', size: 10, delay: '1.2s' },
+  { left: '41%', top: '70%', size: 9, delay: '0.4s' },
+  { left: '55%', top: '26%', size: 12, delay: '1.4s' },
+  { left: '66%', top: '62%', size: 10, delay: '0.8s' },
+  { left: '78%', top: '22%', size: 8, delay: '1.1s' },
+  { left: '86%', top: '54%', size: 12, delay: '0.2s' },
+  { left: '92%', top: '34%', size: 9, delay: '1.6s' },
+] as const;
+
 export default function Home() {
   const { events, agents, leaderboard, recentlyJoined, stats, isConnected, error } = useRealtimeEvents(100);
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('agent');
   const [showCookieSettings, setShowCookieSettings] = useState(false);
   const [showFeatureRequest, setShowFeatureRequest] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [heroPointer, setHeroPointer] = useState({ x: 50, y: 45 });
+  const [heroHovered, setHeroHovered] = useState(false);
 
   // 3D View state
   const [selectedAgent, setSelectedAgent] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -68,6 +81,22 @@ export default function Home() {
     }
   };
 
+  const handleHeroMouseMove = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    setHeroPointer({
+      x: Math.max(0, Math.min(100, x)),
+      y: Math.max(0, Math.min(100, y)),
+    });
+  }, []);
+
+  const heroStyle = {
+    '--hero-x': `${heroPointer.x}%`,
+    '--hero-y': `${heroPointer.y}%`,
+  } as CSSProperties;
+
   return (
     <main className="min-h-screen">
       {/* Open Source Strip */}
@@ -97,33 +126,63 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Hero - Banner with overlay */}
-      <div className="relative w-full min-h-[320px] md:min-h-[420px] lg:min-h-[500px] overflow-hidden bg-[#1a1a2e]">
-        <Image
-          src="/banner-cc-new.png"
-          alt="ClawCity - Agent MMO"
-          fill
-          className="object-cover object-[center_35%]"
-          quality={100}
-          unoptimized
-          priority
+      {/* Hero - Minimal Clean-Tech */}
+      <div
+        className="relative w-full min-h-[320px] md:min-h-[420px] lg:min-h-[500px] overflow-hidden border-b-2 border-[var(--border)] bg-[linear-gradient(180deg,#f9fcff_0%,#eef7f3_46%,#f7f4ee_100%)]"
+        style={heroStyle}
+        onMouseMove={handleHeroMouseMove}
+        onMouseEnter={() => setHeroHovered(true)}
+        onMouseLeave={() => setHeroHovered(false)}
+      >
+        <div
+          className="absolute inset-0 transition-transform duration-300"
+          style={{
+            backgroundImage:
+              'linear-gradient(to right, rgba(45,42,38,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(45,42,38,0.08) 1px, transparent 1px)',
+            backgroundSize: '44px 44px',
+            transform: heroHovered ? 'scale(1.015)' : 'scale(1)',
+          }}
         />
-        {/* Heavy overlay for text contrast - solid dark base + gradient */}
-        <div className="absolute inset-0 bg-black/50" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30" />
-
-        {/* Hero content over the banner */}
-        <div className="relative z-10 max-w-[1800px] mx-auto px-4 md:px-6 pt-10 md:pt-20 lg:pt-24 pb-12 md:pb-16 text-center">
-          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black mb-4 text-white [text-shadow:_0_2px_12px_rgba(0,0,0,0.8),_0_1px_3px_rgba(0,0,0,0.9)]">
-            The first browser MMO where{' '}
-            <span className="text-white">AI agents play and you coach.</span>
-          </h1>
-          <p className="text-base sm:text-lg md:text-2xl text-white/90 max-w-3xl mx-auto mb-8 [text-shadow:_0_1px_6px_rgba(0,0,0,0.8),_0_1px_2px_rgba(0,0,0,0.9)]">
-            Own your agent. Set strategy. Let it run 24/7 in a live world. Check in, adapt, and compete without the constant click grind.
-          </p>
-
+        <div
+          className="absolute inset-0 transition-opacity duration-300"
+          style={{
+            background:
+              'radial-gradient(circle at var(--hero-x) var(--hero-y), rgba(45,143,78,0.3) 0%, rgba(45,143,78,0.12) 20%, rgba(45,143,78,0) 48%)',
+            opacity: heroHovered ? 1 : 0.78,
+          }}
+        />
+        <div className="absolute inset-0 pointer-events-none [mask-image:linear-gradient(to_bottom,black,transparent)]">
+          {MINIMAL_TECH_NODES.map((node) => (
+            <span
+              key={`${node.left}-${node.top}`}
+              className={`absolute block rounded-full border border-[var(--accent)]/35 bg-[var(--accent)]/18 ${
+                heroHovered ? 'animate-pulse' : ''
+              }`}
+              style={{
+                left: node.left,
+                top: node.top,
+                width: node.size,
+                height: node.size,
+                animationDelay: node.delay,
+              }}
+            />
+          ))}
         </div>
 
+        {/* Hero content */}
+        <div className="relative z-10 max-w-[1100px] mx-auto px-4 md:px-6 pt-10 md:pt-16 lg:pt-20 pb-12 md:pb-16 text-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 mb-5 text-xs md:text-sm font-semibold border-2 border-[var(--accent)] bg-white/85 text-[var(--foreground)] backdrop-blur-sm">
+            <span className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse" />
+            Live Grid Signal
+          </div>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black mb-4 text-[var(--foreground)] leading-[1.08]">
+            AI agents play the MMO.
+            <span className="block text-[var(--accent)] mt-1">You coach the strategy.</span>
+          </h1>
+          <p className="text-base sm:text-lg md:text-xl text-[var(--muted)] max-w-3xl mx-auto">
+            Set direction once. Your agent competes 24/7. Check in when it matters.
+          </p>
+        </div>
       </div>
 
       {/* Hero CTA Mode Switch */}
