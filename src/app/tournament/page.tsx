@@ -69,6 +69,13 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   danger_zone: 'bg-red-500/20 text-red-400 border-red-500/50',
   rare_spawn: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50',
 };
+
+const PODIUM_REWARDS = [
+  { rank: '#1', amount: 5000, tone: 'text-yellow-400' },
+  { rank: '#2', amount: 2000, tone: 'text-gray-300' },
+  { rank: '#3', amount: 1000, tone: 'text-amber-500' },
+] as const;
+
 const MICRO_EVENTS_DISPLAY_LIMIT = 4;
 
 function formatTimeAgo(minutes: number): string {
@@ -238,6 +245,9 @@ export default function TournamentPage() {
                       <span className="px-2 py-0.5 text-xs font-bold bg-[var(--accent)] text-white animate-pulse">
                         LIVE
                       </span>
+                      <span className="px-2 py-0.5 text-xs font-bold bg-[var(--surface-alt)] border border-[var(--border)] text-[var(--foreground)]">
+                        TOURNAMENT MODE
+                      </span>
                       <span className="text-sm text-[var(--muted)]">Cycle #{tournament.week_number}</span>
                       {tournament.week_number === 1 && (
                         <span className="px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-yellow-500 to-amber-500 text-white">
@@ -246,31 +256,53 @@ export default function TournamentPage() {
                       )}
                     </div>
                     <h2 className="text-2xl md:text-3xl font-bold text-[var(--foreground)]">{tournament.name}</h2>
-                    <p className="text-[var(--muted)] mt-1">{config.description}</p>
+                    <p className="text-[var(--muted)] mt-1">Compete for Claw Credits.</p>
+                    <p className="text-xs text-[var(--muted)] mt-2 mb-1">Top 3 Rewards</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {PODIUM_REWARDS.map((reward) => (
+                        <div
+                          key={reward.rank}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-[var(--surface-alt)] border border-[var(--border)] text-xs"
+                        >
+                          <span className="font-semibold text-[var(--foreground)]">{reward.rank}</span>
+                          <span className={`font-bold ${reward.tone}`}>
+                            {reward.amount.toLocaleString()} CC
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-[var(--muted)] mt-2">
+                      Spend credits on jump-start perks.
+                    </p>
                   </div>
                 </div>
 
                 {/* Countdown */}
                 {timeRemaining && !timeRemaining.isEnded && (
-                  <div className="flex items-center gap-3 bg-[var(--surface-alt)] px-4 py-3 border-2 border-[var(--border)]">
-                    <div className="text-center">
-                      <div className="text-3xl font-bold text-[var(--foreground)]">{timeRemaining.days}</div>
-                      <div className="text-xs text-[var(--muted)]">days</div>
-                    </div>
-                    <span className="text-2xl text-[var(--muted)]">:</span>
-                    <div className="text-center">
-                      <div className="text-3xl font-bold text-[var(--foreground)]">{timeRemaining.hours}</div>
-                      <div className="text-xs text-[var(--muted)]">hours</div>
-                    </div>
-                    <span className="text-2xl text-[var(--muted)]">:</span>
-                    <div className="text-center">
-                      <div className="text-3xl font-bold text-[var(--foreground)]">{timeRemaining.minutes}</div>
-                      <div className="text-xs text-[var(--muted)]">min</div>
-                    </div>
-                    <span className="text-2xl text-[var(--muted)]">:</span>
-                    <div className="text-center">
-                      <div className="text-3xl font-bold text-[var(--accent)]">{timeRemaining.seconds}</div>
-                      <div className="text-xs text-[var(--muted)]">sec</div>
+                  <div className="bg-[var(--surface-alt)] px-4 py-3 border-2 border-[var(--border)]">
+                    <p className="text-[10px] font-semibold tracking-wide uppercase text-[var(--muted)] text-center mb-1">
+                      Ends In
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-[var(--foreground)]">{timeRemaining.days}</div>
+                        <div className="text-xs text-[var(--muted)]">days</div>
+                      </div>
+                      <span className="text-2xl text-[var(--muted)]">:</span>
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-[var(--foreground)]">{timeRemaining.hours}</div>
+                        <div className="text-xs text-[var(--muted)]">hours</div>
+                      </div>
+                      <span className="text-2xl text-[var(--muted)]">:</span>
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-[var(--foreground)]">{timeRemaining.minutes}</div>
+                        <div className="text-xs text-[var(--muted)]">min</div>
+                      </div>
+                      <span className="text-2xl text-[var(--muted)]">:</span>
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-[var(--accent)]">{timeRemaining.seconds}</div>
+                        <div className="text-xs text-[var(--muted)]">sec</div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -443,6 +475,7 @@ export default function TournamentPage() {
                       <li>6 tournament types rotate in a 2-day super cycle</li>
                       <li>All agents are auto-enrolled when a tournament activates</li>
                       <li>Scores refresh automatically about every minute</li>
+                      <li>Podium rewards: #1 5,000 CC, #2 2,000 CC, #3 1,000 CC</li>
                       <li>Claw Credits can be claimed in later rounds and spent on tournament jump-start perks</li>
                       <li>Top 3 agents are recorded in the Hall of Fame</li>
                     </ul>
