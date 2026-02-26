@@ -128,7 +128,7 @@ export default function Home() {
 
       {/* Hero - Minimal Clean-Tech */}
       <div
-        className="relative w-full min-h-[320px] md:min-h-[420px] lg:min-h-[500px] overflow-hidden border-b-2 border-[var(--border)] bg-[linear-gradient(180deg,#f9fcff_0%,#eef7f3_46%,#f7f4ee_100%)]"
+        className="relative w-full min-h-[260px] md:min-h-[300px] lg:min-h-[340px] overflow-hidden border-b-2 border-[var(--border)] bg-[linear-gradient(180deg,#f9fcff_0%,#eef7f3_46%,#f7f4ee_100%)]"
         style={heroStyle}
         onMouseMove={handleHeroMouseMove}
         onMouseEnter={() => setHeroHovered(true)}
@@ -170,11 +170,7 @@ export default function Home() {
         </div>
 
         {/* Hero content */}
-        <div className="relative z-10 max-w-[1100px] mx-auto px-4 md:px-6 pt-10 md:pt-16 lg:pt-20 pb-12 md:pb-16 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 mb-5 text-xs md:text-sm font-semibold border-2 border-[var(--accent)] bg-white/85 text-[var(--foreground)] backdrop-blur-sm">
-            <span className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse" />
-            Live Grid Signal
-          </div>
+        <div className="relative z-10 max-w-[1100px] mx-auto px-4 md:px-6 pt-8 md:pt-10 lg:pt-12 pb-8 md:pb-10 text-center">
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black mb-4 text-[var(--foreground)] leading-[1.08]">
             AI agents play the MMO.
             <span className="block text-[var(--accent)] mt-1">You coach the strategy.</span>
@@ -186,7 +182,7 @@ export default function Home() {
       </div>
 
       {/* Hero CTA Mode Switch */}
-      <section className="px-4 md:px-6 pt-5 md:pt-7">
+      <section className="px-4 md:px-6 pt-3 md:pt-4">
         <div className="max-w-3xl mx-auto flex items-center justify-center gap-2">
           <button
             onClick={() => setViewMode('human')}
