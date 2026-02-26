@@ -16,6 +16,12 @@ interface TournamentBannerProps {
   upcoming?: Tournament | null;
 }
 
+const PODIUM_REWARDS = [
+  { rank: '#1', amount: 5000, tone: 'text-yellow-400' },
+  { rank: '#2', amount: 2000, tone: 'text-gray-300' },
+  { rank: '#3', amount: 1000, tone: 'text-amber-500' },
+] as const;
+
 export function TournamentBanner({ tournament, topThree = [], upcoming }: TournamentBannerProps) {
   const [timeRemaining, setTimeRemaining] = useState<ReturnType<typeof getTimeRemaining> | null>(null);
 
@@ -43,6 +49,11 @@ export function TournamentBanner({ tournament, topThree = [], upcoming }: Tourna
             <div className="flex items-center gap-3">
               <span className="text-3xl">{upcomingConfig.icon}</span>
               <div>
+                <div className="mb-1">
+                  <span className="px-2 py-0.5 text-[10px] font-bold bg-[var(--surface-alt)] border border-[var(--border)] text-[var(--muted)]">
+                    TOURNAMENT MODE
+                  </span>
+                </div>
                 <h3 className="font-bold text-[var(--foreground)]">
                   Next Tournament: {upcoming.name}
                 </h3>
@@ -100,9 +111,12 @@ export function TournamentBanner({ tournament, topThree = [], upcoming }: Tourna
           <div className="flex items-center gap-3">
             <span className="text-4xl">{config.icon}</span>
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
                 <span className="px-2 py-0.5 text-xs font-bold bg-[var(--accent)] text-white">
                   LIVE
+                </span>
+                <span className="px-2 py-0.5 text-xs font-bold bg-[var(--surface-alt)] border border-[var(--border)] text-[var(--foreground)]">
+                  TOURNAMENT MODE
                 </span>
                 <span className="text-xs text-[var(--muted)]">Cycle #{tournament.week_number}</span>
                 {tournament.week_number === 1 && (
@@ -112,26 +126,48 @@ export function TournamentBanner({ tournament, topThree = [], upcoming }: Tourna
                 )}
               </div>
               <h2 className="text-xl font-bold text-[var(--foreground)]">{tournament.name}</h2>
-              <p className="text-sm text-[var(--muted)]">{config.description}</p>
+              <p className="text-sm text-[var(--muted)]">Compete for Claw Credits.</p>
+              <p className="text-xs text-[var(--muted)] mt-2 mb-1">Top 3 Rewards</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {PODIUM_REWARDS.map((reward) => (
+                  <div
+                    key={reward.rank}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-[var(--surface-alt)] border border-[var(--border)] text-xs"
+                  >
+                    <span className="font-semibold text-[var(--foreground)]">{reward.rank}</span>
+                    <span className={`font-bold ${reward.tone}`}>
+                      {reward.amount.toLocaleString()} CC
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-[var(--muted)] mt-2">
+                Spend credits on jump-start perks.
+              </p>
             </div>
           </div>
 
           {/* Countdown */}
           {timeRemaining && !timeRemaining.isEnded && (
-            <div className="flex items-center gap-2 lg:gap-4">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-[var(--foreground)]">{timeRemaining.days}</div>
-                <div className="text-xs text-[var(--muted)]">days</div>
-              </div>
-              <span className="text-xl text-[var(--muted)]">:</span>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-[var(--foreground)]">{timeRemaining.hours}</div>
-                <div className="text-xs text-[var(--muted)]">hours</div>
-              </div>
-              <span className="text-xl text-[var(--muted)]">:</span>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-[var(--foreground)]">{timeRemaining.minutes}</div>
-                <div className="text-xs text-[var(--muted)]">min</div>
+            <div className="bg-[var(--surface-alt)] border-2 border-[var(--border)] px-3 py-2">
+              <p className="text-[10px] font-semibold tracking-wide uppercase text-[var(--muted)] text-center mb-1">
+                Ends In
+              </p>
+              <div className="flex items-center gap-2 lg:gap-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-[var(--foreground)]">{timeRemaining.days}</div>
+                  <div className="text-xs text-[var(--muted)]">days</div>
+                </div>
+                <span className="text-xl text-[var(--muted)]">:</span>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-[var(--foreground)]">{timeRemaining.hours}</div>
+                  <div className="text-xs text-[var(--muted)]">hours</div>
+                </div>
+                <span className="text-xl text-[var(--muted)]">:</span>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-[var(--foreground)]">{timeRemaining.minutes}</div>
+                  <div className="text-xs text-[var(--muted)]">min</div>
+                </div>
               </div>
             </div>
           )}
@@ -140,7 +176,7 @@ export function TournamentBanner({ tournament, topThree = [], upcoming }: Tourna
         {/* Top 3 Leaders */}
         {topThree.length > 0 && (
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
-            <span className="text-sm text-[var(--muted)] font-medium">Leaders:</span>
+            <span className="text-sm text-[var(--muted)] font-medium">Live Leaders:</span>
             <div className="flex flex-wrap gap-2">
               {topThree.map((entry) => (
                 <div
@@ -169,7 +205,7 @@ export function TournamentBanner({ tournament, topThree = [], upcoming }: Tourna
             href="/tournament"
             className="px-4 py-2 bg-[var(--accent)] text-white font-semibold text-sm hover:opacity-90 transition-opacity"
           >
-            View Full Leaderboard →
+            Enter Tournament Mode →
           </Link>
         </div>
       </div>
