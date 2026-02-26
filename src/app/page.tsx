@@ -82,11 +82,10 @@ const TILE_FONT: Record<string, string[]> = {
 };
 
 const TEXT_TILE_COLORS = ['#1f4f2e', '#29653a', '#317746', '#3b8750', '#2a5f3a', '#4f9b5f'] as const;
-const TERRAIN_STRIP_COLORS = ['#90a955', '#386641', '#6c757d', '#457b9d', '#495057', '#90a955', '#386641'] as const;
 
 function PixelWord({ word }: { word: string }) {
   return (
-    <div className="flex items-center gap-[3px] sm:gap-1">
+    <div className="flex items-center gap-1.5 sm:gap-2">
       {word.split('').map((char, letterIndex) => {
         const glyph = TILE_FONT[char];
         if (!glyph) return null;
@@ -101,9 +100,9 @@ function PixelWord({ word }: { word: string }) {
                 return (
                   <span
                     key={`${char}-${letterIndex}-${rowIndex}-${columnIndex}`}
-                    className="block h-[9px] w-[9px] rounded-[2px] sm:h-[11px] sm:w-[11px]"
+                    className="block h-[10px] w-[10px] rounded-[2px] sm:h-[12px] sm:w-[12px]"
                     style={{
-                      backgroundColor: isLit ? TEXT_TILE_COLORS[colorIndex] : 'rgba(255,255,255,0.56)',
+                      backgroundColor: isLit ? TEXT_TILE_COLORS[colorIndex] : 'rgba(255,255,255,0.4)',
                       border: isLit ? '1px solid rgba(20,58,36,0.5)' : '1px solid rgba(29,94,54,0.1)',
                       boxShadow: isLit ? '0 1px 0 rgba(15,44,27,0.35)' : 'none',
                     }}
@@ -120,25 +119,10 @@ function PixelWord({ word }: { word: string }) {
 
 function OpenWorldComingSoonArt() {
   return (
-    <div className="relative mx-auto w-full max-w-[560px] overflow-hidden rounded-xl border-[3px] border-[var(--foreground)] bg-[rgba(250,247,242,0.92)] px-3 py-4 shadow-[6px_6px_0_rgba(45,42,38,0.16)] sm:px-4 sm:py-5">
-      <div className="relative flex flex-col items-center gap-2">
+    <div className="relative mx-auto w-full max-w-[560px] px-2 py-2 sm:px-4">
+      <div className="relative flex flex-col items-center gap-3 sm:gap-4">
         <PixelWord word="COMING" />
         <PixelWord word="SOON" />
-      </div>
-      <div className="mt-3 grid grid-cols-18 gap-[2px] rounded-md border border-[var(--foreground)]/30 bg-white/50 p-2">
-        {Array.from({ length: 72 }, (_, index) => {
-          const row = Math.floor(index / 18);
-          const col = index % 18;
-          const colorIndex = (row * 2 + col) % TERRAIN_STRIP_COLORS.length;
-
-          return (
-            <span
-              key={`terrain-tile-${index}`}
-              className="block h-[8px] w-[8px] rounded-[2px] sm:h-[9px] sm:w-[9px]"
-              style={{ backgroundColor: TERRAIN_STRIP_COLORS[colorIndex] }}
-            />
-          );
-        })}
       </div>
     </div>
   );
@@ -548,11 +532,8 @@ export default function Home() {
                     Tournament Mode
                   </button>
                 </h2>
-                <div className="relative z-10 flex min-h-[500px] flex-1 flex-col items-center justify-center gap-4 px-1 py-2 text-center xl:min-h-0">
+                <div className="relative z-10 flex min-h-[500px] flex-1 flex-col items-center justify-center px-1 py-2 text-center xl:min-h-0">
                   <OpenWorldComingSoonArt />
-                  <p className="max-w-[540px] text-sm font-semibold text-[#2f5539] sm:text-base">
-                    Under construction. Coming soon live.
-                  </p>
                 </div>
               </section>
             </div>
