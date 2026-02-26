@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, type CSSProperties, type MouseEvent } from 'react';
+import { useState, useEffect, useMemo, useCallback, type CSSProperties, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
 import { WorldMapPixel } from '@/components/WorldMapPixel';
@@ -14,6 +14,146 @@ import { TournamentBanner } from '@/components/TournamentBanner';
 import { Tournament } from '@/lib/tournament-types';
 import { AgentView3D } from '@/components/AgentView3D';
 import { ActiveAgents } from '@/components/ActiveAgents';
+
+const TILE_FONT: Record<string, string[]> = {
+  C: [
+    '01110',
+    '10001',
+    '10000',
+    '10000',
+    '10000',
+    '10001',
+    '01110',
+  ],
+  G: [
+    '01110',
+    '10001',
+    '10000',
+    '10111',
+    '10001',
+    '10001',
+    '01110',
+  ],
+  I: [
+    '11111',
+    '00100',
+    '00100',
+    '00100',
+    '00100',
+    '00100',
+    '11111',
+  ],
+  M: [
+    '10001',
+    '11011',
+    '10101',
+    '10001',
+    '10001',
+    '10001',
+    '10001',
+  ],
+  N: [
+    '10001',
+    '11001',
+    '10101',
+    '10011',
+    '10001',
+    '10001',
+    '10001',
+  ],
+  O: [
+    '01110',
+    '10001',
+    '10001',
+    '10001',
+    '10001',
+    '10001',
+    '01110',
+  ],
+  S: [
+    '01111',
+    '10000',
+    '10000',
+    '01110',
+    '00001',
+    '00001',
+    '11110',
+  ],
+};
+
+const TEXT_TILE_COLORS = ['#9fc86b', '#8fb95e', '#7ea953', '#6f9a49', '#5b8440', '#3f6a36'] as const;
+const WORLD_TILE_COLORS = ['#90a955', '#386641', '#6c757d', '#457b9d', '#495057', '#90a955', '#386641'] as const;
+
+function PixelWord({ word }: { word: string }) {
+  return (
+    <div className="flex items-center gap-[3px] sm:gap-1">
+      {word.split('').map((char, letterIndex) => {
+        const glyph = TILE_FONT[char];
+        if (!glyph) return null;
+
+        return (
+          <div key={`${char}-${letterIndex}`} className="grid grid-cols-5 gap-[2px]">
+            {glyph.flatMap((row, rowIndex) =>
+              row.split('').map((pixel, columnIndex) => {
+                const isLit = pixel === '1';
+                const colorIndex = (letterIndex * 3 + rowIndex + columnIndex) % TEXT_TILE_COLORS.length;
+
+                return (
+                  <span
+                    key={`${char}-${letterIndex}-${rowIndex}-${columnIndex}`}
+                    className="block h-[8px] w-[8px] rounded-[2px] sm:h-[10px] sm:w-[10px]"
+                    style={{
+                      backgroundColor: isLit ? TEXT_TILE_COLORS[colorIndex] : 'rgba(45,42,38,0.1)',
+                      border: isLit ? '1px solid rgba(45,42,38,0.25)' : '1px solid transparent',
+                    }}
+                  />
+                );
+              })
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function OpenWorldComingSoonArt() {
+  const backgroundTiles = useMemo(
+    () =>
+      Array.from({ length: 180 }, (_, index) => {
+        const row = Math.floor(index / 20);
+        const col = index % 20;
+        const colorIndex = (row * 2 + col * 3 + (row % 3)) % WORLD_TILE_COLORS.length;
+        return WORLD_TILE_COLORS[colorIndex];
+      }),
+    []
+  );
+
+  return (
+    <div className="relative mx-auto w-full max-w-[540px] overflow-hidden rounded-xl border-[3px] border-[var(--foreground)] bg-[var(--surface-alt)] px-4 py-4 shadow-[6px_6px_0_rgba(45,42,38,0.12)] sm:px-5 sm:py-5">
+      <div className="pointer-events-none absolute inset-0 grid grid-cols-20 gap-[2px] p-3 opacity-35">
+        {backgroundTiles.map((color, idx) => (
+          <span
+            key={`bg-tile-${idx}`}
+            className="block rounded-[2px]"
+            style={{ backgroundColor: color }}
+          />
+        ))}
+      </div>
+
+      <div className="relative">
+        <div className="mb-3 inline-flex items-center gap-1 rounded-md border-2 border-[var(--foreground)] bg-[var(--surface)] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-[var(--foreground)] sm:text-xs">
+          <span className="inline-block h-2 w-2 rounded-sm bg-[var(--accent)]" />
+          Block World Preview
+        </div>
+        <div className="space-y-2">
+          <PixelWord word="COMING" />
+          <PixelWord word="SOON" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const MINIMAL_TECH_NODES = [
   { left: '7%', top: '20%', size: 12, delay: '0s' },
@@ -30,6 +170,7 @@ const MINIMAL_TECH_NODES = [
 export default function Home() {
   const { events, agents, leaderboard, recentlyJoined, stats, isConnected, error } = useRealtimeEvents(100);
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('agent');
+  const [worldPanelMode, setWorldPanelMode] = useState<'tournament' | 'open-world'>('tournament');
   const [showCookieSettings, setShowCookieSettings] = useState(false);
   const [showFeatureRequest, setShowFeatureRequest] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -342,18 +483,70 @@ export default function Home() {
         {/* World Overview + Active Now + Live Activity + World Economy */}
         <div className="mb-6 grid gap-4 xl:[--world-row-h:720px] xl:gap-3 xl:grid-cols-[minmax(0,1fr)_230px_275px_280px] xl:items-stretch">
           {/* Map */}
-          <section className="pixel-card min-w-0 p-4 pb-6 xl:h-[var(--world-row-h)]">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
-              <span>🗺️</span> World Overview
-            </h2>
-            <WorldMapPixel
-              agents={agents}
-              onlineCount={stats.active_agents}
-              onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
-              onMapClick={(x, y) => setSpectatorPos({ x, y })}
-              isConnected={isConnected}
-            />
-          </section>
+          <div className="min-w-0 [perspective:2000px]">
+            <div
+              className={`grid transition-transform duration-700 ease-in-out [transform-style:preserve-3d] motion-reduce:duration-0 ${
+                worldPanelMode === 'open-world' ? '[transform:rotateY(180deg)]' : ''
+              }`}
+            >
+              <section
+                aria-hidden={worldPanelMode === 'open-world'}
+                className={`pixel-card min-w-0 p-4 pb-6 [grid-area:1/1] [backface-visibility:hidden] ${
+                  worldPanelMode === 'open-world' ? 'pointer-events-none' : ''
+                } xl:h-[var(--world-row-h)]`}
+              >
+                <h2 className="mb-4 flex items-center justify-between gap-3 text-lg font-semibold text-[var(--foreground)]">
+                  <span className="inline-flex items-center gap-2">
+                    <span>🗺️</span> Tournament Mode
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setWorldPanelMode('open-world')}
+                    className="pixel-btn inline-flex items-center gap-1 bg-[var(--surface-alt)] px-2 py-1 text-[11px] font-semibold text-[var(--foreground)] hover:bg-[var(--accent-light)]"
+                    aria-label="Flip to Open World view"
+                  >
+                    <span>🌍</span>
+                    Open World
+                  </button>
+                </h2>
+                <WorldMapPixel
+                  agents={agents}
+                  onlineCount={stats.active_agents}
+                  onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
+                  onMapClick={(x, y) => setSpectatorPos({ x, y })}
+                  isConnected={isConnected}
+                />
+              </section>
+
+              <section
+                aria-hidden={worldPanelMode === 'tournament'}
+                className={`pixel-card min-w-0 p-4 pb-6 [grid-area:1/1] [backface-visibility:hidden] [transform:rotateY(180deg)] ${
+                  worldPanelMode === 'tournament' ? 'pointer-events-none' : ''
+                } flex flex-col xl:h-[var(--world-row-h)]`}
+              >
+                <h2 className="mb-4 flex items-center justify-between gap-3 text-lg font-semibold text-[var(--foreground)]">
+                  <span className="inline-flex items-center gap-2">
+                    <span>🌍</span> Open World
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setWorldPanelMode('tournament')}
+                    className="pixel-btn inline-flex items-center gap-1 bg-[var(--surface-alt)] px-2 py-1 text-[11px] font-semibold text-[var(--foreground)] hover:bg-[var(--accent-light)]"
+                    aria-label="Flip back to Tournament Mode view"
+                  >
+                    <span>🗺️</span>
+                    Tournament Mode
+                  </button>
+                </h2>
+                <div className="flex min-h-[500px] flex-1 flex-col items-center justify-center gap-4 px-1 py-2 text-center xl:min-h-0">
+                  <OpenWorldComingSoonArt />
+                  <p className="max-w-[540px] text-sm text-[var(--muted)] sm:text-base">
+                    Under construction. Coming soon live.
+                  </p>
+                </div>
+              </section>
+            </div>
+          </div>
 
           {/* Active Agents Sidebar */}
           <section className="pixel-card min-w-0 overflow-hidden p-4 h-[360px] sm:h-[440px] xl:h-[var(--world-row-h)]">
