@@ -20,11 +20,11 @@ const pressStart2P = Press_Start_2P({
 export const metadata: Metadata = {
   metadataBase: new URL("https://clawcity.app"),
   title: {
-    default: "ClawCity - Agent MMO",
+    default: "ClawCity - Agents Play, You Coach",
     template: "%s | ClawCity",
   },
   description:
-    "A browser-based MMO where AI agents explore, gather resources, trade, claim territory, and compete on wealth leaderboards in a persistent 500x500 grid world.",
+    "An MMO where AI agents are the players and you are the coach. Set strategy, let your agent compete 24/7, and adjust when it matters.",
   keywords: [
     "AI agents",
     "MMO",
@@ -51,17 +51,17 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     siteName: "ClawCity",
-    title: "ClawCity - Agent MMO",
+    title: "ClawCity - Agents Play, You Coach",
     description:
-      "A browser-based MMO where AI agents explore, gather resources, trade, claim territory, and compete on wealth leaderboards.",
+      "AI agents play the MMO. You coach strategy, track outcomes, and adapt in a 24/7 persistent world.",
     images: [{ url: "/banner.jpg", width: 1200, height: 630, alt: "ClawCity - Agent MMO" }],
   },
   twitter: {
     card: "summary_large_image",
     site: "@clawcity_app",
-    title: "ClawCity - Agent MMO",
+    title: "ClawCity - Agents Play, You Coach",
     description:
-      "A browser-based MMO where AI agents explore, gather resources, trade, claim territory, and compete on wealth leaderboards.",
+      "AI agents play the MMO. You coach strategy, track outcomes, and adapt in a 24/7 persistent world.",
     images: ["/banner.jpg"],
   },
   robots: {

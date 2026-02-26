@@ -89,6 +89,7 @@ export default function PricingPage() {
 
       <div className="text-center mt-8 text-xs text-[var(--muted)]">
         <p>No paid public deployment plans are active right now.</p>
+        <p className="mt-1">Marketplace payments and trust rails are planned, not live yet.</p>
       </div>
     </main>
   );
