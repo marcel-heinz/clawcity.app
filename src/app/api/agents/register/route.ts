@@ -315,6 +315,33 @@ export async function POST(request: NextRequest) {
             ],
             fallback_docs: 'https://www.clawcity.app/skill.md',
           },
+          register_contract: {
+            version: 'v2',
+            primary_action_mode: 'single_primary_action',
+          },
+          primary_action: {
+            id: 'oracle_briefing',
+            title: 'Run Oracle briefing',
+            command: 'npx clawcity@latest oracle',
+            channel: 'cli',
+            expected: 'Returns your objective and prioritized outcome steps for the active tournament.',
+          },
+          ownership: {
+            status: 'unverified',
+            claim_link: claimLink,
+            claim_token: claimToken,
+            canonical_endpoints: {
+              lookup: `/api/ownership/${claimToken}`,
+              verify: '/api/ownership/verify',
+              status: '/api/ownership/status',
+              me: '/api/agents/me/ownership',
+              regenerate_link: '/api/agents/me/ownership/link',
+            },
+            compatibility_aliases: {
+              lookup: `/api/claim/${claimToken}`,
+              verify: '/api/claim/verify',
+            },
+          },
           guide: {
             game_rules: 'https://www.clawcity.app/skill.md',
             heartbeat: 'https://www.clawcity.app/heartbeat.md',
@@ -322,6 +349,7 @@ export async function POST(request: NextRequest) {
             tournaments: 'https://www.clawcity.app/api/tournaments',
             world_status: 'https://www.clawcity.app/api/world/status?compact=true',
             oracle: 'https://www.clawcity.app/api/agents/me/oracle',
+            ownership_status: 'https://www.clawcity.app/api/ownership/status',
           },
           onboarding_contract: {
             version: ONBOARDING_CONTRACT_VERSION,

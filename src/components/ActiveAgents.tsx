@@ -5,12 +5,17 @@ import { AgentLeaderboard } from '@/lib/types';
 import { CrabSprite } from './CrabSprite';
 import { resolveAvatar } from '@/lib/avatar';
 import { isAgentOnline } from '@/lib/presence';
+import {
+  type HomeLiveState,
+  getHomeEmptyStateMessage,
+  getHomeLiveStatusPresentation,
+} from '@/lib/home-live-state';
 
 interface ActiveAgentsProps {
   agents: AgentLeaderboard[];
   onlineCount?: number;
   onAgentClick?: (agentId: string, x: number, y: number) => void;
-  isConnected?: boolean;
+  liveState: HomeLiveState;
 }
 
 // Shared presence signal from world/status (with local fallback).
@@ -38,7 +43,7 @@ function formatTimeAgo(lastSeenAt?: string | null): string {
   return 'offline';
 }
 
-export function ActiveAgents({ agents, onlineCount, onAgentClick, isConnected = true }: ActiveAgentsProps) {
+export function ActiveAgents({ agents, onlineCount, onAgentClick, liveState }: ActiveAgentsProps) {
   // Filter to only active agents and sort by most recently active
   const activeAgents = useMemo(() => {
     return agents
@@ -50,18 +55,23 @@ export function ActiveAgents({ agents, onlineCount, onAgentClick, isConnected = 
       });
   }, [agents]);
   const displayedOnlineCount = typeof onlineCount === 'number' ? onlineCount : activeAgents.length;
-  const showConnectingState = !isConnected && activeAgents.length === 0;
+  const lifecycle = getHomeLiveStatusPresentation(liveState);
+  const headerMeta = liveState.phase === 'live'
+    ? `${displayedOnlineCount} online`
+    : liveState.isStaleSnapshot
+      ? `${displayedOnlineCount} in snapshot`
+      : lifecycle.label;
 
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold text-[var(--foreground)] flex items-center gap-2">
-          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+          <span className={`w-2 h-2 rounded-full ${lifecycle.dotClassName}`} aria-hidden="true" />
           Active Now
         </h3>
-        <span className="text-xs text-[var(--muted)]">
-          {showConnectingState ? 'syncing...' : `${displayedOnlineCount} online`}
+        <span className={`text-xs ${liveState.phase === 'live' ? 'text-[var(--muted)]' : lifecycle.textClassName}`}>
+          {headerMeta}
         </span>
       </div>
 
@@ -102,10 +112,10 @@ export function ActiveAgents({ agents, onlineCount, onAgentClick, isConnected = 
         ) : (
           <div className="text-center py-8 text-[var(--muted)] text-sm">
             <div className="text-2xl mb-2">😴</div>
-            <p>{showConnectingState ? 'Connecting to live agent feed...' : 'No agents active right now'}</p>
-            <p className="text-xs mt-1">
-              {showConnectingState ? 'Static previews do not include realtime presence.' : 'Check back soon!'}
-            </p>
+            <p>{getHomeEmptyStateMessage('activeAgents', liveState)}</p>
+            {liveState.phase !== 'live' && (
+              <p className={`text-xs mt-1 ${lifecycle.textClassName}`}>{lifecycle.detail}</p>
+            )}
           </div>
         )}
       </div>

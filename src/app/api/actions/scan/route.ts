@@ -3,6 +3,7 @@ import { authenticateAgent, errorResponse, jsonResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { type AgentItem, getHarvestScanRange } from '@/lib/crafting';
+import { buildScanMetadata, buildScanTileIntel, type ScanTileIntel } from '@/lib/gather-intel';
 import { isTileHarvestable } from '@/lib/tile-state';
 import { WORLD_SIZE, type TerrainType } from '@/lib/types';
 
@@ -37,6 +38,7 @@ interface ScanTileRow {
   depleted?: boolean | null;
   depleted_at?: string | null;
   regenerates_at?: string | null;
+  gather_count?: number | null;
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -85,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     if (requestedTerrain && !SCANNABLE_TERRAINS.includes(requestedTerrain as TerrainType)) {
       return errorResponse(
-        `Invalid terrain for fresh-tile scanning. Valid: ${SCANNABLE_TERRAINS.join(', ')}`
+        `Invalid terrain for harvestable-tile scanning. Valid: ${SCANNABLE_TERRAINS.join(', ')}`
       );
     }
 
@@ -136,7 +138,7 @@ export async function POST(request: NextRequest) {
     let blockedByBuildings = 0;
     let harvestableTiles = 0;
 
-    type Candidate = { x: number; y: number; terrain: TerrainType; distance: number };
+    type Candidate = { x: number; y: number; terrain: TerrainType; distance: number; tile_intel: ScanTileIntel };
     let nearest: Candidate | null = null;
     const alternatives: Candidate[] = [];
 
@@ -146,7 +148,7 @@ export async function POST(request: NextRequest) {
 
       let query = supabase
         .from('tiles')
-        .select('x, y, terrain, owner_id, building_type, depleted, depleted_at, regenerates_at')
+        .select('x, y, terrain, owner_id, building_type, depleted, depleted_at, regenerates_at, gather_count')
         .gte('x', minX)
         .lte('x', maxX)
         .gte('y', minY)
@@ -189,11 +191,18 @@ export async function POST(request: NextRequest) {
 
         harvestableTiles += 1;
         const distance = Math.abs(tile.x - agent.x) + Math.abs(tile.y - agent.y);
+        const tileIntel = buildScanTileIntel({
+          gatherCount: Math.max(0, tile.gather_count || 0),
+          harvestable: true,
+          nonDepleting: tile.terrain === 'water',
+          observedAtMs: nowMs,
+        });
         const candidate: Candidate = {
           x: tile.x,
           y: tile.y,
           terrain: tile.terrain,
           distance,
+          tile_intel: tileIntel,
         };
         alternatives.push(candidate);
 
@@ -212,6 +221,16 @@ export async function POST(request: NextRequest) {
       }
       page += 1;
     }
+
+    const generatedAtMs = Date.now();
+    const scanMetadata = buildScanMetadata({
+      observedAtMs: nowMs,
+      generatedAtMs,
+      scannedTiles,
+      harvestableTiles,
+      depletedTiles,
+      blockedByBuildings,
+    });
 
     let spyglassUsesRemaining: number | null = null;
     let usedSpyglass = false;
@@ -235,7 +254,7 @@ export async function POST(request: NextRequest) {
         success: true,
         data: {
           found: false,
-          message: `No harvestable ${requestedTerrain || 'resource'} tile found within ${effectiveRadius * 2}x${effectiveRadius * 2} scan area.`,
+          message: `No harvestable ${requestedTerrain || 'resource'} tile found within ${effectiveRadius * 2}x${effectiveRadius * 2} scan area. Nearby matches are depleted or blocked.`,
           position: { x: agent.x, y: agent.y },
           terrain_filter: requestedTerrain || 'resource_terrains',
           scan: {
@@ -248,7 +267,9 @@ export async function POST(request: NextRequest) {
             blocked_by_buildings: blockedByBuildings,
             used_spyglass: usedSpyglass,
             spyglass_uses_remaining: spyglassUsesRemaining,
+            metadata: scanMetadata,
           },
+          scan_metadata: scanMetadata,
         },
       });
     }
@@ -263,10 +284,13 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         found: true,
-        message: `Nearest harvestable tile is ${nearest.terrain} at (${nearest.x},${nearest.y}), ${nearest.distance} steps away.`,
+        message:
+          `Nearest harvestable tile is ${nearest.terrain} at (${nearest.x},${nearest.y}), ${nearest.distance} steps away. ` +
+          `Harvest risk: ${nearest.tile_intel.harvest_risk} (${nearest.tile_intel.depletion_chance_percent}% next-gather depletion).`,
         position: { x: agent.x, y: agent.y },
         terrain_filter: requestedTerrain || 'resource_terrains',
         target: nearest,
+        target_tile_intel: nearest.tile_intel,
         alternatives: altTop,
         scan: {
           requested_radius: requestedRadius,
@@ -278,7 +302,9 @@ export async function POST(request: NextRequest) {
           blocked_by_buildings: blockedByBuildings,
           used_spyglass: usedSpyglass,
           spyglass_uses_remaining: spyglassUsesRemaining,
+          metadata: scanMetadata,
         },
+        scan_metadata: scanMetadata,
       },
     });
   } catch (error) {

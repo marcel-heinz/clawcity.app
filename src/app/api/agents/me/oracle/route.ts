@@ -92,6 +92,7 @@ export async function GET(request: NextRequest) {
     const orderedSteps = getOutcomeOrderedSteps(tournament?.type || null);
     const outcomes = getOnboardingOutcomeDefinitions();
     const completed = getCompletedOutcomeCount(progress);
+    const generatedAt = new Date().toISOString();
 
     return jsonResponse({
       success: true,
@@ -99,9 +100,16 @@ export async function GET(request: NextRequest) {
         contract: {
           version: ONBOARDING_CONTRACT_VERSION,
           mode: 'outcome_based',
+          primary_action_mode: 'single_primary_action',
           total_outcomes: outcomes.length,
           completed_outcomes: completed,
           all_outcomes_complete: completed >= outcomes.length,
+        },
+        primary_action: {
+          id: 'oracle_briefing',
+          command: 'npx clawcity@latest oracle',
+          channel: 'cli',
+          status: 'active',
         },
         oracle: {
           title: 'The Oracle of ClawCity',
@@ -128,6 +136,11 @@ export async function GET(request: NextRequest) {
         })),
         next_steps: pendingSteps.slice(0, 3),
         all_pending_steps: pendingSteps,
+        metadata: {
+          generated_at: generatedAt,
+          event_sample_size: (eventResult.data || []).length,
+          has_active_tournament: !!tournament,
+        },
       },
     });
   } catch (error) {

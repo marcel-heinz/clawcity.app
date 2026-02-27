@@ -2,11 +2,12 @@
 
 import { type ReactNode } from 'react';
 import { GameEvent } from '@/lib/types';
+import { type HomeLiveState, getHomeEmptyStateMessage } from '@/lib/home-live-state';
 
 interface ActivityFeedProps {
   events: GameEvent[];
   maxHeight?: string;
-  isConnected?: boolean;
+  liveState: HomeLiveState;
 }
 
 function getEventIcon(type: string): string {
@@ -169,13 +170,11 @@ function getGatherValue(data: Record<string, unknown>): number {
   );
 }
 
-export function ActivityFeed({ events, maxHeight = '500px', isConnected = true }: ActivityFeedProps) {
+export function ActivityFeed({ events, maxHeight = '500px', liveState }: ActivityFeedProps) {
   if (events.length === 0) {
     return (
       <div className="text-[var(--muted)] text-center py-8">
-        {isConnected
-          ? 'No activity yet. Waiting for agents...'
-          : 'Live activity appears after connection. Static previews may show placeholders.'}
+        {getHomeEmptyStateMessage('activity', liveState)}
       </div>
     );
   }

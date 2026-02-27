@@ -1,7 +1,23 @@
 import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { jsonResponse, errorResponse } from '@/lib/auth';
-import { Tournament } from '@/lib/tournament-types';
+import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
+import { Tournament, type TournamentViewerEntry, type TournamentViewerStatus } from '@/lib/tournament-types';
+
+function clampRecentLimit(value: number): number {
+  if (!Number.isFinite(value)) return 5;
+  return Math.max(1, Math.min(20, Math.floor(value)));
+}
+
+function withParticipantCount<T extends Tournament | null>(
+  tournament: T,
+  countById: Map<string, number>,
+): (Tournament & { participant_count: number }) | null {
+  if (!tournament) return null;
+  return {
+    ...tournament,
+    participant_count: countById.get(tournament.id) || 0,
+  };
+}
 
 /**
  * GET /api/tournaments
@@ -22,7 +38,7 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServerClient();
     const url = new URL(request.url);
-    const recentLimit = parseInt(url.searchParams.get('recent_limit') || '5');
+    const recentLimit = clampRecentLimit(parseInt(url.searchParams.get('recent_limit') || '5', 10));
 
     // Get current active tournament
     const { data: currentTournament, error: currentError } = await supabase
@@ -79,12 +95,99 @@ export async function GET(request: NextRequest) {
       topThree = leaderboard || [];
     }
 
+    const tournamentIds = [
+      currentTournament?.id,
+      upcomingTournament?.id,
+      ...((recentTournaments || []) as Tournament[]).map((tournament) => tournament.id),
+    ].filter((value): value is string => typeof value === 'string');
+
+    const participantCountByTournament = new Map<string, number>();
+    if (tournamentIds.length > 0) {
+      const { data: entryRows, error: entryError } = await supabase
+        .from('tournament_entries')
+        .select('tournament_id')
+        .in('tournament_id', tournamentIds);
+
+      if (entryError) {
+        console.error('Error fetching tournament participant counts:', entryError);
+      } else {
+        for (const row of entryRows || []) {
+          const tournamentId = row.tournament_id;
+          if (typeof tournamentId !== 'string') continue;
+          participantCountByTournament.set(
+            tournamentId,
+            (participantCountByTournament.get(tournamentId) || 0) + 1,
+          );
+        }
+      }
+    }
+
+    const currentWithParticipants = withParticipantCount(
+      currentTournament as Tournament | null,
+      participantCountByTournament,
+    );
+    const upcomingWithParticipants = withParticipantCount(
+      upcomingTournament,
+      participantCountByTournament,
+    );
+    const recentWithParticipants = ((recentTournaments || []) as Tournament[]).map((tournament) => ({
+      ...tournament,
+      participant_count: participantCountByTournament.get(tournament.id) || 0,
+    }));
+
+    const hasAuthorizationHeader = !!request.headers.get('authorization');
+    let viewerStatus: TournamentViewerStatus = 'anonymous';
+    let viewerEntry: TournamentViewerEntry | null = null;
+
+    const focusTournamentId = currentWithParticipants?.id || upcomingWithParticipants?.id || null;
+    if (hasAuthorizationHeader) {
+      const auth = await authenticateAgent(request);
+      if (auth.success && auth.agent) {
+        if (focusTournamentId) {
+          const { data: viewerRow, error: viewerError } = await supabase
+            .from('tournament_leaderboard')
+            .select('id, tournament_id, agent_id, agent_name, current_score, live_rank, final_rank, joined_at')
+            .eq('tournament_id', focusTournamentId)
+            .eq('agent_id', auth.agent.id)
+            .maybeSingle();
+
+          if (viewerError) {
+            console.error('Error fetching tournament viewer entry:', viewerError);
+          } else if (viewerRow) {
+            viewerEntry = {
+              id: viewerRow.id,
+              tournament_id: viewerRow.tournament_id,
+              agent_id: viewerRow.agent_id,
+              agent_name: viewerRow.agent_name,
+              current_score: viewerRow.current_score,
+              live_rank: viewerRow.live_rank,
+              final_rank: viewerRow.final_rank,
+              joined_at: viewerRow.joined_at,
+            };
+          }
+          viewerStatus = viewerEntry ? 'joined' : 'not_joined';
+        } else {
+          viewerStatus = 'no_focus_tournament';
+        }
+      }
+    }
+
     return jsonResponse({
       success: true,
       data: {
-        current: currentTournament as Tournament | null,
-        recent: (recentTournaments || []) as Tournament[],
-        upcoming: upcomingTournament,
+        current: currentWithParticipants,
+        recent: recentWithParticipants,
+        upcoming: upcomingWithParticipants,
+        participants: {
+          current: currentWithParticipants?.participant_count || 0,
+          upcoming: upcomingWithParticipants?.participant_count || 0,
+          recent: recentWithParticipants.map((tournament) => ({
+            tournament_id: tournament.id,
+            count: tournament.participant_count,
+          })),
+        },
+        viewer_status: viewerStatus,
+        viewer_entry: viewerEntry,
         top_three: topThree,
       },
     });

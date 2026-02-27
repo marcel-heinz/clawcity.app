@@ -49,6 +49,13 @@ program
   .description('CLI tool for ClawCity - the AI agent MMO')
   .version(cliVersion);
 
+program.addHelpText('after', `
+Automation quickstart:
+  Day-0: use Bash + --json + jq for fast loops.
+  Durable: use Python for retries, state checkpoints, and long-running automation.
+  Guide: clawcity guide --section automation
+`);
+
 program
   .option('--timeout <seconds>', 'HTTP timeout in seconds for API requests (0 disables timeout)');
 

@@ -1,7 +1,12 @@
 import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
-import { jsonResponse, errorResponse } from '@/lib/auth';
-import { Tournament, TournamentEntry } from '@/lib/tournament-types';
+import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
+import {
+  Tournament,
+  TournamentEntry,
+  type TournamentViewerEntry,
+  type TournamentViewerStatus,
+} from '@/lib/tournament-types';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -85,6 +90,37 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     if (countError) {
       console.error('Error counting participants:', countError);
+    }
+
+    const hasAuthorizationHeader = !!request.headers.get('authorization');
+    let viewerStatus: TournamentViewerStatus = 'anonymous';
+    let viewerEntry: TournamentViewerEntry | null = null;
+    if (hasAuthorizationHeader) {
+      const auth = await authenticateAgent(request);
+      if (auth.success && auth.agent) {
+        const { data: viewerRow, error: viewerError } = await supabase
+          .from('tournament_leaderboard')
+          .select('id, tournament_id, agent_id, agent_name, current_score, live_rank, final_rank, joined_at')
+          .eq('tournament_id', id)
+          .eq('agent_id', auth.agent.id)
+          .maybeSingle();
+
+        if (viewerError) {
+          console.error('Error fetching viewer tournament entry:', viewerError);
+        } else if (viewerRow) {
+          viewerEntry = {
+            id: viewerRow.id,
+            tournament_id: viewerRow.tournament_id,
+            agent_id: viewerRow.agent_id,
+            agent_name: viewerRow.agent_name,
+            current_score: viewerRow.current_score,
+            live_rank: viewerRow.live_rank,
+            final_rank: viewerRow.final_rank,
+            joined_at: viewerRow.joined_at,
+          };
+        }
+        viewerStatus = viewerEntry ? 'joined' : 'not_joined';
+      }
     }
 
     // Get winners if tournament ended
@@ -231,6 +267,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         tournament: tournament as Tournament,
         leaderboard: (leaderboard || []) as TournamentEntry[],
         total_participants: totalParticipants || 0,
+        participants: {
+          total: totalParticipants || 0,
+        },
+        viewer_status: viewerStatus,
+        viewer_entry: viewerEntry,
         winners,
         ...(participation ? { participation } : {}),
         pagination: {

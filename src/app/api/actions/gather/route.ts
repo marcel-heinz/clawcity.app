@@ -27,6 +27,39 @@ import { isTileHarvestable } from '@/lib/tile-state';
 import { buildGatherCooldownMeta, buildGatherTileIntel } from '@/lib/gather-intel';
 import { consumeDurableAxeUse, getActiveStorageBonus } from '@/lib/claw-credits';
 
+interface GatherTileSnapshot {
+  terrain: TerrainType;
+  depleted?: boolean | null;
+  depleted_at?: string | null;
+  regenerates_at?: string | null;
+  gather_count?: number | null;
+}
+
+async function getGatherTileCooldownContext(
+  supabase: ReturnType<typeof createServerClient>,
+  position: { x: number; y: number },
+): Promise<{ terrain: TerrainType; tile_intel: ReturnType<typeof buildGatherTileIntel> } | null> {
+  const { data: tile, error } = await supabase
+    .from('tiles')
+    .select('terrain, depleted, depleted_at, regenerates_at, gather_count')
+    .eq('x', position.x)
+    .eq('y', position.y)
+    .maybeSingle();
+
+  if (error || !tile) return null;
+
+  const tileSnapshot = tile as GatherTileSnapshot;
+  const nonDepleting = tileSnapshot.terrain === 'water' || tileSnapshot.terrain === 'market';
+  const harvestable = isTileHarvestable(tileSnapshot);
+  return {
+    terrain: tileSnapshot.terrain,
+    tile_intel: buildGatherTileIntel(Math.max(0, tileSnapshot.gather_count || 0), {
+      nonDepleting,
+      depleted: !nonDepleting && !harvestable,
+    }),
+  };
+}
+
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
     return errorResponse('Database not configured. Please set up Supabase.', 503, {
@@ -76,12 +109,14 @@ export async function POST(request: NextRequest) {
     
     if (cooldownResult.remainingMs !== undefined && cooldownResult.remainingMs > 0) {
       const waitSeconds = Math.ceil(cooldownResult.remainingMs / 1000);
+      const tileCooldownContext = await getGatherTileCooldownContext(supabase, { x: agent.x, y: agent.y });
       return jsonResponse(
         {
           success: false,
           code: 'gather_cooldown',
           error: `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
           cooldown: buildGatherCooldownMeta(gatherCooldownMs, cooldownResult.remainingMs),
+          ...(tileCooldownContext || {}),
         },
         429,
       );
@@ -95,12 +130,14 @@ export async function POST(request: NextRequest) {
         if (elapsed < gatherCooldownMs) {
           const remainingMs = Math.max(0, gatherCooldownMs - elapsed);
           const waitSeconds = Math.ceil(remainingMs / 1000);
+          const tileCooldownContext = await getGatherTileCooldownContext(supabase, { x: agent.x, y: agent.y });
           return jsonResponse(
             {
               success: false,
               code: 'gather_cooldown',
               error: `Gather cooldown active. Wait ${waitSeconds}s before gathering again.`,
               cooldown: buildGatherCooldownMeta(gatherCooldownMs, remainingMs),
+              ...(tileCooldownContext || {}),
             },
             429,
           );
@@ -145,7 +182,23 @@ export async function POST(request: NextRequest) {
       regenerates_at: tile.regenerates_at,
     });
 
-    const baseGatherCount = Math.max(0, tile.gather_count || 0);
+    let baseGatherCount = Math.max(0, tile.gather_count || 0);
+
+    // If tile was depleted but has now regenerated, reset depletion markers before this gather.
+    if (tileMarkedDepleted && tileHarvestable) {
+      await supabase
+        .from('tiles')
+        .update({
+          depleted: false,
+          depleted_at: null,
+          regenerates_at: null,
+          gather_count: 0,
+        })
+        .eq('x', agent.x)
+        .eq('y', agent.y);
+      baseGatherCount = 0;
+    }
+
     const baseTileIntel = (opts: { depleted?: boolean; nonDepleting?: boolean } = {}) =>
       buildGatherTileIntel(baseGatherCount, opts);
 
@@ -226,22 +279,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // If tile was depleted but has now regenerated, reset it
-    if (tileMarkedDepleted && tileHarvestable) {
-      await supabase
-        .from('tiles')
-        .update({
-          depleted: false,
-          depleted_at: null,
-          regenerates_at: null,
-          gather_count: 0  // Reset gather count on regeneration
-        })
-        .eq('x', agent.x)
-        .eq('y', agent.y);
-    }
-
     // Get current gather count for this tile (for progressive depletion)
-    const currentGatherCount = (tile.gather_count || 0) + 1;
+    const currentGatherCount = baseGatherCount + 1;
 
     // Check if terrain normally has no resources but items enable gathering
     const barrenTerrains: TerrainType[] = ['rocky', 'sand'];
@@ -583,6 +622,10 @@ export async function POST(request: NextRequest) {
       console.error('Error updating inventory:', updateError);
       return errorResponse('Failed to gather resources', 500, {
         code: 'gather_update_failed',
+        details: {
+          terrain,
+          tile_intel: buildGatherTileIntel(currentGatherCount, { depleted: tileDepleted }),
+        },
       });
     }
 

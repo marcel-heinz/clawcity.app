@@ -1,5 +1,7 @@
 'use client';
 
+import { type HomeLiveState, getHomeLiveStatusPresentation } from '@/lib/home-live-state';
+
 interface StatsProps {
   totalResources?: {
     gold: number;
@@ -9,7 +11,7 @@ interface StatsProps {
   };
   miningActivityLastHour?: number;
   topGatherer?: string | null;
-  isConnected: boolean;
+  liveState: HomeLiveState;
 }
 
 function formatNumber(num: number): string {
@@ -22,30 +24,16 @@ export function Stats({
   totalResources,
   miningActivityLastHour = 0,
   topGatherer,
-  isConnected 
+  liveState,
 }: StatsProps) {
+  const lifecycle = getHomeLiveStatusPresentation(liveState);
   const totalResourceValue = totalResources 
     ? totalResources.gold + totalResources.wood + totalResources.food + totalResources.stone
     : 0;
-  const showConnectingState =
-    !isConnected &&
-    totalResourceValue === 0 &&
-    miningActivityLastHour === 0 &&
-    !topGatherer;
-  const statusText = isConnected ? 'Live' : showConnectingState ? 'Connecting...' : 'Disconnected';
-  const statusColorClass = isConnected
-    ? 'text-[var(--accent)] font-medium'
-    : showConnectingState
-      ? 'text-[var(--gold)]'
-      : 'text-[var(--red)]';
-  const statusDotClass = isConnected
-    ? 'bg-[var(--accent)] animate-pulse'
-    : showConnectingState
-      ? 'bg-[var(--gold)] animate-pulse'
-      : 'bg-[var(--red)]';
-  const metricValue = (value: number) => (showConnectingState ? '—' : value.toString());
-  const compactMetricValue = (value: number) => (showConnectingState ? '—' : formatNumber(value));
-  const topGathererLabel = showConnectingState ? 'syncing' : topGatherer || '—';
+  const hideLiveMetrics = liveState.phase !== 'live' && !liveState.isStaleSnapshot;
+  const metricValue = (value: number) => (hideLiveMetrics ? '—' : value.toString());
+  const compactMetricValue = (value: number) => (hideLiveMetrics ? '—' : formatNumber(value));
+  const topGathererLabel = hideLiveMetrics ? '—' : topGatherer || '—';
   const resourceBreakdown = totalResources
     ? [
       { icon: '🪙', value: totalResources.gold, className: 'text-yellow-600' },
@@ -57,14 +45,17 @@ export function Stats({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-1.5 text-[11px]">
+      <div className="flex items-center gap-1.5 text-[11px]" role="status" aria-live="polite">
         <span
-          className={`h-2 w-2 rounded-full ${statusDotClass}`}
+          className={`h-2 w-2 rounded-full ${lifecycle.dotClassName}`}
         />
-        <span className={statusColorClass}>
-          {statusText}
+        <span className={lifecycle.textClassName}>
+          {lifecycle.label}
         </span>
       </div>
+      {liveState.isStaleSnapshot && (
+        <div className="text-[10px] text-[var(--gold)]">{lifecycle.detail}</div>
+      )}
 
       <div className="bg-[var(--surface-alt)] border-2 border-[var(--border)] p-2">
         <div className="flex items-end justify-between gap-2">
@@ -76,7 +67,7 @@ export function Stats({
               Total Resources
             </div>
           </div>
-          {totalResources && !showConnectingState && (
+          {totalResources && !hideLiveMetrics && (
             <div className="flex flex-wrap items-center justify-end gap-1 text-[10px]">
               {resourceBreakdown.map((resource) => (
                 <span key={resource.icon} className={resource.className}>

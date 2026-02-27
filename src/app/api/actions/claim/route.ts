@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
+import { buildClaimQuote, getTerritoryDeedDiscountPercent, type ClaimBlockReason } from '@/lib/claim-quote';
 import {
   CLAIM_COST_GOLD,
   CLAIM_COST_WOOD,
@@ -12,9 +13,6 @@ import {
 } from '@/lib/types';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
-import { getItemDefinition } from '@/lib/crafting';
-
-const FIRST_CLAIM_DISCOUNT_PERCENT = 30;
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -48,16 +46,64 @@ export async function POST(request: NextRequest) {
   try {
     const agent = auth.agent;
     const supabase = createServerClient();
-    const deedDef = getItemDefinition('territory_deed');
-    let deedDiscountPercent = 50;
-    if (deedDef) {
-      for (const effect of deedDef.effects) {
-        if (effect.type === 'claim_discount') {
-          deedDiscountPercent = effect.percent;
-          break;
-        }
-      }
+    const deedDiscountPercent = getTerritoryDeedDiscountPercent();
+
+    const [tileResult, territoryCountResult, deedResult] = await Promise.all([
+      supabase
+        .from('tiles')
+        .select('terrain, owner_id')
+        .eq('x', agent.x)
+        .eq('y', agent.y)
+        .maybeSingle(),
+      supabase
+        .from('tiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('owner_id', agent.id),
+      supabase
+        .from('agent_items')
+        .select('quantity, uses_remaining')
+        .eq('agent_id', agent.id)
+        .eq('item_id', 'territory_deed')
+        .gt('quantity', 0)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    if (territoryCountResult.error) {
+      console.error('claim: failed to fetch territory count', territoryCountResult.error);
     }
+
+    if (tileResult.error) {
+      console.error('claim: failed to fetch current tile snapshot', tileResult.error);
+    }
+
+    let territoryDeedAvailable = false;
+    if (deedResult.error) {
+      console.error('claim: failed to fetch territory deed availability', deedResult.error);
+    } else if (deedResult.data) {
+      territoryDeedAvailable =
+        (deedResult.data.quantity || 0) > 0 &&
+        (deedResult.data.uses_remaining === null || deedResult.data.uses_remaining > 0);
+    }
+
+    const territoryCount = territoryCountResult.count || 0;
+    const preClaimQuote = buildClaimQuote({
+      inventory: {
+        gold: agent.gold,
+        wood: agent.wood,
+        stone: agent.stone,
+        food: agent.food,
+      },
+      terrain: tileResult.data?.terrain || null,
+      tileOwnerId: tileResult.data?.owner_id || null,
+      agentId: agent.id,
+      territoryCount,
+      maxTerritories: MAX_TERRITORIES_PER_AGENT,
+      territoryDeedAvailable,
+      territoryDeedDiscountPercent: deedDiscountPercent,
+      firstClaimDiscountAvailable: territoryCount === 0,
+    });
 
     const { data: rawResult, error: claimError } = await supabase.rpc('claim_tile_atomic', {
       p_agent_id: agent.id,
@@ -84,21 +130,57 @@ export async function POST(request: NextRequest) {
     const code = typeof result.code === 'string' ? result.code : 'unknown';
     const toNumber = (value: unknown, fallback: number): number =>
       typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+    const claimQuoteFor = (
+      baseReasons: ClaimBlockReason[] = [],
+      discountOverride: {
+        discount_percent_applied?: number;
+        discount_source?: 'none' | 'first_claim' | 'territory_deed';
+        territory_deed_used?: boolean;
+        first_claim_discount_used?: boolean;
+      } = {},
+    ) =>
+      buildClaimQuote({
+        inventory: {
+          gold: agent.gold,
+          wood: agent.wood,
+          stone: agent.stone,
+          food: agent.food,
+        },
+        terrain: tileResult.data?.terrain || null,
+        tileOwnerId: tileResult.data?.owner_id || null,
+        agentId: agent.id,
+        territoryCount,
+        maxTerritories: MAX_TERRITORIES_PER_AGENT,
+        territoryDeedAvailable,
+        territoryDeedDiscountPercent: deedDiscountPercent,
+        firstClaimDiscountAvailable: territoryCount === 0,
+        baseReasons,
+        discountOverride,
+      });
 
     if (result.ok !== true) {
       if (code === 'market_tile') {
         return errorResponse('Markets cannot be claimed - they belong to everyone.', 400, {
           code,
+          details: {
+            claim_quote: claimQuoteFor(['market_tile']),
+          },
         });
       }
       if (code === 'water_tile') {
         return errorResponse('Water tiles cannot be claimed.', 400, {
           code,
+          details: {
+            claim_quote: claimQuoteFor(['water_tile']),
+          },
         });
       }
       if (code === 'already_owned') {
         return errorResponse('You already own this tile!', 400, {
           code,
+          details: {
+            claim_quote: claimQuoteFor(['already_owned']),
+          },
         });
       }
       if (code === 'tile_claimed') {
@@ -120,6 +202,7 @@ export async function POST(request: NextRequest) {
             details: {
               owner_id: ownerId,
               owner_name: ownerName,
+              claim_quote: claimQuoteFor(['tile_claimed']),
             },
           }
         );
@@ -132,6 +215,7 @@ export async function POST(request: NextRequest) {
             code,
             details: {
               max_territories: MAX_TERRITORIES_PER_AGENT,
+              claim_quote: claimQuoteFor(['territory_limit']),
             },
           }
         );
@@ -151,12 +235,23 @@ export async function POST(request: NextRequest) {
         const firstClaimDiscountUsed = result.first_claim_discount_used === true;
         const discountPercentApplied = toNumber(
           result.discount_percent_applied,
-          territoryDeedUsed
-            ? deedDiscountPercent
-            : firstClaimDiscountUsed
-              ? FIRST_CLAIM_DISCOUNT_PERCENT
-              : 0,
+          preClaimQuote.discounts.discount_percent_applied,
         );
+        const discountSourceRaw = result.discount_source;
+        const discountSource =
+          discountSourceRaw === 'territory_deed' || discountSourceRaw === 'first_claim' || discountSourceRaw === 'none'
+            ? discountSourceRaw
+            : territoryDeedUsed
+              ? 'territory_deed'
+              : firstClaimDiscountUsed
+                ? 'first_claim'
+                : 'none';
+        const claimQuote = claimQuoteFor(['insufficient_resources'], {
+          discount_percent_applied: discountPercentApplied,
+          discount_source: discountSource,
+          territory_deed_used: territoryDeedUsed,
+          first_claim_discount_used: firstClaimDiscountUsed,
+        });
         const discountNote = territoryDeedUsed
           ? ` (with Territory Deed -${discountPercentApplied}% discount)`
           : firstClaimDiscountUsed
@@ -207,7 +302,9 @@ export async function POST(request: NextRequest) {
                 territory_deed_used: territoryDeedUsed,
                 first_claim_discount_used: firstClaimDiscountUsed,
                 discount_percent_applied: discountPercentApplied,
+                discount_source: discountSource,
               },
+              claim_quote: claimQuote,
             },
             hint: recoveryOptions,
           }
@@ -216,10 +313,16 @@ export async function POST(request: NextRequest) {
       if (code === 'tile_not_found') {
         return errorResponse('Could not find your current tile', 500, {
           code,
+          details: {
+            claim_quote: preClaimQuote,
+          },
         });
       }
       return errorResponse('Failed to claim tile', 500, {
         code: code === 'unknown' ? 'claim_failed' : code,
+        details: {
+          claim_quote: preClaimQuote,
+        },
       });
     }
 
@@ -247,12 +350,23 @@ export async function POST(request: NextRequest) {
     const firstClaimDiscountUsed = result.first_claim_discount_used === true;
     const discountPercentApplied = toNumber(
       result.discount_percent_applied,
-      territoryDeedUsed
-        ? deedDiscountPercent
-        : firstClaimDiscountUsed
-          ? FIRST_CLAIM_DISCOUNT_PERCENT
-          : 0,
+      preClaimQuote.discounts.discount_percent_applied,
     );
+    const discountSourceRaw = result.discount_source;
+    const discountSource =
+      discountSourceRaw === 'territory_deed' || discountSourceRaw === 'first_claim' || discountSourceRaw === 'none'
+        ? discountSourceRaw
+        : territoryDeedUsed
+          ? 'territory_deed'
+          : firstClaimDiscountUsed
+            ? 'first_claim'
+            : 'none';
+    const claimQuote = claimQuoteFor([], {
+      discount_percent_applied: discountPercentApplied,
+      discount_source: discountSource,
+      territory_deed_used: territoryDeedUsed,
+      first_claim_discount_used: firstClaimDiscountUsed,
+    });
     const discountMessage = territoryDeedUsed
       ? ` (Territory Deed applied: -${discountPercentApplied}% cost!)`
       : firstClaimDiscountUsed
@@ -272,6 +386,7 @@ export async function POST(request: NextRequest) {
         stone: effectiveStoneCost,
         food: totalFoodCost,
         discount_percent_applied: discountPercentApplied,
+        discount_source: discountSource,
         first_claim_discount_used: firstClaimDiscountUsed,
         territory_deed_used: territoryDeedUsed,
         food_breakdown: {
@@ -291,6 +406,7 @@ export async function POST(request: NextRequest) {
       },
       territory_count: newTerritoryCount,
       max_territories: MAX_TERRITORIES_PER_AGENT,
+      claim_quote: claimQuote,
     });
 
     return jsonResponse({ success: true, data: responseData });

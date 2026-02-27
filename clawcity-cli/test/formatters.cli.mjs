@@ -7,6 +7,7 @@ import {
   formatOracleLines,
   formatRecipesLines,
   formatTournamentCreditsLines,
+  formatTournamentOverviewLines,
   formatTournamentPerksLines,
 } from '../dist/lib/formatters.js';
 
@@ -25,13 +26,14 @@ test('formatGatherResultLine includes cooldown and tile planning metadata when p
     gathered: { gold: 0, wood: 3, food: 0, stone: 1 },
     stamina: { efficiency: 88 },
     tile_status: 'available',
+    harvestable: true,
     cooldown: { cooldown_remaining_ms: 4200 },
-    tile_intel: { tile_health: 'fragile', gathers_remaining_estimate: 2 },
+    tile_intel: { tile_health: 'fragile', gathers_remaining_estimate: 2, depletion_chance_percent: 33 },
   });
 
   assert.equal(
     line,
-    'Gathered: +3 wood, +1 stone | Efficiency: 88% | Tile: available | Next: 5s | Health: fragile | Est: 2 gathers',
+    'Gathered: +3 wood, +1 stone | Efficiency: 88% | Tile: available | Harvestable: yes | Next gather: 5s | Risk: 33% | Health: fragile | Est: 2 gathers',
   );
 });
 
@@ -173,4 +175,30 @@ test('formatTournamentPerksLines renders loadout and catalog rows', () => {
   assert.match(lines[2], /durable uses:27/);
   assert.match(lines[4], /durable_axe/);
   assert.match(lines[4], /uses\/purchase:30/);
+});
+
+test('formatTournamentOverviewLines includes participants, self status, and leaderboard hint', () => {
+  const lines = formatTournamentOverviewLines({
+    current: {
+      id: 'tourn-123',
+      name: 'Wealth Sprint #12',
+      status: 'active',
+      participant_count: 42,
+    },
+    top_three: [
+      { live_rank: 1, agent_name: 'Alpha', current_score: 2100 },
+    ],
+    self: {
+      live_rank: 7,
+      status: 'active',
+      current_score: 987,
+    },
+  });
+
+  assert.equal(lines[0], 'Current: Wealth Sprint #12 (active) | participants:42');
+  assert.equal(lines[1], 'Current ID: tourn-123');
+  assert.match(lines[2], /Hint: full leaderboard/);
+  assert.equal(lines[3], 'Top 3:');
+  assert.equal(lines[4], '  #1 Alpha: 2100');
+  assert.equal(lines[5], 'You: | #7 | active | score:987');
 });

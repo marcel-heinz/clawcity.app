@@ -14,6 +14,7 @@ import { TournamentBanner } from '@/components/TournamentBanner';
 import { Tournament } from '@/lib/tournament-types';
 import { AgentView3D } from '@/components/AgentView3D';
 import { ActiveAgents } from '@/components/ActiveAgents';
+import { getHomeEmptyStateMessage, getHomeLiveStatusPresentation } from '@/lib/home-live-state';
 
 const TILE_FONT: Record<string, string[]> = {
   C: [
@@ -141,7 +142,7 @@ const MINIMAL_TECH_NODES = [
 ] as const;
 
 export default function Home() {
-  const { events, agents, leaderboard, recentlyJoined, stats, isConnected, error } = useRealtimeEvents(100);
+  const { events, agents, leaderboard, recentlyJoined, stats, liveState, retryNow } = useRealtimeEvents(100);
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('agent');
   const [worldPanelMode, setWorldPanelMode] = useState<'tournament' | 'open-world'>('tournament');
   const [showCookieSettings, setShowCookieSettings] = useState(false);
@@ -179,10 +180,17 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    fetchTournament();
+    const initialFetchTimeout = setTimeout(() => {
+      void fetchTournament();
+    }, 0);
     // Refresh tournament data every 30 seconds
-    const interval = setInterval(fetchTournament, 30000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      void fetchTournament();
+    }, 30000);
+    return () => {
+      clearTimeout(initialFetchTimeout);
+      clearInterval(interval);
+    };
   }, [fetchTournament]);
 
   const copyToClipboard = async (text: string, key: string) => {
@@ -210,6 +218,8 @@ export default function Home() {
     '--hero-x': `${heroPointer.x}%`,
     '--hero-y': `${heroPointer.y}%`,
   } as CSSProperties;
+  const liveStatus = getHomeLiveStatusPresentation(liveState);
+  const shouldShowRetryButton = liveState.phase === 'delayed' || liveState.phase === 'error';
 
   return (
     <main className="min-h-screen">
@@ -429,12 +439,35 @@ export default function Home() {
           </div>
         </noscript>
 
-        {/* Error banner */}
-        {error && (
-          <div className="mb-6 p-3 bg-[var(--red-light)] border-2 border-[var(--red)] text-[var(--red)] text-sm">
-            {error}
+        {/* Live world status */}
+        <div
+          className={`mb-6 border-2 p-3 text-sm ${liveStatus.bannerClassName}`}
+          role={liveStatus.role}
+          aria-live={liveStatus.role === 'alert' ? 'assertive' : 'polite'}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 font-semibold">
+                <span className={`h-2 w-2 rounded-full ${liveStatus.dotClassName}`} />
+                <span>{liveStatus.title}</span>
+              </div>
+              <p className="mt-1 text-xs leading-relaxed">{liveStatus.detail}</p>
+              {liveState.phase === 'error' && liveState.errorMessage && (
+                <p className="mt-1 text-xs opacity-90">Reason: {liveState.errorMessage}</p>
+              )}
+            </div>
+            {shouldShowRetryButton && (
+              <button
+                type="button"
+                onClick={retryNow}
+                className="pixel-btn shrink-0 bg-[var(--surface-alt)] px-2 py-1 text-[11px] font-semibold text-[var(--foreground)] hover:bg-[var(--accent-light)]"
+                aria-label="Retry live world connection now"
+              >
+                Retry now
+              </button>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Tournament Banner */}
         {(currentTournament || upcomingTournament) && (
@@ -488,7 +521,7 @@ export default function Home() {
                     onlineCount={stats.active_agents}
                     onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
                     onMapClick={(x, y) => setSpectatorPos({ x, y })}
-                    isConnected={isConnected}
+                    liveState={liveState}
                   />
                 </div>
               </section>
@@ -545,7 +578,7 @@ export default function Home() {
               agents={agents}
               onlineCount={stats.active_agents}
               onAgentClick={(id, x, y) => setSelectedAgent({ id, x, y })}
-              isConnected={isConnected}
+              liveState={liveState}
             />
           </section>
 
@@ -555,7 +588,7 @@ export default function Home() {
               <span>📜</span> Live Activity Feed
             </h2>
             <div className="min-h-0 flex-1">
-              <ActivityFeed events={events} maxHeight="100%" isConnected={isConnected} />
+              <ActivityFeed events={events} maxHeight="100%" liveState={liveState} />
             </div>
           </section>
 
@@ -568,7 +601,7 @@ export default function Home() {
               totalResources={stats.total_resources}
               miningActivityLastHour={stats.mining_activity_last_hour}
               topGatherer={stats.top_gatherer}
-              isConnected={isConnected}
+              liveState={liveState}
             />
           </section>
         </div>
@@ -580,7 +613,7 @@ export default function Home() {
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-[var(--foreground)]">
               <span>🏆</span> Leaderboard
             </h2>
-            <Leaderboard agents={agents} leaderboard={leaderboard} maxDisplay={10} isConnected={isConnected} />
+            <Leaderboard agents={agents} leaderboard={leaderboard} maxDisplay={10} liveState={liveState} />
           </section>
 
           {/* Recently Joined */}
@@ -601,7 +634,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="text-[var(--muted)] text-sm">
-                {isConnected ? 'No recent agents' : 'Recently joined list loads after live connection is established.'}
+                {getHomeEmptyStateMessage('recentlyJoined', liveState)}
               </div>
             )}
           </section>

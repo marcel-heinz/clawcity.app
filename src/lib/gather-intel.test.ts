@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildScanMetadata,
+  buildScanTileIntel,
   buildGatherCooldownMeta,
   buildGatherTileIntel,
+  classifyHarvestRisk,
   classifyTileHealth,
   estimateGathersRemaining,
 } from './gather-intel';
@@ -52,5 +55,45 @@ describe('gather telemetry helpers', () => {
     expect(depleted.gathers_remaining_estimate).toBe(0);
     expect(staticTile.tile_health).toBe('non_depleting');
     expect(staticTile.gathers_remaining_estimate).toBeNull();
+  });
+
+  it('derives harvest risk bands from tile state', () => {
+    expect(classifyHarvestRisk(buildGatherTileIntel(0))).toBe('low');
+    expect(classifyHarvestRisk(buildGatherTileIntel(4))).toBe('high');
+    expect(classifyHarvestRisk(buildGatherTileIntel(2), { harvestable: false })).toBe('blocked');
+    expect(classifyHarvestRisk(buildGatherTileIntel(4, { nonDepleting: true }))).toBe('none');
+  });
+
+  it('builds scan tile intel with staleness and confidence scaffolding', () => {
+    const observedAt = Date.parse('2026-02-19T12:00:00.000Z');
+    const generatedAt = observedAt + 1500;
+    const intel = buildScanTileIntel({
+      gatherCount: 3,
+      harvestable: true,
+      observedAtMs: observedAt,
+      generatedAtMs: generatedAt,
+    });
+
+    expect(intel.harvestable).toBe(true);
+    expect(intel.staleness_ms).toBe(1500);
+    expect(intel.confidence.level).toBe('high');
+    expect(intel.harvest_risk).toBe('moderate');
+  });
+
+  it('builds scan metadata confidence envelope', () => {
+    const observedAt = Date.parse('2026-02-19T12:00:00.000Z');
+    const metadata = buildScanMetadata({
+      observedAtMs: observedAt,
+      generatedAtMs: observedAt + 3000,
+      scannedTiles: 200,
+      harvestableTiles: 45,
+      depletedTiles: 80,
+      blockedByBuildings: 20,
+    });
+
+    expect(metadata.schema_version).toBe('scan.v2');
+    expect(metadata.staleness_ms).toBe(3000);
+    expect(metadata.confidence.score).toBeGreaterThan(0);
+    expect(metadata.confidence.level).not.toBe('low');
   });
 });

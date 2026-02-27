@@ -5,15 +5,16 @@ description: Audit, update, test, and publish the clawcity npm CLI from the repo
 
 # CLI Update Agent
 
-This agent maintains the `clawcity` npm package used by gameplay agents and Railway runtime.
+This agent maintains the `clawcity` npm package used by gameplay agents and the OpenClaw runtime.
 
-## Canonical Paths
+## Canonical Paths (Repo-Relative)
 
-- CLI package root: `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/clawcity-cli/`
-- API source: `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/src/app/api/`
-- Gameplay skill docs:
-  - `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/openclaw-gateway/clawcity-skill/SKILL.md`
-  - `/Users/marcelheinz/Desktop/clawcity.app-main-fresh/public/skill.md`
+- CLI package root: `clawcity-cli/`
+- API source: `src/app/api/`
+- Gameplay skill docs (tiered):
+  - Canonical: `openclaw-gateway/clawcity-skill/{SKILL.md,skill-workflows.md,skill-reference.md}`
+  - Mirrors: `skill/clawcity/{SKILL.md,skill-workflows.md,skill-reference.md}`
+  - Public docs: `public/{skill.md,skill-workflows.md,skill-reference.md}`
 
 ## Contract Rules
 
@@ -26,16 +27,21 @@ This agent maintains the `clawcity` npm package used by gameplay agents and Rail
 - `clawcity-cli/src/lib/endpoints.ts`
 4. Keep compatibility aliases stable for autoplay resilience (`move-to`, `look`).
 5. Keep onboarding CLI-first:
-   - `clawcity install clawcity` remains the primary registration handoff.
-   - Oracle guidance output must stay clear (`clawcity oracle`).
+- `clawcity install clawcity` remains the primary registration handoff.
+- Oracle guidance output must stay clear (`clawcity oracle`).
+6. Keep docs tier-aware when command behavior changes:
+- `skill.md` is quickstart/TL;DR
+- `skill-workflows.md` is automation strategy scaffolding
+- `skill-reference.md` is full command/API catalog
 
 ## Quick Start
 
 1. Audit published npm state.
 2. Scan local API/CLI drift.
 3. Update CLI commands and endpoint registry.
-4. Build and run local smoke tests.
-5. Publish and verify `@latest`.
+4. Update CLI docs and tiered skill references if needed.
+5. Build and run local smoke tests.
+6. Publish and verify `@latest`.
 
 ## Phase 1: Audit npm
 
@@ -48,8 +54,6 @@ npm view clawcity time --json
 ## Phase 2: Scan for Drift
 
 ```bash
-cd /Users/marcelheinz/Desktop/clawcity.app-main-fresh
-
 rg -n "export async function (GET|POST|PUT|PATCH|DELETE)" src/app/api -g"route.ts"
 rg -n "move-to|look|cost|afford|territories|timeout|api request|builder|billing|user/profile" clawcity-cli/src -g"*.ts"
 ```
@@ -86,7 +90,6 @@ Required checks when updating:
 ## Phase 4: Build + Smoke Test
 
 ```bash
-cd /Users/marcelheinz/Desktop/clawcity.app-main-fresh
 npm --prefix clawcity-cli install
 npm --prefix clawcity-cli run build
 
@@ -103,7 +106,7 @@ node clawcity-cli/dist/index.js api list
 ## Phase 5: Publish
 
 ```bash
-cd /Users/marcelheinz/Desktop/clawcity.app-main-fresh/clawcity-cli
+cd clawcity-cli
 npm whoami
 npm publish
 ```
@@ -120,11 +123,11 @@ npx clawcity@latest api list
 
 ## Validation Checklist
 
-- [ ] README reflects current command catalog
+- [ ] `clawcity-cli/README.md` reflects current command catalog and doc tier links
 - [ ] `files` in `clawcity-cli/package.json` includes `README.md` so npm package shows docs
 - [ ] Reserved routes exclusion is documented
 - [ ] New version is semver-correct
-- [ ] No stale clawhub-era migration language in active instructions
+- [ ] No stale absolute local paths remain in docs
 - [ ] Railway-relevant alias behavior is covered by examples
 - [ ] Gather output formatting covers cooldown + tile planning hints
 - [ ] README documents timeout behavior and planning helpers (`cost`, `afford`, `territories`)

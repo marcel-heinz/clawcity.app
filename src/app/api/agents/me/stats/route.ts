@@ -2,15 +2,11 @@ import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { BUILDING_DEFINITIONS, calculateResourceCap } from '@/lib/buildings';
+import { buildClaimQuote, getTerritoryDeedDiscountPercent } from '@/lib/claim-quote';
 import {
   calculateWealthBreakdown,
-  CLAIM_COST_FOOD,
-  CLAIM_COST_GOLD,
-  CLAIM_COST_STONE,
-  CLAIM_COST_WOOD,
   MAX_TERRITORIES_PER_AGENT,
   MAX_UPGRADE_LEVEL,
-  STAMINA_COST_CLAIM,
   UPGRADE_COSTS,
 } from '@/lib/types';
 import { getActiveStorageBonus } from '@/lib/claw-credits';
@@ -141,30 +137,6 @@ export async function GET(request: NextRequest) {
     // agent_items table may not exist yet
   }
 
-  const firstClaimDiscountAvailable = territoryCount === 0;
-  const claimDiscountPercent = territoryDeedAvailable
-    ? 50
-    : firstClaimDiscountAvailable
-      ? 30
-      : 0;
-  const claimDiscountMultiplier = (100 - claimDiscountPercent) / 100;
-
-  const claimCostHere = {
-    gold: Math.floor(CLAIM_COST_GOLD * claimDiscountMultiplier),
-    wood: Math.floor(CLAIM_COST_WOOD * claimDiscountMultiplier),
-    stone: Math.floor(CLAIM_COST_STONE * claimDiscountMultiplier),
-    food_claim_cost: Math.floor(CLAIM_COST_FOOD * claimDiscountMultiplier),
-    stamina_cost: STAMINA_COST_CLAIM,
-  };
-  const claimFoodTotal = claimCostHere.food_claim_cost + STAMINA_COST_CLAIM;
-  const claimRequirements: Record<ResourceName, Requirement> = {
-    gold: makeRequirement(claimCostHere.gold, agent.gold),
-    wood: makeRequirement(claimCostHere.wood, agent.wood),
-    stone: makeRequirement(claimCostHere.stone, agent.stone),
-    food: makeRequirement(claimFoodTotal, agent.food),
-  };
-  const canAffordClaim = canAfford(claimRequirements);
-
   const currentTile = {
     x: agent.x,
     y: agent.y,
@@ -176,14 +148,24 @@ export async function GET(request: NextRequest) {
     building_type: tile?.building_type || null,
   };
 
-  const claimReasons: string[] = [];
-  if (currentTile.terrain === 'market') claimReasons.push('market_tile');
-  if (currentTile.terrain === 'water') claimReasons.push('water_tile');
-  if (currentTile.owner_id === agent.id) claimReasons.push('already_owned');
-  if (currentTile.owner_id && currentTile.owner_id !== agent.id) claimReasons.push('tile_claimed');
-  if (territoryCount >= MAX_TERRITORIES_PER_AGENT) claimReasons.push('territory_limit');
-  if (!canAffordClaim) claimReasons.push('insufficient_resources');
-  const canClaimHere = claimReasons.length === 0;
+  const firstClaimDiscountAvailable = territoryCount === 0;
+  const claimQuote = buildClaimQuote({
+    inventory: {
+      gold: agent.gold,
+      wood: agent.wood,
+      stone: agent.stone,
+      food: agent.food,
+    },
+    terrain: currentTile.terrain,
+    tileOwnerId: currentTile.owner_id,
+    agentId: agent.id,
+    territoryCount,
+    maxTerritories: MAX_TERRITORIES_PER_AGENT,
+    territoryDeedAvailable,
+    territoryDeedDiscountPercent: getTerritoryDeedDiscountPercent(),
+    firstClaimDiscountAvailable,
+  });
+  const canClaimHere = claimQuote.can_execute;
 
   const currentLevel = currentTile.upgrade_level;
   const nextUpgradeLevel = currentLevel + 1;
@@ -258,20 +240,8 @@ export async function GET(request: NextRequest) {
       current_tile: currentTile,
       action_eligibility: {
         claim: {
+          ...claimQuote,
           can_execute: canClaimHere,
-          can_afford: canAffordClaim,
-          reasons: claimReasons,
-          effective_cost: {
-            ...claimCostHere,
-            food_total: claimFoodTotal,
-          },
-          discounts: {
-            territory_deed_available: territoryDeedAvailable,
-            first_claim_discount_available: firstClaimDiscountAvailable,
-            discount_percent_applied: claimDiscountPercent,
-          },
-          missing_resources: missingResources(claimRequirements),
-          requirements: claimRequirements,
         },
         upgrade: {
           can_execute: canUpgradeHere,

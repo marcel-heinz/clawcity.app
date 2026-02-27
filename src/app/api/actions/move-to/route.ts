@@ -11,7 +11,7 @@ import { isTileHarvestable } from '@/lib/tile-state';
 import {
   buildBlockedGoalSet,
   buildTerrainTileStateMap,
-  findNearestFreshTerrainTile,
+  findNearestHarvestableTerrainTile,
   tileCoordKey,
   type TerrainTileState,
 } from '@/lib/move-to-targeting';
@@ -342,10 +342,10 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Always prefer fresh tiles for terrain mode (not only when standing on a depleted tile).
+      // Always prefer harvestable tiles for terrain mode (not only when standing on a depleted tile).
       const radii = [...FRESH_TILE_SEARCH_RADII.filter((radius) => radius < effectiveMaxSteps), effectiveMaxSteps]
         .filter((radius, index, all) => radius > 0 && all.indexOf(radius) === index);
-      let freshTarget: { x: number; y: number; distance: number } | null = null;
+      let harvestableTarget: { x: number; y: number; distance: number } | null = null;
 
       for (const radius of radii) {
         try {
@@ -357,7 +357,7 @@ export async function POST(request: NextRequest) {
             ...buildBlockedGoalSet(terrainTiles, nowMs),
           ]);
 
-          const target = findNearestFreshTerrainTile({
+          const target = findNearestHarvestableTerrainTile({
             startX: agent.x,
             startY: agent.y,
             targetTerrain: desiredTerrain,
@@ -368,7 +368,7 @@ export async function POST(request: NextRequest) {
           });
 
           if (target) {
-            freshTarget = target;
+            harvestableTarget = target;
             break;
           }
         } catch (error) {
@@ -377,14 +377,14 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (freshTarget) {
-        const targetPoint = freshTarget;
-        goalDescription = `fresh ${desiredTerrain} tile`;
+      if (harvestableTarget) {
+        const targetPoint = harvestableTarget;
+        goalDescription = `harvestable ${desiredTerrain} tile`;
         isGoal = (x, y) => x === targetPoint.x && y === targetPoint.y;
         effectiveMaxSteps = Math.max(effectiveMaxSteps, targetPoint.distance + 6);
         effectiveMaxSteps = Math.min(effectiveMaxSteps, MAX_STEPS_LIMIT);
       } else if (blockedTerrainGoals.size > 0) {
-        goalDescription = `nearest fresh ${desiredTerrain} tile`;
+        goalDescription = `nearest harvestable ${desiredTerrain} tile`;
         isGoal = (x, y, terrain) =>
           terrain === desiredTerrain && !blockedTerrainGoals.has(tileCoordKey(x, y));
       }

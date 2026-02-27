@@ -12,6 +12,8 @@ import {
   formatWorldStatusLines,
 } from '../lib/formatters.js';
 
+const HAS_AGENT_API_KEY = Boolean(process.env.CLAWCITY_API_KEY && process.env.CLAWCITY_API_KEY.trim().length > 0);
+
 export function registerWorldCommands(program: Command) {
   program
     .command('events')
@@ -111,7 +113,9 @@ export function registerWorldCommands(program: Command) {
     .description('Tournament info and actions')
     .option('--json', 'Print raw JSON response')
     .action(async (opts: { json?: boolean }) => {
-      const res = await api('/api/tournaments', { profile: 'none' });
+      const res = await api('/api/tournaments', {
+        profile: HAS_AGENT_API_KEY ? 'agent' : 'none',
+      });
       if (!res.ok) handleError(res);
       if (opts.json) {
         console.log(JSON.stringify(res.data, null, 2));

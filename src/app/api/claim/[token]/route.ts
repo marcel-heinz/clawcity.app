@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { jsonResponse, errorResponse } from '@/lib/auth';
-import { hashToken } from '@/lib/game-logic';
+import { getOwnershipClaimByToken } from '@/lib/ownership';
 
-// GET /api/claim/[token] - Get claim info for a token
+// GET /api/claim/[token] - legacy alias of /api/ownership/[token]
 export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
+  _request: NextRequest,
+  { params }: { params: Promise<{ token: string }> },
 ) {
   if (!isSupabaseConfigured) {
     return errorResponse('Database not configured', 503);
@@ -20,49 +20,35 @@ export async function GET(
     }
 
     const supabase = createServerClient();
+    const lookup = await getOwnershipClaimByToken(supabase, token);
 
-    // Hash-based lookup (secure method - plaintext tokens are no longer stored)
-    const tokenHash = hashToken(token);
-    const { data: claim, error } = await supabase
-      .from('agent_claims')
-      .select(`
-        id,
-        verified,
-        twitter_handle,
-        created_at,
-        verified_at,
-        expires_at,
-        agent_id
-      `)
-      .eq('claim_token_hash', tokenHash)
-      .single();
+    if (lookup.error) {
+      console.error('Claim lookup alias error:', lookup.error);
+      return errorResponse('Failed to fetch claim state', 500, {
+        code: 'claim_lookup_failed',
+      });
+    }
 
-    if (error || !claim) {
+    if (lookup.notFound || !lookup.data) {
       return errorResponse('Invalid or expired claim token', 404);
     }
 
-    // Get the agent info separately
-    const { data: agent } = await supabase
-      .from('agents')
-      .select('id, name, created_at')
-      .eq('id', claim.agent_id)
-      .single();
-
-    // Check if expired
-    if (claim.expires_at && new Date(claim.expires_at) < new Date()) {
+    if (lookup.data.status === 'expired') {
       return errorResponse('This claim link has expired', 410);
     }
 
     return jsonResponse({
       success: true,
       data: {
-        token: token,  // Return the token they provided, not from DB
-        agent_name: agent?.name,
-        agent_created_at: agent?.created_at,
-        verified: claim.verified,
-        twitter_handle: claim.twitter_handle,
-        verified_at: claim.verified_at,
-        expires_at: claim.expires_at,
+        token,
+        agent_name: lookup.data.agent.name,
+        agent_created_at: lookup.data.agent.created_at,
+        verified: lookup.data.verified,
+        twitter_handle: lookup.data.twitter_handle,
+        verified_at: lookup.data.verified_at,
+        expires_at: lookup.data.expires_at,
+        ownership_status: lookup.data.status,
+        canonical_endpoint: `/api/ownership/${token}`,
       },
     });
   } catch (error) {

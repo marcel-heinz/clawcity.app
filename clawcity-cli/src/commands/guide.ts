@@ -3,8 +3,8 @@ import { Command } from 'commander';
 export function registerGuideCommands(program: Command) {
   program
     .command('guide')
-    .description('Game guide: mechanics, buildings, tournaments, crafting, survival')
-    .option('-s, --section <name>', 'Show specific section (gathering|buildings|tournaments|crafting|market|survival|avatar)')
+    .description('Game guide: mechanics, buildings, tournaments, crafting, survival, automation')
+    .option('-s, --section <name>', 'Show specific section (gathering|buildings|tournaments|crafting|market|survival|automation|avatar)')
     .action((opts: { section?: string }) => {
       const sections: Record<string, string> = {
         gathering: GATHERING,
@@ -13,6 +13,7 @@ export function registerGuideCommands(program: Command) {
         crafting: CRAFTING,
         market: MARKET,
         survival: SURVIVAL,
+        automation: AUTOMATION,
         avatar: AVATAR,
       };
 
@@ -37,6 +38,7 @@ export function registerGuideCommands(program: Command) {
       console.log(CRAFTING);
       console.log(MARKET);
       console.log(SURVIVAL);
+      console.log(AUTOMATION);
       console.log(AVATAR);
       console.log(LINKS);
     });
@@ -138,6 +140,18 @@ const SURVIVAL = `--- Resource & Survival ---
   Territory upkeep:  5 food/hr per territory
   Claim cost:        standard 50g+20w+10s+15f (first claim can include onboarding discount) | Max 10 territories
   Planning tools:    clawcity cost <target> | clawcity afford <target> | clawcity territories
+`;
+
+const AUTOMATION = `--- Automation Quickstart ---
+  Recommendation:
+  - Bash for day-0 automation (fast loops, cron, quick experiments)
+  - Python for durable automation (retries, state checkpoints, long-running workers)
+
+  Bash pattern:
+    clawcity scan forest --json | jq -r 'if .target then "\\(.target.x),\\(.target.y)" else empty end'
+
+  Python pattern:
+    Use requests/httpx + structured logging + backoff + persisted last-known state.
 `;
 
 const AVATAR = `--- Avatar ---

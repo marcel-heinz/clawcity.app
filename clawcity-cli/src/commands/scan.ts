@@ -15,6 +15,10 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+function asBoolean(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null;
+}
+
 export function registerScanCommands(program: Command) {
   program
     .command('scan [terrain]')
@@ -48,11 +52,20 @@ export function registerScanCommands(program: Command) {
         const message = asString(data.message) || 'No harvestable tile found in range.';
         const effectiveRadius = asNumber(scan?.effective_radius);
         const maxRadius = asNumber(scan?.max_radius);
+        const harvestableTiles = asNumber(scan?.harvestable_tiles);
+        const blockedByBuildings = asNumber(scan?.blocked_by_buildings);
         if (effectiveRadius !== null && maxRadius !== null && effectiveRadius < maxRadius) {
           console.log(`${message} (scan capped at ${effectiveRadius}/${maxRadius}).`);
           return;
         }
-        console.log(message);
+        const parts = [message];
+        if (harvestableTiles !== null) {
+          parts.push(`harvestable_seen:${harvestableTiles}`);
+        }
+        if (blockedByBuildings !== null) {
+          parts.push(`blocked:${blockedByBuildings}`);
+        }
+        console.log(parts.join(' | '));
         return;
       }
 
@@ -60,22 +73,50 @@ export function registerScanCommands(program: Command) {
       const x = asNumber(target.x);
       const y = asNumber(target.y);
       const distance = asNumber(target.distance);
+      const harvestable = asBoolean(target.harvestable);
+      const riskPercent = asNumber(target.depletion_chance_percent)
+        ?? asNumber(target.risk_percent)
+        ?? asNumber(target.risk);
+      const health = asString(target.tile_health) || asString(target.health);
+      const nextGatherMs = asNumber(target.cooldown_remaining_ms)
+        ?? asNumber(target.next_gather_in_ms);
+      const nextGatherSeconds = nextGatherMs === null ? null : Math.ceil(nextGatherMs / 1000);
       const effectiveRadius = asNumber(scan?.effective_radius);
       const maxRadius = asNumber(scan?.max_radius);
+      const harvestableTiles = asNumber(scan?.harvestable_tiles);
       const depleted = asNumber(scan?.depleted_tiles);
+      const blockedByBuildings = asNumber(scan?.blocked_by_buildings);
 
       const pieces = [
-        `Next fresh ${terrainLabel} tile: (${x ?? '?'},${y ?? '?'})`,
-        `distance:${distance ?? '?'}`,
+        `Nearest ${terrainLabel} tile: (${x ?? '?'},${y ?? '?'})`,
+        `dist:${distance ?? '?'}`,
       ];
+      if (harvestable !== null) {
+        pieces.push(`harvestable:${harvestable ? 'yes' : 'no'}`);
+      }
+      if (riskPercent !== null) {
+        pieces.push(`risk:${riskPercent}%`);
+      }
+      if (health) {
+        pieces.push(`health:${health}`);
+      }
+      if (nextGatherSeconds !== null) {
+        pieces.push(`next_gather:${nextGatherSeconds > 0 ? `${nextGatherSeconds}s` : 'now'}`);
+      }
       if (effectiveRadius !== null) {
         pieces.push(`radius:${effectiveRadius}`);
       }
       if (maxRadius !== null && effectiveRadius !== null && effectiveRadius < maxRadius) {
         pieces.push(`capped:${effectiveRadius}/${maxRadius}`);
       }
+      if (harvestableTiles !== null) {
+        pieces.push(`harvestable_seen:${harvestableTiles}`);
+      }
       if (depleted !== null) {
         pieces.push(`depleted_seen:${depleted}`);
+      }
+      if (blockedByBuildings !== null) {
+        pieces.push(`blocked:${blockedByBuildings}`);
       }
       if (usedSpyglass) {
         const usesRemaining = asNumber(scan?.spyglass_uses_remaining);

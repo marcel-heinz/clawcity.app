@@ -45,6 +45,23 @@ export interface TournamentEntry {
   live_rank?: number;
 }
 
+export type TournamentViewerStatus =
+  | 'anonymous'
+  | 'joined'
+  | 'not_joined'
+  | 'no_focus_tournament';
+
+export interface TournamentViewerEntry {
+  id: string;
+  tournament_id: string;
+  agent_id: string;
+  agent_name?: string;
+  current_score: number;
+  live_rank?: number | null;
+  final_rank?: number | null;
+  joined_at?: string;
+}
+
 export interface TournamentWinner {
   id: string;
   tournament_id: string;
@@ -100,9 +117,16 @@ export interface TournamentParticipationSnapshot {
 export interface TournamentsResponse {
   success: boolean;
   data?: {
-    current: Tournament | null;
-    recent: Tournament[];
-    upcoming: Tournament | null;
+    current: (Tournament & { participant_count?: number }) | null;
+    recent: Array<Tournament & { participant_count?: number }>;
+    upcoming: (Tournament & { participant_count?: number }) | null;
+    participants?: {
+      current: number;
+      upcoming: number;
+      recent: Array<{ tournament_id: string; count: number }>;
+    };
+    viewer_status?: TournamentViewerStatus;
+    viewer_entry?: TournamentViewerEntry | null;
   };
   error?: string;
 }
@@ -113,6 +137,11 @@ export interface TournamentDetailResponse {
     tournament: Tournament;
     leaderboard: TournamentEntry[];
     total_participants: number;
+    participants?: {
+      total: number;
+    };
+    viewer_status?: TournamentViewerStatus;
+    viewer_entry?: TournamentViewerEntry | null;
     participation?: {
       rules: TournamentParticipationRule;
       summary: {

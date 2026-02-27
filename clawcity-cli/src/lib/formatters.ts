@@ -20,6 +20,10 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+function asBoolean(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null;
+}
+
 function formatNumber(value: number | null, digits = 2): string {
   if (value === null) return '?';
   return value.toFixed(digits);
@@ -51,6 +55,14 @@ export function formatGatherResultLine(data: UnknownRecord): string {
   const tileIntel = asRecord(data.tile_intel);
   const efficiency = asNumber(stamina?.efficiency);
   const cooldownRemainingMs = asNumber(cooldown?.cooldown_remaining_ms);
+  const harvestable = asBoolean(data.harvestable)
+    ?? asBoolean(tileIntel?.harvestable);
+  const depletionRiskPercent = asNumber(tileIntel?.depletion_chance_percent)
+    ?? asNumber(tileIntel?.risk_percent)
+    ?? asNumber(tileIntel?.risk)
+    ?? asNumber(data.depletion_risk_percent)
+    ?? asNumber(data.risk_percent)
+    ?? asNumber(data.risk);
   const tileHealth = asString(tileIntel?.tile_health);
   const gathersRemainingEstimate = asNumber(tileIntel?.gathers_remaining_estimate);
   const tileStatus = asString(data.tile_status)
@@ -72,8 +84,15 @@ export function formatGatherResultLine(data: UnknownRecord): string {
     `Tile: ${tileStatus}`,
   ];
 
+  if (harvestable !== null) {
+    segments.push(`Harvestable: ${harvestable ? 'yes' : 'no'}`);
+  }
   if (cooldownRemainingMs !== null) {
-    segments.push(`Next: ${Math.ceil(cooldownRemainingMs / 1000)}s`);
+    const seconds = Math.ceil(cooldownRemainingMs / 1000);
+    segments.push(`Next gather: ${seconds > 0 ? `${seconds}s` : 'now'}`);
+  }
+  if (depletionRiskPercent !== null) {
+    segments.push(`Risk: ${depletionRiskPercent}%`);
   }
   if (tileHealth) {
     segments.push(`Health: ${tileHealth}`);
@@ -282,14 +301,31 @@ export function formatTournamentOverviewLines(data: UnknownRecord): string[] {
   const current = asRecord(data.current);
   const upcoming = asRecord(data.upcoming);
   const topThree = asRecordArray(data.top_three);
+  const self = asRecord(data.self)
+    || asRecord(data.me)
+    || asRecord(data.my_entry)
+    || asRecord(data.own_entry)
+    || asRecord(data.entry);
 
   const lines: string[] = [];
   if (current) {
     const name = asString(current.name) || asString(current.type) || 'Tournament';
-    lines.push(`Current: ${name} (${asString(current.status) || 'active'})`);
+    const status = asString(current.status) || 'active';
+    const participantCount = asNumber(current.participant_count)
+      ?? asNumber(current.participants)
+      ?? asNumber(current.total_participants)
+      ?? asNumber(data.current_participants)
+      ?? asNumber(data.participant_count)
+      ?? asNumber(data.total_participants);
+    lines.push(
+      participantCount !== null
+        ? `Current: ${name} (${status}) | participants:${participantCount}`
+        : `Current: ${name} (${status})`
+    );
     const id = asString(current.id);
     if (id) {
       lines.push(`Current ID: ${id}`);
+      lines.push(`Hint: full leaderboard -> clawcity tournament show ${id} --limit 20`);
     }
   } else {
     lines.push('Current: none active');
@@ -308,7 +344,23 @@ export function formatTournamentOverviewLines(data: UnknownRecord): string[] {
       const score = asNumber(row.current_score) ?? 0;
       lines.push(`  #${rank} ${name}: ${score}`);
     }
-    lines.push('This snapshot shows only top 3. Use "clawcity tournament --json" for id, then "clawcity tournament show <id> --refresh".');
+  }
+
+  if (topThree.length > 0 && !lines.some((line) => line.startsWith('Hint: full leaderboard'))) {
+    lines.push('Hint: full leaderboard -> clawcity tournament show <id> --limit 20');
+  }
+
+  if (self) {
+    const rank = asNumber(self.live_rank) ?? asNumber(self.rank) ?? asNumber(self.final_rank);
+    const status = asString(self.status)
+      || (self.qualified === true ? 'qualified' : null)
+      || (self.joined === true ? 'joined' : null);
+    const score = asNumber(self.current_score) ?? asNumber(self.score);
+    const parts = ['You:'];
+    if (rank !== null) parts.push(`#${rank}`);
+    if (status) parts.push(status);
+    if (score !== null) parts.push(`score:${score}`);
+    lines.push(parts.join(' | '));
   }
 
   return lines;

@@ -6,11 +6,14 @@ export interface TerrainTileState extends TileDepletionState {
   y: number;
 }
 
-export interface FreshTerrainTarget {
+export interface HarvestableTerrainTarget {
   x: number;
   y: number;
   distance: number;
 }
+
+// Backwards-compatible alias for older imports.
+export type FreshTerrainTarget = HarvestableTerrainTarget;
 
 export function tileCoordKey(x: number, y: number): string {
   return `${x},${y}`;
@@ -34,7 +37,7 @@ export function buildBlockedGoalSet(tiles: TerrainTileState[], nowMs = Date.now(
   return blocked;
 }
 
-export function findNearestFreshTerrainTile(params: {
+export function findNearestHarvestableTerrainTile(params: {
   startX: number;
   startY: number;
   targetTerrain: TerrainType;
@@ -42,7 +45,7 @@ export function findNearestFreshTerrainTile(params: {
   terrainAt: (x: number, y: number) => TerrainType;
   tileStateMap: Map<string, TerrainTileState>;
   nowMs?: number;
-}): FreshTerrainTarget | null {
+}): HarvestableTerrainTarget | null {
   const {
     startX,
     startY,
@@ -72,3 +75,6 @@ export function findNearestFreshTerrainTile(params: {
 
   return null;
 }
+
+// Backwards-compatible alias for callers still using "fresh" terminology.
+export const findNearestFreshTerrainTile = findNearestHarvestableTerrainTile;

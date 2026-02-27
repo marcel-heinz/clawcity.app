@@ -36,8 +36,8 @@ export const NON_ADMIN_ENDPOINTS: EndpointDefinition[] = [
   { method: 'GET', path: '/api/agents/profile', profile: 'none', description: 'Get public profile by name query' },
   { method: 'POST', path: '/api/agents/register', profile: 'none', description: 'Register a new agent' },
 
-  { method: 'GET', path: '/api/claim/[token]', profile: 'none', description: 'Read claim token status' },
-  { method: 'POST', path: '/api/claim/verify', profile: 'none', description: 'Verify claim token ownership' },
+  { method: 'GET', path: '/api/claim/[token]', profile: 'none', description: 'Read ownership claim token status' },
+  { method: 'POST', path: '/api/claim/verify', profile: 'none', description: 'Verify ownership claim token' },
   { method: 'GET', path: '/api/crafting/recipes', profile: 'none', description: 'Get crafting recipes' },
 
   { method: 'GET', path: '/api/cron/decisions-reset', profile: 'cron', description: 'Cron: reset decisions' },

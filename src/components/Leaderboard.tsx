@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { AgentLeaderboard } from '@/lib/types';
 import { resolveAvatar } from '@/lib/avatar';
+import { type HomeLiveState, getHomeEmptyStateMessage } from '@/lib/home-live-state';
 
 interface LeaderboardEntry {
   rank: number;
@@ -32,7 +33,7 @@ interface LeaderboardProps {
   agents: AgentLeaderboard[];
   leaderboard?: LeaderboardEntry[];
   maxDisplay?: number;
-  isConnected?: boolean;
+  liveState: HomeLiveState;
 }
 
 type SortMode = 'wealth' | 'reputation' | 'territory' | 'gatherer';
@@ -73,7 +74,7 @@ function getRankIcon(rank: number): string {
   return '';
 }
 
-export function Leaderboard({ agents, leaderboard, maxDisplay = 15, isConnected = true }: LeaderboardProps) {
+export function Leaderboard({ agents, leaderboard, maxDisplay = 15, liveState }: LeaderboardProps) {
   const [sortMode, setSortMode] = useState<SortMode>('wealth');
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   
@@ -134,7 +135,7 @@ export function Leaderboard({ agents, leaderboard, maxDisplay = 15, isConnected 
   if (sortedAgents.length === 0) {
     return (
       <div className="text-[var(--muted)] text-center py-4">
-        {isConnected ? 'No agents yet' : 'Leaderboard loads after live connection is established.'}
+        {getHomeEmptyStateMessage('leaderboard', liveState)}
       </div>
     );
   }
