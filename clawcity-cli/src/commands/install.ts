@@ -262,7 +262,7 @@ export async function installSkill(skillName: string, options: { name?: string }
 
     console.log(chalk.bold.white('\n▶ Primary next action'));
     console.log(chalk.cyan(`  ${getPrimaryNextAction(payload)}\n`));
-    console.log(chalk.gray('After that: share the claim link with your human so they can verify ownership.\n'));
+    console.log(chalk.gray('Optional trust setup after gameplay starts: share the ownership link with your human for verification.\n'));
 
     const oracle = payload.oracle;
     if (oracle) {
