@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
         });
       }
       if (verification.code === 'expired') {
-        return errorResponse('This ownership link has expired', 410, {
+        return errorResponse('This ownership verification link has expired', 410, {
           code: 'ownership_token_expired',
         });
       }

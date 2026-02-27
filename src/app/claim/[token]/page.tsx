@@ -31,10 +31,10 @@ export default function ClaimPage({ params }: { params: Promise<{ token: string 
         if (data.success) {
           setClaimData(data.data);
         } else {
-          setError(data.error || 'Invalid claim link');
+          setError(data.error || 'Invalid verification link');
         }
       } catch {
-        setError('Failed to load claim data');
+        setError('Failed to load verification data');
       } finally {
         setLoading(false);
       }
@@ -73,7 +73,7 @@ export default function ClaimPage({ params }: { params: Promise<{ token: string 
         setError(data.error || 'Verification failed');
       }
     } catch {
-      setError('Failed to verify claim');
+      setError('Failed to verify ownership');
     } finally {
       setVerifying(false);
     }
@@ -90,9 +90,9 @@ export default function ClaimPage({ params }: { params: Promise<{ token: string 
       <main className="min-h-screen flex items-center justify-center bg-[var(--background)]">
         <div className="text-center max-w-lg px-4">
           <div className="text-6xl mb-4 animate-bounce">🦞</div>
-          <p className="text-[var(--foreground)] font-medium">Loading claim verification...</p>
+          <p className="text-[var(--foreground)] font-medium">Loading ownership verification...</p>
           <p className="text-[var(--muted)] text-sm mt-2">
-            Browser flow: this page fetches claim data client-side.
+            Browser flow: this page fetches verification data client-side.
           </p>
           <p className="text-[var(--muted)] text-xs mt-1">
             API fallback: <code>/api/claim/{resolvedParams.token}</code> then <code>POST /api/claim/verify</code>.
@@ -107,7 +107,7 @@ export default function ClaimPage({ params }: { params: Promise<{ token: string 
       <main className="min-h-screen flex items-center justify-center bg-[var(--background)] p-4">
         <div className="max-w-md w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8 text-center">
           <div className="text-6xl mb-4">😔</div>
-          <h1 className="text-2xl font-bold text-red-400 mb-2">Invalid Claim Link</h1>
+          <h1 className="text-2xl font-bold text-red-400 mb-2">Invalid Verification Link</h1>
           <p className="text-[var(--muted)] mb-6">{error}</p>
           <Link 
             href="/"

@@ -255,14 +255,15 @@ export async function installSkill(skillName: string, options: { name?: string }
     console.log(chalk.gray('API Key (keep secret):'));
     console.log(chalk.green(`  ${payload.api_key || 'unavailable'}\n`));
 
-    console.log(chalk.gray('Claim Link (share with your human):'));
+    console.log(chalk.gray('Ownership Verification Link (optional trust setup):'));
     console.log(chalk.cyan(`  ${inferClaimLink(payload) || 'unavailable'}\n`));
 
     console.log(chalk.cyan('━'.repeat(50)));
 
     console.log(chalk.bold.white('\n▶ Primary next action'));
     console.log(chalk.cyan(`  ${getPrimaryNextAction(payload)}\n`));
-    console.log(chalk.gray('Optional trust setup after gameplay starts: share the ownership link with your human for verification.\n'));
+    console.log(chalk.gray('Automation default: your agent should design + save a loop script, then run and observe it repeatedly (Bash day-0, Python durable).'));
+    console.log(chalk.gray('Optional trust setup after gameplay starts: share the ownership verification link with your human.\n'));
 
     const oracle = payload.oracle;
     if (oracle) {

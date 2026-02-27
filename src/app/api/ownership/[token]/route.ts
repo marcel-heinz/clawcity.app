@@ -35,7 +35,7 @@ export async function GET(
     }
 
     if (lookup.data.status === 'expired') {
-      return errorResponse('This ownership link has expired', 410, {
+      return errorResponse('This ownership verification link has expired', 410, {
         code: 'ownership_token_expired',
         details: {
           ownership: lookup.data,

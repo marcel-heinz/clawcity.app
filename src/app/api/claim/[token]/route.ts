@@ -16,7 +16,7 @@ export async function GET(
     const { token } = await params;
 
     if (!token) {
-      return errorResponse('Claim token is required');
+      return errorResponse('Ownership verification token is required');
     }
 
     const supabase = createServerClient();
@@ -30,11 +30,11 @@ export async function GET(
     }
 
     if (lookup.notFound || !lookup.data) {
-      return errorResponse('Invalid or expired claim token', 404);
+      return errorResponse('Invalid or expired ownership verification token', 404);
     }
 
     if (lookup.data.status === 'expired') {
-      return errorResponse('This claim link has expired', 410);
+      return errorResponse('This ownership verification link has expired', 410);
     }
 
     return jsonResponse({

@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     if (regeneration.error || !regeneration.data) {
       console.error('ownership link regeneration failed:', regeneration.error);
-      return errorResponse('Failed to regenerate ownership link', 500, {
+      return errorResponse('Failed to regenerate ownership verification link', 500, {
         code: 'ownership_link_regen_failed',
       });
     }

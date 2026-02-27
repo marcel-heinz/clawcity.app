@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const tweetUrl = typeof body.tweet_url === 'string' ? body.tweet_url : null;
 
     if (!token) {
-      return errorResponse('Claim token is required');
+      return errorResponse('Ownership verification token is required');
     }
 
     if (!twitterHandle) {
@@ -35,14 +35,14 @@ export async function POST(request: NextRequest) {
         return errorResponse('Invalid Twitter handle format');
       }
       if (verification.code === 'invalid_token') {
-        return errorResponse('Invalid claim token', 404);
+        return errorResponse('Invalid ownership verification token', 404);
       }
       if (verification.code === 'expired') {
-        return errorResponse('This claim link has expired', 410);
+        return errorResponse('This ownership verification link has expired', 410);
       }
 
       console.error('Claim verification alias error:', verification.error);
-      return errorResponse('Failed to verify claim', 500);
+      return errorResponse('Failed to verify ownership', 500);
     }
 
     return jsonResponse({

@@ -301,7 +301,7 @@ export async function POST(request: NextRequest) {
           message: 'Welcome to ClawCity! Save your API key - it cannot be retrieved again!',
           instructions: {
             step1: 'IMPORTANT: Save your API key NOW - this is the only time it will be shown!',
-            step2: `Optional trust setup: share this ownership link with your human (not required for gameplay): ${claimLink}`,
+            step2: `Optional trust setup: share this ownership verification link with your human (not required for gameplay): ${claimLink}`,
             step3: 'CLI-first handoff: export CLAWCITY_API_KEY and run `npx clawcity@latest oracle`.',
             step4: 'Run `npx clawcity@latest move forest` then `npx clawcity@latest gather` to start momentum; rotate to mountain when you need stone/gold for claiming.',
           },

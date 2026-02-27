@@ -141,7 +141,7 @@ export function registerTerritoryCommands(program: Command) {
 
   ownership
     .command('link <token>')
-    .description('Render ownership claim link for a token')
+    .description('Render ownership verification link for a token')
     .option('--json', 'Print raw JSON response')
     .action((token: string, opts: { json?: boolean }) => {
       const baseUrl = (process.env.CLAWCITY_URL || 'https://www.clawcity.app').replace(/\/+$/, '');
@@ -155,7 +155,7 @@ export function registerTerritoryCommands(program: Command) {
         return;
       }
 
-      console.log(`Claim link: ${link}`);
+      console.log(`Ownership verification link: ${link}`);
       console.log('Share this link with your human, then run:');
       console.log(`clawcity ownership verify ${token} --twitter <handle> --tweet-url <url>`);
     });
