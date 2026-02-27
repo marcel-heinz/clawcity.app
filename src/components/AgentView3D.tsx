@@ -244,6 +244,31 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     return createSharedCrabMesh(colors);
   }, []);
 
+  const getTerrainGroundColor = useCallback((terrain: TerrainType, seed: number) => {
+    switch (terrain) {
+      case 'plains':
+        return seed % 2 === 0 ? COLORS.ground : COLORS.groundDark;
+      case 'forest':
+        return seed % 2 === 0 ? COLORS.treeLeaves : COLORS.treeLeavesLight;
+      case 'mountain':
+        return seed % 2 === 0 ? COLORS.mountainMid : COLORS.mountainDark;
+      case 'market':
+        return COLORS.marketBase;
+      case 'water':
+        return COLORS.water;
+      case 'rocky':
+        return seed % 2 === 0 ? COLORS.rockyMid : COLORS.rockyDark;
+      case 'sand':
+        return seed % 2 === 0 ? COLORS.sand : COLORS.sandDark;
+      case 'deep_water':
+        return COLORS.deepWater;
+      case 'marsh':
+        return COLORS.marshWater;
+      default:
+        return COLORS.ground;
+    }
+  }, []);
+
   const createMountain = useCallback((seed: number) => {
     const group = new THREE.Group();
     const height = 1.2 + (seed % 30) * 0.025;
@@ -394,6 +419,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
   const createWater = useCallback(() => {
     const geo = new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE);
+    const waterBaseY = 0.02;
     const mat = new THREE.MeshStandardMaterial({
       color: COLORS.water,
       transparent: true,
@@ -403,7 +429,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     });
     const water = new THREE.Mesh(geo, mat);
     water.rotation.x = -Math.PI / 2;
-    water.position.y = -0.05;
+    water.position.y = waterBaseY;
+    water.userData.waterBaseY = waterBaseY;
     water.receiveShadow = true;
     return water;
   }, []);
@@ -460,6 +487,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   }, []);
 
   const createDeepWater = useCallback(() => {
+    const waterBaseY = 0.015;
     const dw = new THREE.Mesh(
       new THREE.PlaneGeometry(BLOCK_SIZE, BLOCK_SIZE),
       new THREE.MeshStandardMaterial({
@@ -471,7 +499,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
       })
     );
     dw.rotation.x = -Math.PI / 2;
-    dw.position.y = -0.1;
+    dw.position.y = waterBaseY;
+    dw.userData.waterBaseY = waterBaseY;
     dw.receiveShadow = true;
     return dw;
   }, []);
@@ -712,7 +741,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
     // Ground tile
     const groundGeo = new THREE.PlaneGeometry(BLOCK_SIZE * 1.01, BLOCK_SIZE * 1.01);
-    const groundColor = tile.terrain === 'plains' ? (seed % 2 === 0 ? COLORS.ground : COLORS.groundDark) : COLORS.ground;
+    const groundColor = getTerrainGroundColor(tile.terrain, seed);
     const groundMat = new THREE.MeshStandardMaterial({ color: groundColor, roughness: 0.9 });
     const groundTile = new THREE.Mesh(groundGeo, groundMat);
     groundTile.rotation.x = -Math.PI / 2;
@@ -763,7 +792,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     }
 
     return tileGroup;
-  }, [createMountain, createTree, createMarket, createWater, createRocky, createSand, createDeepWater, createMarsh, createStorageBuilding, createWorkshopBuilding, createFortificationBuilding]);
+  }, [createMountain, createTree, createMarket, createWater, createRocky, createSand, createDeepWater, createMarsh, createStorageBuilding, createWorkshopBuilding, createFortificationBuilding, getTerrainGroundColor]);
 
   // ─── Incremental terrain streaming (add new tiles, remove far tiles) ──────────
 
@@ -1056,7 +1085,8 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
       // Animate water
       waterMeshesRef.current.forEach(mesh => {
-        mesh.position.y = -0.05 + Math.sin(elapsedTime * 1.5 + mesh.position.x * 2) * 0.015;
+        const baseY = typeof mesh.userData.waterBaseY === 'number' ? mesh.userData.waterBaseY : 0.02;
+        mesh.position.y = baseY + Math.sin(elapsedTime * 1.5 + mesh.position.x * 2) * 0.012;
       });
 
       if (isSpectator) {
