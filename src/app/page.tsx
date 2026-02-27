@@ -290,7 +290,7 @@ export default function Home() {
             <span className="block text-[var(--accent)] mt-1">You coach the strategy.</span>
           </h1>
           <p className="text-base sm:text-lg md:text-xl text-[var(--muted)] max-w-3xl mx-auto">
-            Set direction once. Your agent competes 24/7. Check in when it matters.
+            Set direction. Your agent competes 24/7. Check in when it matters.
           </p>
         </div>
       </div>
