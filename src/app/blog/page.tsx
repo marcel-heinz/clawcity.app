@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Footer } from '@/components/Footer';
 import { BlogPostCard } from '@/components/blog/blog-post-card';
-import { BlogLayoutNav, BlogLayoutSectionHeader } from '@/components/blog/blog-layout-nav';
+import { BlogLayoutNav } from '@/components/blog/blog-layout-nav';
 import {
   BLOG_LAYOUTS,
   type BlogLayout,
@@ -32,8 +32,26 @@ export const metadata: Metadata = {
   },
 };
 
-export default function BlogPage() {
+function getSelectedLayout(layout: string | string[] | undefined): BlogLayout | 'all' {
+  const selected = Array.isArray(layout) ? layout[0] : layout;
+  if (typeof selected === 'string' && BLOG_LAYOUTS.includes(selected as BlogLayout)) {
+    return selected as BlogLayout;
+  }
+  return 'all';
+}
+
+export default async function BlogPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ layout?: string | string[] }>;
+}) {
+  const { layout } = await searchParams;
+  const selectedLayout = getSelectedLayout(layout);
   const posts = getPublishedPosts();
+  const visiblePosts =
+    selectedLayout === 'all'
+      ? posts
+      : posts.filter((post) => post.layout === selectedLayout);
 
   const counts = BLOG_LAYOUTS.reduce<Record<BlogLayout, number>>((acc, layout) => {
     acc[layout] = posts.filter((post) => post.layout === layout).length;
@@ -51,34 +69,22 @@ export default function BlogPage() {
         <header className="mb-8">
           <h1 className="mb-3 text-4xl font-bold text-[var(--foreground)]">ClawCity Blog</h1>
           <p className="max-w-3xl text-sm leading-relaxed text-[var(--muted)] md:text-base">
-            Four content pillars: engineering on ClawCity, gameplay, agentic gameplay, and other ecosystem notes.
+            Newest posts first. Filter by engineering on ClawCity, gameplay, agentic gameplay, or other ecosystem notes.
             Every article is designed for discoverability in search and clear retrieval by LLMs.
           </p>
         </header>
 
-        <BlogLayoutNav counts={counts} />
+        <BlogLayoutNav counts={counts} selectedLayout={selectedLayout} />
 
-        {posts.length === 0 ? (
+        {visiblePosts.length === 0 ? (
           <section className="pixel-card p-8 text-center">
-            <p className="text-[var(--muted)]">No posts published yet.</p>
+            <p className="text-[var(--muted)]">No posts found for this filter.</p>
           </section>
         ) : (
-          <div className="space-y-12">
-            {BLOG_LAYOUTS.map((layout) => {
-              const layoutPosts = posts.filter((post) => post.layout === layout);
-              if (layoutPosts.length === 0) return null;
-
-              return (
-                <section key={layout}>
-                  <BlogLayoutSectionHeader layout={layout} />
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {layoutPosts.map((post) => (
-                      <BlogPostCard key={post.slug} post={post} />
-                    ))}
-                  </div>
-                </section>
-              );
-            })}
+          <div className="grid gap-4 md:grid-cols-2">
+            {visiblePosts.map((post) => (
+              <BlogPostCard key={post.slug} post={post} />
+            ))}
           </div>
         )}
       </div>
