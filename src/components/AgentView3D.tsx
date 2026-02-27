@@ -4,8 +4,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { AgentPublic, AgentAvatar, Tile, TerrainType, WORLD_SIZE } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
-import { resolveAvatar, hexToThreeColor } from '@/lib/avatar';
-import { createCrabMesh as createSharedCrabMesh } from '@/lib/crab-mesh';
+import { resolveAvatarLabConfig, type ResolvedAvatarLabConfig } from '@/lib/avatar-lab';
+import { createAvatarLabMesh, disposeObject3D } from '@/lib/avatar-lab-mesh';
 import { isAgentOnline } from '@/lib/presence';
 
 // ─── Color palette ───────────────────────────────────────────────────────────
@@ -60,6 +60,7 @@ const COLORS = {
 };
 
 const BLOCK_SIZE = 1;
+const WHITE_COLOR = new THREE.Color(0xffffff);
 
 // Terrain colors for minimap
 const TERRAIN_COLORS: Record<TerrainType, string> = {
@@ -81,7 +82,9 @@ interface OtherAgentData {
   current: THREE.Vector3;
   target: THREE.Vector3;
   mesh: THREE.Group;
-  avatar: Required<AgentAvatar>;
+  avatar: ResolvedAvatarLabConfig;
+  avatarSignature: string;
+  skinKey: string | null;
 }
 
 interface AgentView3DProps {
@@ -140,6 +143,13 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   // Per-tile chunk tracking for smooth streaming (no clear-and-rebuild)
   const loadedTilesRef = useRef<Map<string, THREE.Group>>(new Map());
   const loadedWaterRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const textureLoaderRef = useRef<THREE.TextureLoader | null>(null);
+  const skinTextureCacheRef = useRef<Map<string, {
+    texture: THREE.Texture | null;
+    loading: Promise<THREE.Texture | null> | null;
+    refCount: number;
+  }>>(new Map());
+  const selfSkinKeyRef = useRef<string | null>(null);
 
   // Joystick visual state
   const [joystickPos, setJoystickPos] = useState({ x: 0, y: 0 });
@@ -191,19 +201,170 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
   const terrainFetchThreshold = isSpectator ? SPECTATOR_TERRAIN_FETCH_THRESHOLD : FOLLOW_TERRAIN_FETCH_THRESHOLD;
 
   // Find selected agent's name and avatar
-  const selfAvatarRef = useRef<Required<AgentAvatar>>({ body_color: '#ff4444', claw_color: '#cc2222', eye_color: '#111111' });
+  const selfAvatarRef = useRef<ResolvedAvatarLabConfig>(
+    resolveAvatarLabConfig('Agent', {
+      body_color: '#ff4444',
+      claw_color: '#cc2222',
+      eye_color: '#111111',
+    })
+  );
   useEffect(() => {
     if (!isSpectator) {
       const agent = agents.find(a => a.id === selectedAgentId);
       if (agent) {
         setAgentName(agent.name);
-        selfAvatarRef.current = resolveAvatar(agent.name, agent.avatar);
+        selfAvatarRef.current = resolveAvatarLabConfig(agent.name, agent.avatar);
       }
     }
   }, [agents, selectedAgentId, isSpectator]);
 
   // Sync refs for animation loop access
   useEffect(() => { agentNameRef.current = agentName; }, [agentName]);
+
+  // ─── Mesh Creators ───────────────────────────────────────────────────────────
+
+  const getAvatarSignature = useCallback((config: ResolvedAvatarLabConfig) => {
+    return [
+      config.model_type,
+      config.body_color,
+      config.claw_color,
+      config.eye_color,
+      config.accent_color,
+      config.skin_data_url || '',
+      config.skin_scale.toFixed(4),
+      config.skin_tint_strength.toFixed(4),
+      config.material_roughness.toFixed(4),
+      config.material_metalness.toFixed(4),
+      config.animation_profile,
+    ].join('|');
+  }, []);
+
+  const acquireSkinTexture = useCallback((config: ResolvedAvatarLabConfig): { key: string | null; promise: Promise<THREE.Texture | null> } => {
+    if (!config.skin_data_url) {
+      return { key: null, promise: Promise.resolve(null) };
+    }
+
+    const key = `${config.skin_data_url}|${config.skin_scale.toFixed(4)}`;
+    const cache = skinTextureCacheRef.current;
+    let entry = cache.get(key);
+
+    if (!entry) {
+      entry = { texture: null, loading: null, refCount: 0 };
+      cache.set(key, entry);
+    }
+
+    entry.refCount += 1;
+
+    if (entry.texture) {
+      return { key, promise: Promise.resolve(entry.texture) };
+    }
+
+    if (!entry.loading) {
+      if (!textureLoaderRef.current) {
+        textureLoaderRef.current = new THREE.TextureLoader();
+      }
+
+      entry.loading = new Promise<THREE.Texture | null>((resolve) => {
+        textureLoaderRef.current!.load(
+          config.skin_data_url!,
+          (texture) => {
+            const activeEntry = cache.get(key);
+            if (!activeEntry || activeEntry !== entry || activeEntry.refCount <= 0) {
+              texture.dispose();
+              if (activeEntry === entry) cache.delete(key);
+              resolve(null);
+              return;
+            }
+
+            texture.colorSpace = THREE.SRGBColorSpace;
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(config.skin_scale, config.skin_scale);
+            texture.center.set(0.5, 0.5);
+            texture.rotation = Math.PI / 2;
+
+            activeEntry.texture = texture;
+            activeEntry.loading = null;
+            resolve(texture);
+          },
+          undefined,
+          () => {
+            const activeEntry = cache.get(key);
+            if (activeEntry === entry) {
+              activeEntry.loading = null;
+              if (activeEntry.refCount <= 0) cache.delete(key);
+            }
+            resolve(null);
+          },
+        );
+      });
+    }
+
+    return { key, promise: entry.loading ?? Promise.resolve(null) };
+  }, []);
+
+  const releaseSkinTexture = useCallback((skinKey: string | null) => {
+    if (!skinKey) return;
+    const cache = skinTextureCacheRef.current;
+    const entry = cache.get(skinKey);
+    if (!entry) return;
+
+    entry.refCount = Math.max(0, entry.refCount - 1);
+    if (entry.refCount > 0) return;
+
+    if (entry.texture) {
+      entry.texture.dispose();
+      cache.delete(skinKey);
+      return;
+    }
+
+    if (!entry.loading) {
+      cache.delete(skinKey);
+    }
+  }, []);
+
+  const createAvatarMeshFromConfig = useCallback((config: ResolvedAvatarLabConfig): { mesh: THREE.Group; skinKey: string | null } => {
+    const build = createAvatarLabMesh(config);
+    build.root.userData.avatarDisposed = false;
+
+    const materials = [
+      ...build.channels.primary,
+      ...build.channels.secondary,
+      ...build.channels.accent,
+    ];
+
+    const { key: skinKey, promise } = acquireSkinTexture(config);
+    if (skinKey) {
+      void promise.then((texture) => {
+        if (!texture || build.root.userData.avatarDisposed) return;
+        for (const material of materials) {
+          material.map = texture;
+          material.color.lerp(WHITE_COLOR, config.skin_tint_strength);
+          material.needsUpdate = true;
+        }
+      });
+    }
+
+    return { mesh: build.root, skinKey };
+  }, [acquireSkinTexture]);
+
+  const createAvatarMesh = useCallback((name: string, avatar?: AgentAvatar) => {
+    const resolvedAvatar = resolveAvatarLabConfig(name, avatar);
+    const { mesh, skinKey } = createAvatarMeshFromConfig(resolvedAvatar);
+    return {
+      mesh,
+      avatar: resolvedAvatar,
+      avatarSignature: getAvatarSignature(resolvedAvatar),
+      skinKey,
+    };
+  }, [createAvatarMeshFromConfig, getAvatarSignature]);
+
+  const disposeAgentMesh = useCallback((mesh: THREE.Group, skinKey: string | null) => {
+    mesh.userData.avatarDisposed = true;
+    releaseSkinTexture(skinKey);
+    disposeObject3D(mesh);
+  }, [releaseSkinTexture]);
+
   useEffect(() => {
     agentsDataRef.current = agents;
     const agentGroup = agentGroupRef.current;
@@ -220,6 +381,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
       const latest = visibleAgents.get(agentId);
       if (!latest || (!isSpectator && agentId === selectedAgentId)) {
         agentGroup.remove(agentData.mesh);
+        disposeAgentMesh(agentData.mesh, agentData.skinKey);
         otherAgentsRef.current.delete(agentId);
         const label = agentLabelElsRef.current.get(agentId);
         if (label) {
@@ -236,13 +398,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
       const relZ = latest.y - center.y;
       agentData.target.set(relX, 0, relZ);
     });
-  }, [agents, isSpectator, selectedAgentId]);
-
-  // ─── Mesh Creators ───────────────────────────────────────────────────────────
-
-  const createCrabMesh = useCallback((colors: { body: number; claw: number; eye: number }) => {
-    return createSharedCrabMesh(colors);
-  }, []);
+  }, [agents, isSpectator, selectedAgentId, disposeAgentMesh]);
 
   const getTerrainGroundColor = useCallback((terrain: TerrainType, seed: number) => {
     switch (terrain) {
@@ -1055,11 +1211,11 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
 
     // Create self agent mesh (for follow mode)
     if (!isSpectator) {
-      const av = selfAvatarRef.current;
-      const selfAgent = createCrabMesh({ body: hexToThreeColor(av.body_color), claw: hexToThreeColor(av.claw_color), eye: hexToThreeColor(av.eye_color) });
-      selfAgent.position.set(0, 0, 0);
-      agentGroup.add(selfAgent);
-      selfAgentRef.current = selfAgent;
+      const selfBuild = createAvatarMeshFromConfig(selfAvatarRef.current);
+      selfBuild.mesh.position.set(0, 0, 0);
+      agentGroup.add(selfBuild.mesh);
+      selfAgentRef.current = selfBuild.mesh;
+      selfSkinKeyRef.current = selfBuild.skinKey;
     }
 
     // Initial load
@@ -1244,6 +1400,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
               const relZ = agentData.worldY - newCy;
               if (Math.abs(relX) > AGENT_UNLOAD_RADIUS || Math.abs(relZ) > AGENT_UNLOAD_RADIUS) {
                 agentGroupRef.current?.remove(agentData.mesh);
+                disposeAgentMesh(agentData.mesh, agentData.skinKey);
                 otherAgentsRef.current.delete(agentId);
               } else {
                 agentData.target.set(relX, 0, relZ);
@@ -1345,6 +1502,9 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           }
           const curName = agentNameRef.current || 'Agent';
           if (selfLabel.textContent !== curName) selfLabel.textContent = curName;
+          const selfLabelColor = selfAvatarRef.current.body_color;
+          selfLabel.style.color = selfLabelColor;
+          selfLabel.style.borderColor = `${selfLabelColor}66`;
           positionLabel(selfLabel, 0, 0.8, 0);
         }
 
@@ -1497,6 +1657,19 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
     return () => {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationId);
+      otherAgentsRef.current.forEach((agentData) => {
+        disposeAgentMesh(agentData.mesh, agentData.skinKey);
+      });
+      otherAgentsRef.current.clear();
+      if (selfAgentRef.current) {
+        disposeAgentMesh(selfAgentRef.current, selfSkinKeyRef.current);
+      }
+      selfAgentRef.current = null;
+      selfSkinKeyRef.current = null;
+      skinTextureCacheRef.current.forEach((entry) => {
+        if (entry.texture) entry.texture.dispose();
+      });
+      skinTextureCacheRef.current.clear();
       renderer.dispose();
       if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
       // Clean up labels
@@ -1505,7 +1678,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
       buildingLabels.forEach(label => label.remove());
       buildingLabels.clear();
     };
-  }, [centerX, centerY, isSpectator, fetchTiles, buildTerrain, streamTerrain, createCrabMesh]);
+  }, [centerX, centerY, isSpectator, fetchTiles, buildTerrain, streamTerrain, createAvatarMeshFromConfig, disposeAgentMesh]);
 
   // ─── Supabase Realtime subscription ────────────────────────────────────────────
 
@@ -1525,6 +1698,28 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         targetPosRef.current.y = updatedAgent.y;
         setDisplayPos({ x: updatedAgent.x, y: updatedAgent.y });
 
+        const selectedCanonical = agentsDataRef.current.find((agent) => agent.id === updatedAgent.id);
+        const selectedName = selectedCanonical?.name || updatedAgent.name;
+        const selectedAvatarSource = selectedCanonical?.avatar || updatedAgent.avatar;
+        const nextSelfAvatar = resolveAvatarLabConfig(selectedName, selectedAvatarSource);
+        const nextSelfSignature = getAvatarSignature(nextSelfAvatar);
+        const currentSelfSignature = getAvatarSignature(selfAvatarRef.current);
+
+        if (nextSelfSignature !== currentSelfSignature) {
+          selfAvatarRef.current = nextSelfAvatar;
+          const selfMesh = selfAgentRef.current;
+          const agentGroup = agentGroupRef.current;
+          if (selfMesh && agentGroup) {
+            const rebuiltSelf = createAvatarMeshFromConfig(nextSelfAvatar);
+            rebuiltSelf.mesh.position.copy(selfMesh.position);
+            agentGroup.remove(selfMesh);
+            disposeAgentMesh(selfMesh, selfSkinKeyRef.current);
+            agentGroup.add(rebuiltSelf.mesh);
+            selfAgentRef.current = rebuiltSelf.mesh;
+            selfSkinKeyRef.current = rebuiltSelf.skinKey;
+          }
+        }
+
         if (Math.abs(updatedAgent.x - oldX) > 0 || Math.abs(updatedAgent.y - oldY) > 0) {
           const tiles = await fetchTiles(updatedAgent.x, updatedAgent.y);
           buildTerrain(tiles, updatedAgent.x, updatedAgent.y);
@@ -1538,6 +1733,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           const existing = otherAgentsRef.current.get(updatedAgent.id);
           if (existing) {
             agentGroup.remove(existing.mesh);
+            disposeAgentMesh(existing.mesh, existing.skinKey);
             otherAgentsRef.current.delete(updatedAgent.id);
             const lbl = agentLabelElsRef.current.get(updatedAgent.id);
             if (lbl) { lbl.remove(); agentLabelElsRef.current.delete(updatedAgent.id); }
@@ -1553,6 +1749,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           const existing = otherAgentsRef.current.get(updatedAgent.id);
           if (existing) {
             agentGroup.remove(existing.mesh);
+            disposeAgentMesh(existing.mesh, existing.skinKey);
             otherAgentsRef.current.delete(updatedAgent.id);
             const lbl = agentLabelElsRef.current.get(updatedAgent.id);
             if (lbl) { lbl.remove(); agentLabelElsRef.current.delete(updatedAgent.id); }
@@ -1561,24 +1758,44 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
         }
 
         const existing = otherAgentsRef.current.get(updatedAgent.id);
+        const avatarSource = canonicalAgent.avatar || updatedAgent.avatar;
         if (existing) {
           existing.target.set(relX, 0, relZ);
           existing.worldX = updatedAgent.x;
           existing.worldY = updatedAgent.y;
           existing.name = canonicalAgent.name;
+          const nextAvatar = resolveAvatarLabConfig(canonicalAgent.name, avatarSource);
+          const nextSignature = getAvatarSignature(nextAvatar);
+          if (nextSignature !== existing.avatarSignature) {
+            const rebuilt = createAvatarMesh(canonicalAgent.name, avatarSource);
+            rebuilt.mesh.position.copy(existing.current);
+            agentGroup.remove(existing.mesh);
+            disposeAgentMesh(existing.mesh, existing.skinKey);
+            agentGroup.add(rebuilt.mesh);
+            existing.mesh = rebuilt.mesh;
+            existing.avatar = rebuilt.avatar;
+            existing.avatarSignature = rebuilt.avatarSignature;
+            existing.skinKey = rebuilt.skinKey;
+            const label = agentLabelElsRef.current.get(updatedAgent.id);
+            if (label) {
+              label.remove();
+              agentLabelElsRef.current.delete(updatedAgent.id);
+            }
+          }
         } else {
-          const av = resolveAvatar(canonicalAgent.name, canonicalAgent.avatar || updatedAgent.avatar);
-          const mesh = createCrabMesh({ body: hexToThreeColor(av.body_color), claw: hexToThreeColor(av.claw_color), eye: hexToThreeColor(av.eye_color) });
-          mesh.position.set(relX, 0, relZ);
-          agentGroup.add(mesh);
+          const built = createAvatarMesh(canonicalAgent.name, avatarSource);
+          built.mesh.position.set(relX, 0, relZ);
+          agentGroup.add(built.mesh);
           otherAgentsRef.current.set(updatedAgent.id, {
             worldX: updatedAgent.x,
             worldY: updatedAgent.y,
             name: canonicalAgent.name,
             current: new THREE.Vector3(relX, 0, relZ),
             target: new THREE.Vector3(relX, 0, relZ),
-            mesh,
-            avatar: av,
+            mesh: built.mesh,
+            avatar: built.avatar,
+            avatarSignature: built.avatarSignature,
+            skinKey: built.skinKey,
           });
         }
       }
@@ -1596,6 +1813,24 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
           if (!isSpectator) {
             const ourAgent = allAgents.find(a => a.id === selectedAgentId);
             if (ourAgent) {
+              setAgentName(ourAgent.name);
+              const nextSelfAvatar = resolveAvatarLabConfig(ourAgent.name, ourAgent.avatar);
+              const nextSelfSignature = getAvatarSignature(nextSelfAvatar);
+              const currentSelfSignature = getAvatarSignature(selfAvatarRef.current);
+              if (nextSelfSignature !== currentSelfSignature) {
+                selfAvatarRef.current = nextSelfAvatar;
+                const selfMesh = selfAgentRef.current;
+                const agentGroup = agentGroupRef.current;
+                if (selfMesh && agentGroup) {
+                  const rebuiltSelf = createAvatarMeshFromConfig(nextSelfAvatar);
+                  rebuiltSelf.mesh.position.copy(selfMesh.position);
+                  agentGroup.remove(selfMesh);
+                  disposeAgentMesh(selfMesh, selfSkinKeyRef.current);
+                  agentGroup.add(rebuiltSelf.mesh);
+                  selfAgentRef.current = rebuiltSelf.mesh;
+                  selfSkinKeyRef.current = rebuiltSelf.skinKey;
+                }
+              }
               targetPosRef.current.x = ourAgent.x;
               targetPosRef.current.y = ourAgent.y;
               setDisplayPos({ x: ourAgent.x, y: ourAgent.y });
@@ -1612,18 +1847,19 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
               const relX = agent.x - center.x;
               const relZ = agent.y - center.y;
               if (Math.abs(relX) <= AGENT_VIEW_RADIUS && Math.abs(relZ) <= AGENT_VIEW_RADIUS) {
-                const av = resolveAvatar(agent.name, agent.avatar);
-                const mesh = createCrabMesh({ body: hexToThreeColor(av.body_color), claw: hexToThreeColor(av.claw_color), eye: hexToThreeColor(av.eye_color) });
-                mesh.position.set(relX, 0, relZ);
-                agentGroup.add(mesh);
+                const built = createAvatarMesh(agent.name, agent.avatar);
+                built.mesh.position.set(relX, 0, relZ);
+                agentGroup.add(built.mesh);
                 otherAgentsRef.current.set(agent.id, {
                   worldX: agent.x,
                   worldY: agent.y,
                   name: agent.name,
                   current: new THREE.Vector3(relX, 0, relZ),
                   target: new THREE.Vector3(relX, 0, relZ),
-                  mesh,
-                  avatar: av,
+                  mesh: built.mesh,
+                  avatar: built.avatar,
+                  avatarSignature: built.avatarSignature,
+                  skinKey: built.skinKey,
                 });
               }
             });
@@ -1657,7 +1893,7 @@ export function AgentView3D({ centerX, centerY, agents, selectedAgentId, mode = 
       isMounted = false;
       supabase.removeChannel(channel);
     };
-  }, [selectedAgentId, isSpectator, fetchTiles, buildTerrain, createCrabMesh]);
+  }, [selectedAgentId, isSpectator, fetchTiles, buildTerrain, createAvatarMesh, createAvatarMeshFromConfig, disposeAgentMesh, getAvatarSignature]);
 
   // ─── Joystick handlers ────────────────────────────────────────────────────────
 

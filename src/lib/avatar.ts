@@ -1,5 +1,7 @@
 import { AgentAvatar } from './types';
 
+type ResolvedAvatarColors = Required<Pick<AgentAvatar, 'body_color' | 'claw_color' | 'eye_color'>>;
+
 // Simple string hash (djb2)
 function hashString(str: string): number {
   let hash = 5381;
@@ -26,7 +28,7 @@ function hslToHex(h: number, s: number, l: number): string {
  * Generate deterministic default avatar colors from agent name.
  * Each agent gets a unique hue, with consistent saturation/lightness.
  */
-export function generateDefaultAvatar(name: string): Required<AgentAvatar> {
+export function generateDefaultAvatar(name: string): ResolvedAvatarColors {
   const hash = hashString(name);
   const hue = hash % 360;
   // Body: vivid color
@@ -43,7 +45,7 @@ export function generateDefaultAvatar(name: string): Required<AgentAvatar> {
  * Merge explicit avatar settings over deterministic defaults.
  * Returns a fully resolved avatar with all 3 colors.
  */
-export function resolveAvatar(name: string, avatar?: AgentAvatar): Required<AgentAvatar> {
+export function resolveAvatar(name: string, avatar?: AgentAvatar): ResolvedAvatarColors {
   const defaults = generateDefaultAvatar(name);
   if (!avatar) return defaults;
   return {

@@ -3,6 +3,15 @@ export interface AgentAvatar {
   body_color?: string;  // hex "#ff8844"
   claw_color?: string;  // hex "#cc6622"
   eye_color?: string;   // hex "#111111"
+  model_type?: 'crab' | 'beetle' | 'sentinel';
+  accent_color?: string; // hex "#aabbcc"
+  skin_url?: string;
+  skin_data_url?: string;
+  skin_scale?: number;
+  skin_tint_strength?: number;
+  material_roughness?: number;
+  material_metalness?: number;
+  animation_profile?: 'idle' | 'energetic' | 'float';
 }
 
 // Agent types
