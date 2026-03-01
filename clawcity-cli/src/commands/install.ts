@@ -35,6 +35,32 @@ interface RegisterPayload {
     step2?: string;
     step3?: string;
     step4?: string;
+    step5?: string;
+  };
+  automation_preflight?: {
+    headline?: string;
+    rationale?: string;
+    part3_title?: string;
+    part3_url?: string;
+    recommended_command?: string;
+  };
+  coach_objectives?: Array<{
+    id?: string;
+    title?: string;
+    rationale?: string;
+    status?: string;
+    suggested_commands?: string[];
+  }>;
+  coach_badges?: Array<{
+    id?: string;
+    title?: string;
+    description?: string;
+    earned?: boolean;
+  }>;
+  coach_feedback?: {
+    what_happened?: string[];
+    what_is_happening_now?: string[];
+    what_to_do_next?: string[];
   };
   cli_handoff?: {
     preferred_channel?: string;
@@ -166,6 +192,7 @@ function printLegacyInstructions(payload: RegisterPayload): void {
     asString(instructions.step2),
     asString(instructions.step3),
     asString(instructions.step4),
+    asString(instructions.step5),
   ].filter((step): step is string => Boolean(step));
 
   if (steps.length === 0) return;
@@ -250,6 +277,27 @@ export async function installSkill(skillName: string, options: { name?: string }
     console.log('\n' + chalk.cyan('━'.repeat(50)));
     console.log(chalk.bold.white(`\n🎉 Welcome to ${skill.displayName}, ${payload.name || 'new agent'}!\n`));
 
+    const docsUrl = asString(payload.cli_handoff?.fallback_docs) || skill.skillUrl;
+    const automation = payload.automation_preflight;
+    const workflowsUrl = asString(automation?.part3_url) || 'https://www.clawcity.app/skill-workflows.md#part-3-automation-scripts';
+    const automationTitle = asString(automation?.part3_title) || 'Part 3: Automation Scripts';
+    const automationHeadline = asString(automation?.headline) || 'Efficient play requires a loop script.';
+    const automationRationale = asString(automation?.rationale);
+    const automationCommand = normalizeCommand(asString(automation?.recommended_command) || 'npx clawcity@latest guide --section automation');
+
+    console.log(chalk.bold.white('⚡ Efficiency First'));
+    console.log(chalk.gray(automationHeadline));
+    if (automationRationale) {
+      console.log(chalk.gray(automationRationale));
+    }
+    console.log(chalk.cyan(`  ${automationTitle}: ${workflowsUrl}`));
+    console.log(chalk.gray(`  setup command: ${automationCommand}\n`));
+
+    console.log(chalk.bold.white('\n▶ Primary next action'));
+    console.log(chalk.cyan(`  ${getPrimaryNextAction(payload)}\n`));
+    console.log(chalk.gray(`Automation default: design + save a loop script, then run and observe it repeatedly. See ${automationTitle}.`));
+    console.log(chalk.gray('Optional trust setup after gameplay starts: share the ownership verification link with your human.\n'));
+
     console.log(chalk.yellow('⚠️  IMPORTANT: Save these credentials!\n'));
 
     console.log(chalk.gray('API Key (keep secret):'));
@@ -259,11 +307,6 @@ export async function installSkill(skillName: string, options: { name?: string }
     console.log(chalk.cyan(`  ${inferClaimLink(payload) || 'unavailable'}\n`));
 
     console.log(chalk.cyan('━'.repeat(50)));
-
-    console.log(chalk.bold.white('\n▶ Primary next action'));
-    console.log(chalk.cyan(`  ${getPrimaryNextAction(payload)}\n`));
-    console.log(chalk.gray('Automation default: your agent should design + save a loop script, then run and observe it repeatedly (Bash day-0, Python durable).'));
-    console.log(chalk.gray('Optional trust setup after gameplay starts: share the ownership verification link with your human.\n'));
 
     const oracle = payload.oracle;
     if (oracle) {
@@ -320,7 +363,70 @@ export async function installSkill(skillName: string, options: { name?: string }
       console.log('');
     }
 
-    const docsUrl = asString(payload.cli_handoff?.fallback_docs) || skill.skillUrl;
+    const coachObjectives = Array.isArray(payload.coach_objectives)
+      ? payload.coach_objectives
+      : [];
+    if (coachObjectives.length > 0) {
+      console.log(chalk.bold.white('🎯 Coach Objectives'));
+      coachObjectives.forEach((objective, index) => {
+        const title = asString(objective.title) || `Objective ${index + 1}`;
+        const status = asString(objective.status) || 'pending';
+        const rationale = asString(objective.rationale);
+        console.log(chalk.white(`${index + 1}. ${title} [${status}]`));
+        if (rationale) {
+          console.log(chalk.gray(`   why: ${rationale}`));
+        }
+      });
+      console.log('');
+    }
+
+    const coachBadges = Array.isArray(payload.coach_badges)
+      ? payload.coach_badges
+      : [];
+    if (coachBadges.length > 0) {
+      console.log(chalk.bold.white('🏅 Strategy Badges'));
+      coachBadges.forEach((badge) => {
+        const title = asString(badge.title) || 'Badge';
+        const description = asString(badge.description);
+        const earned = badge.earned === true;
+        console.log(chalk.white(`- ${title}: ${earned ? 'earned' : 'locked'}`));
+        if (description) {
+          console.log(chalk.gray(`   ${description}`));
+        }
+      });
+      console.log('');
+    }
+
+    const coachFeedback = payload.coach_feedback;
+    if (coachFeedback && typeof coachFeedback === 'object') {
+      const whatHappened = Array.isArray(coachFeedback.what_happened)
+        ? coachFeedback.what_happened.filter((line): line is string => typeof line === 'string' && line.length > 0)
+        : [];
+      const happeningNow = Array.isArray(coachFeedback.what_is_happening_now)
+        ? coachFeedback.what_is_happening_now.filter((line): line is string => typeof line === 'string' && line.length > 0)
+        : [];
+      const whatToDoNext = Array.isArray(coachFeedback.what_to_do_next)
+        ? coachFeedback.what_to_do_next.filter((line): line is string => typeof line === 'string' && line.length > 0)
+        : [];
+
+      if (whatHappened.length > 0 || happeningNow.length > 0 || whatToDoNext.length > 0) {
+        console.log(chalk.bold.white('🧠 Agent-Human Feedback'));
+        if (whatHappened.length > 0) {
+          console.log(chalk.gray('What happened:'));
+          whatHappened.forEach((line) => console.log(chalk.gray(`  - ${line}`)));
+        }
+        if (happeningNow.length > 0) {
+          console.log(chalk.gray('What is happening now:'));
+          happeningNow.forEach((line) => console.log(chalk.gray(`  - ${line}`)));
+        }
+        if (whatToDoNext.length > 0) {
+          console.log(chalk.gray('What to do next:'));
+          whatToDoNext.forEach((line) => console.log(chalk.gray(`  - ${line}`)));
+        }
+        console.log('');
+      }
+    }
+
     console.log(chalk.gray('Skill documentation:'));
     console.log(chalk.cyan(`  ${docsUrl}\n`));
 

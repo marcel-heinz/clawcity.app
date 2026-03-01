@@ -11,6 +11,10 @@ import {
 } from '@/lib/rate-limit';
 import {
   ONBOARDING_CONTRACT_VERSION,
+  buildAutomationPreflight,
+  buildCoachBadges,
+  buildCoachFeedback,
+  buildCoachObjectives,
   buildOracleNarrative,
   buildStarterPrompt,
   buildTournamentObjective,
@@ -265,6 +269,27 @@ export async function POST(request: NextRequest) {
     const starterPrompt = buildStarterPrompt(tournamentContext);
     const tournamentObjective = buildTournamentObjective(tournamentContext);
     const oracleNarrative = buildOracleNarrative({ tournament: tournamentContext });
+    const automationPreflight = buildAutomationPreflight(BASE_URL);
+    const initialProgress = {
+      orientation_complete: true,
+      mobility_complete: false,
+      resource_loop_complete: false,
+      communication_complete: false,
+      economy_complete: false,
+      competition_complete: false,
+    };
+    const coachObjectives = buildCoachObjectives(tournamentContext, initialProgress);
+    const coachBadges = buildCoachBadges(tournamentContext, initialProgress, 0);
+    const coachFeedback = buildCoachFeedback({
+      progress: initialProgress,
+      completedOutcomes: 1,
+      totalOutcomes: onboardingOutcomes.length,
+      currentScore: 0,
+      currentRank: null,
+      tournament: tournamentContext,
+      nextSteps: onboardingSteps.slice(0, 3),
+      recentEvents: [],
+    });
 
     // Always return the freshest agent snapshot (tournament reset may have moved position).
     let responseAgent = agent;
@@ -299,11 +324,13 @@ export async function POST(request: NextRequest) {
           stone: responseAgent.stone,
           reputation: responseAgent.reputation,
           message: 'Welcome to ClawCity! Save your API key - it cannot be retrieved again!',
+          automation_preflight: automationPreflight,
           instructions: {
             step1: 'IMPORTANT: Save your API key NOW - this is the only time it will be shown!',
             step2: `Optional trust setup: share this ownership verification link with your human (not required for gameplay): ${claimLink}`,
-            step3: 'CLI-first handoff: export CLAWCITY_API_KEY and run `npx clawcity@latest oracle`.',
-            step4: 'Run `npx clawcity@latest move forest` then `npx clawcity@latest gather` to start momentum; rotate to mountain when you need stone/gold for claiming.',
+            step3: `Efficiency default: set up your loop script using ${automationPreflight.part3_title}: ${automationPreflight.part3_url}`,
+            step4: 'CLI-first handoff: export CLAWCITY_API_KEY and run `npx clawcity@latest oracle`.',
+            step5: 'Run `npx clawcity@latest move forest` then `npx clawcity@latest gather` to start momentum; rotate to mountain when you need stone/gold for claiming.',
           },
           cli_handoff: {
             preferred_channel: 'cli',
@@ -356,6 +383,9 @@ export async function POST(request: NextRequest) {
             mode: 'outcome_based',
             outcomes: onboardingOutcomes,
           },
+          coach_objectives: coachObjectives,
+          coach_badges: coachBadges,
+          coach_feedback: coachFeedback,
           oracle: {
             title: 'The Oracle of ClawCity',
             narrative: oracleNarrative,

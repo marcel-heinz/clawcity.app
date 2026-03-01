@@ -121,6 +121,53 @@ test('formatOracleLines shows outcome progress and step list', () => {
   assert.match(lines[4], /1\. Leave Spawn/);
 });
 
+test('formatOracleLines renders automation and coach feedback sections when provided', () => {
+  const lines = formatOracleLines({
+    automation_preflight: {
+      headline: 'Efficient play requires a loop script.',
+      part3_title: 'Part 3: Automation Scripts',
+      part3_url: 'https://www.clawcity.app/skill-workflows.md#part-3-automation-scripts',
+      recommended_command: 'npx clawcity@latest guide --section automation',
+    },
+    contract: {
+      completed_outcomes: 1,
+      total_outcomes: 6,
+    },
+    oracle: {
+      title: 'The Oracle of ClawCity',
+      narrative: 'A short story.',
+      tournament_objective: 'Territory Conqueror: claim and hold.',
+    },
+    next_steps: [],
+    coach_objectives: [
+      {
+        title: 'Set Up Opening Loop Script',
+        status: 'pending',
+        rationale: 'Manual one-offs are slower.',
+      },
+    ],
+    coach_badges: [
+      {
+        title: 'Loop Apprentice',
+        description: 'Established basic move + gather cadence.',
+        earned: false,
+      },
+    ],
+    coach_feedback: {
+      what_happened: ['Gathered resources'],
+      what_is_happening_now: ['Outcome progress: 1/6'],
+      what_to_do_next: ['Set Up Opening Loop Script -> npx clawcity@latest guide --section automation'],
+    },
+  });
+
+  assert.match(lines[1], /Efficiency:/);
+  assert.match(lines[2], /Part 3: Automation Scripts/);
+  assert.match(lines.join('\n'), /Coach objectives:/);
+  assert.match(lines.join('\n'), /Strategy badges:/);
+  assert.match(lines.join('\n'), /Agent-human feedback:/);
+  assert.match(lines.join('\n'), /What to do next:/);
+});
+
 test('formatTournamentCreditsLines summarizes wallet and reward unlock states', () => {
   const lines = formatTournamentCreditsLines({
     wallet: {

@@ -3,6 +3,10 @@ import { authenticateAgent, errorResponse, jsonResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import {
   ONBOARDING_CONTRACT_VERSION,
+  buildAutomationPreflight,
+  buildCoachFeedback,
+  buildCoachBadges,
+  buildCoachObjectives,
   buildOracleNarrative,
   buildStarterPrompt,
   buildTournamentObjective,
@@ -86,17 +90,32 @@ export async function GET(request: NextRequest) {
         ? entryResult.data.live_rank
         : null;
 
-    const signals = deriveSignalsFromEvents((eventResult.data || []) as Array<{ type: string; data?: Record<string, unknown> }>, currentScore);
+    const recentEvents = (eventResult.data || []) as Array<{ type: string; data?: Record<string, unknown>; created_at?: string }>;
+    const signals = deriveSignalsFromEvents(recentEvents, currentScore);
     const progress = evaluateOnboardingProgress(signals);
     const pendingSteps = getPendingOutcomeSteps(progress, tournament?.type || null);
     const orderedSteps = getOutcomeOrderedSteps(tournament?.type || null);
     const outcomes = getOnboardingOutcomeDefinitions();
     const completed = getCompletedOutcomeCount(progress);
     const generatedAt = new Date().toISOString();
+    const automationPreflight = buildAutomationPreflight();
+    const coachObjectives = buildCoachObjectives(tournament, progress);
+    const coachBadges = buildCoachBadges(tournament, progress, currentScore);
+    const coachFeedback = buildCoachFeedback({
+      progress,
+      completedOutcomes: completed,
+      totalOutcomes: outcomes.length,
+      currentScore,
+      currentRank: liveRank,
+      tournament,
+      nextSteps: pendingSteps,
+      recentEvents,
+    });
 
     return jsonResponse({
       success: true,
       data: {
+        automation_preflight: automationPreflight,
         contract: {
           version: ONBOARDING_CONTRACT_VERSION,
           mode: 'outcome_based',
@@ -134,11 +153,14 @@ export async function GET(request: NextRequest) {
           ...step,
           completed: progress[step.outcome],
         })),
+        coach_objectives: coachObjectives,
+        coach_badges: coachBadges,
+        coach_feedback: coachFeedback,
         next_steps: pendingSteps.slice(0, 3),
         all_pending_steps: pendingSteps,
         metadata: {
           generated_at: generatedAt,
-          event_sample_size: (eventResult.data || []).length,
+          event_sample_size: recentEvents.length,
           has_active_tournament: !!tournament,
         },
       },

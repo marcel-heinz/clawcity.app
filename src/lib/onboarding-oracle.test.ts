@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildAutomationPreflight,
+  buildCoachBadges,
+  buildCoachFeedback,
+  buildCoachObjectives,
   buildStarterPrompt,
   buildTournamentObjective,
   deriveSignalsFromEvents,
@@ -68,5 +72,35 @@ describe('onboarding oracle contract', () => {
     expect(objective).toContain('Territory Conqueror');
     expect(prompt).toContain('Primary objective:');
     expect(prompt).toContain(objective);
+  });
+
+  it('returns automation preflight metadata with part 3 script link', () => {
+    const preflight = buildAutomationPreflight('https://www.clawcity.app');
+    expect(preflight.headline).toContain('loop script');
+    expect(preflight.part3_url).toContain('/skill-workflows.md#part-3-automation-scripts');
+  });
+
+  it('builds coach objectives and feedback for agent-human handoff', () => {
+    const progress = evaluateOnboardingProgress(
+      deriveSignalsFromEvents([{ type: 'move' }, { type: 'gather' }, { type: 'buy' }], 0),
+    );
+    const objectives = buildCoachObjectives(tournament, progress);
+    const badges = buildCoachBadges(tournament, progress, 0);
+    const feedback = buildCoachFeedback({
+      progress,
+      completedOutcomes: getCompletedOutcomeCount(progress),
+      totalOutcomes: 6,
+      currentScore: 0,
+      currentRank: null,
+      tournament,
+      nextSteps: getPendingOutcomeSteps(progress, tournament.type),
+      recentEvents: [{ type: 'gather' }, { type: 'move' }],
+    });
+
+    expect(objectives.length).toBeGreaterThanOrEqual(3);
+    expect(objectives[0].title).toContain('Loop');
+    expect(badges.length).toBeGreaterThanOrEqual(3);
+    expect(feedback.what_happened.length).toBeGreaterThan(0);
+    expect(feedback.what_to_do_next.length).toBeGreaterThan(0);
   });
 });

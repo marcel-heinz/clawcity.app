@@ -48,6 +48,7 @@ export interface OracleRuntimeSignals {
 export interface OracleAgentEvent {
   type: string;
   data?: Record<string, unknown> | null;
+  created_at?: string | null;
 }
 
 export interface OracleTournamentLike {
@@ -58,6 +59,35 @@ export interface OracleTournamentLike {
   starts_at?: string | null;
   ends_at?: string | null;
   week_number?: number | null;
+}
+
+export interface AutomationPreflight {
+  headline: string;
+  rationale: string;
+  part3_title: string;
+  part3_url: string;
+  recommended_command: string;
+}
+
+export interface CoachObjective {
+  id: string;
+  title: string;
+  rationale: string;
+  status: 'pending' | 'complete';
+  suggested_commands: string[];
+}
+
+export interface CoachFeedback {
+  what_happened: string[];
+  what_is_happening_now: string[];
+  what_to_do_next: string[];
+}
+
+export interface CoachBadge {
+  id: string;
+  title: string;
+  description: string;
+  earned: boolean;
 }
 
 const OUTCOME_DEFINITIONS: OnboardingOutcomeDefinition[] = [
@@ -107,6 +137,13 @@ const COMMON_OPENING_STEPS: OracleStep[] = [
     command: 'clawcity move forest',
     expected: 'You pathfind to forest and gain access to wood+food gathering.',
     fallback_command: 'clawcity move plains',
+  },
+  {
+    outcome: 'resource_loop_complete',
+    title: 'Set Up First Loop Script',
+    command: 'clawcity guide --section automation',
+    expected: 'Pick a loop runtime (Bash day-0 or Python durable), save the script, and run with state checks.',
+    fallback_command: 'clawcity oracle',
   },
   {
     outcome: 'resource_loop_complete',
@@ -227,6 +264,133 @@ export function buildStarterPrompt(tournament: OracleTournamentLike | null): str
     'Report compact status updates to your operator after each major outcome.',
     'Do not idle when blocked; choose a fallback command and continue pressure.',
   ].join(' ');
+}
+
+export function buildAutomationPreflight(baseUrl = 'https://www.clawcity.app'): AutomationPreflight {
+  const normalizedBase = baseUrl.replace(/\/$/, '');
+  return {
+    headline: 'Efficient play requires a loop script.',
+    rationale: 'Humans coach strategy; scripts execute the plan repeatedly while monitoring outcomes.',
+    part3_title: 'Part 3: Automation Scripts',
+    part3_url: `${normalizedBase}/skill-workflows.md#part-3-automation-scripts`,
+    recommended_command: 'npx clawcity@latest guide --section automation',
+  };
+}
+
+export function buildCoachObjectives(tournament: OracleTournamentLike | null, progress: OnboardingProgress): CoachObjective[] {
+  const tournamentName = tournament ? TOURNAMENT_CONFIG[tournament.type]?.name || tournament.name : 'active objective';
+  return [
+    {
+      id: 'automation_loop_setup',
+      title: 'Set Up Opening Loop Script',
+      rationale: 'Manual one-offs are slower; stable loops preserve momentum and reduce idle time.',
+      status: progress.mobility_complete && progress.resource_loop_complete ? 'complete' : 'pending',
+      suggested_commands: [
+        'npx clawcity@latest guide --section automation',
+        'npx clawcity@latest oracle',
+      ],
+    },
+    {
+      id: 'survival_runway',
+      title: 'Maintain Food And Economy Runway',
+      rationale: 'A loop without survivability collapses before it compounds.',
+      status: progress.economy_complete ? 'complete' : 'pending',
+      suggested_commands: [
+        'npx clawcity@latest stats',
+        'npx clawcity@latest buy rations -q 1',
+      ],
+    },
+    {
+      id: 'tournament_pressure',
+      title: `Push ${tournamentName}`,
+      rationale: 'Convert movement and resources into score-bearing actions early.',
+      status: progress.competition_complete ? 'complete' : 'pending',
+      suggested_commands: [
+        'npx clawcity@latest tournament',
+        'npx clawcity@latest afford claim',
+      ],
+    },
+  ];
+}
+
+function describeEventType(type: string): string {
+  switch (type) {
+    case 'move':
+      return 'Moved to a new tile';
+    case 'gather':
+      return 'Gathered resources';
+    case 'claim':
+      return 'Claimed territory';
+    case 'buy':
+      return 'Purchased from shop';
+    case 'trade':
+      return 'Completed a trade';
+    case 'craft':
+      return 'Crafted an item';
+    case 'speak':
+      return 'Spoke in world chat';
+    default:
+      return `Action: ${type}`;
+  }
+}
+
+export function buildCoachFeedback(input: {
+  progress: OnboardingProgress;
+  completedOutcomes: number;
+  totalOutcomes: number;
+  currentScore: number;
+  currentRank: number | null;
+  tournament: OracleTournamentLike | null;
+  nextSteps: OracleStep[];
+  recentEvents: OracleAgentEvent[];
+}): CoachFeedback {
+  const whatHappened = input.recentEvents.slice(0, 3).map((event) => describeEventType(event.type));
+  const whatIsHappeningNow = [
+    `Outcome progress: ${input.completedOutcomes}/${input.totalOutcomes}`,
+    input.tournament
+      ? `Tournament: ${TOURNAMENT_CONFIG[input.tournament.type]?.name || input.tournament.name} | score:${input.currentScore} | rank:${input.currentRank ?? 'unranked'}`
+      : 'Tournament: no active cycle detected',
+    `Mobility: ${input.progress.mobility_complete ? 'ready' : 'pending'} | Resource loop: ${input.progress.resource_loop_complete ? 'ready' : 'pending'} | Economy: ${input.progress.economy_complete ? 'ready' : 'pending'}`,
+  ];
+
+  const whatToDoNext = input.nextSteps.slice(0, 3).map((step) => `${step.title} -> ${step.command}`);
+  if (whatToDoNext.length === 0) {
+    whatToDoNext.push('All onboarding outcomes are complete. Continue optimizing the active tournament objective.');
+  }
+
+  return {
+    what_happened: whatHappened.length > 0 ? whatHappened : ['No recent events recorded yet.'],
+    what_is_happening_now: whatIsHappeningNow,
+    what_to_do_next: whatToDoNext,
+  };
+}
+
+export function buildCoachBadges(
+  tournament: OracleTournamentLike | null,
+  progress: OnboardingProgress,
+  currentScore: number,
+): CoachBadge[] {
+  const modeName = tournament ? TOURNAMENT_CONFIG[tournament.type]?.name || tournament.name : 'Current Cycle';
+  return [
+    {
+      id: 'loop_apprentice',
+      title: 'Loop Apprentice',
+      description: 'Established basic move + gather cadence.',
+      earned: progress.mobility_complete && progress.resource_loop_complete,
+    },
+    {
+      id: 'runway_keeper',
+      title: 'Runway Keeper',
+      description: 'Executed an economy action to stabilize runway.',
+      earned: progress.economy_complete,
+    },
+    {
+      id: 'gold_slayer',
+      title: `Gold Slayer (${modeName})`,
+      description: 'Moved the tournament score above zero.',
+      earned: progress.competition_complete || currentScore > 0,
+    },
+  ];
 }
 
 export function getOutcomeOrderedSteps(tournamentType: TournamentType | null): OracleStep[] {

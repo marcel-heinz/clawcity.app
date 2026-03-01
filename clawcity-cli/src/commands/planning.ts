@@ -278,6 +278,7 @@ export function registerPlanningCommands(program: Command): void {
           can_execute: asBoolean(claim.can_execute),
           can_afford: asBoolean(claim.can_afford),
           affordable_now: asBoolean(claim.can_execute) && asBoolean(claim.can_afford),
+          quote_source: asString(claim.quote_source) || 'unknown',
           reasons: Array.isArray(claim.reasons) ? claim.reasons : [],
           effective_cost: asRecord(claim.effective_cost) || {},
           missing_resources: Array.isArray(claim.missing_resources) ? claim.missing_resources : [],
@@ -292,6 +293,9 @@ export function registerPlanningCommands(program: Command): void {
         console.log(`Cost: ${formatResourceCost(result.effective_cost)}`);
         if ((result.missing_resources as unknown[]).length > 0) {
           console.log(`Missing: ${(result.missing_resources as string[]).join('; ')}`);
+        }
+        if (result.quote_source !== 'rpc') {
+          console.log('Quote source: fallback (local estimate). If uncertain, run `clawcity claim` for authoritative cost.');
         }
         printReasons(result.reasons);
         return;

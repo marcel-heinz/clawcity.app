@@ -504,8 +504,12 @@ export function formatTournamentPerksLines(data: UnknownRecord): string[] {
 }
 
 export function formatOracleLines(data: UnknownRecord, includeAllPending = false): string[] {
+  const automation = asRecord(data.automation_preflight);
   const contract = asRecord(data.contract);
   const oracle = asRecord(data.oracle);
+  const coachObjectives = asRecordArray(data.coach_objectives);
+  const coachBadges = asRecordArray(data.coach_badges);
+  const coachFeedback = asRecord(data.coach_feedback);
   const nextSteps = asRecordArray(data.next_steps);
   const allPendingSteps = asRecordArray(data.all_pending_steps);
 
@@ -517,9 +521,27 @@ export function formatOracleLines(data: UnknownRecord, includeAllPending = false
 
   const lines = [
     `${title} | Outcomes: ${completed}/${total}`,
-    narrative,
-    `Objective: ${objective}`,
   ];
+
+  const automationHeadline = asString(automation?.headline);
+  const automationPartTitle = asString(automation?.part3_title);
+  const automationPartUrl = asString(automation?.part3_url);
+  const automationCommand = asString(automation?.recommended_command);
+
+  if (automationHeadline) {
+    lines.push(`Efficiency: ${automationHeadline}`);
+  }
+  if (automationPartTitle && automationPartUrl) {
+    lines.push(`${automationPartTitle}: ${automationPartUrl}`);
+  } else if (automationPartUrl) {
+    lines.push(`Automation scripts: ${automationPartUrl}`);
+  }
+  if (automationCommand) {
+    lines.push(`Automation setup command: ${automationCommand}`);
+  }
+
+  lines.push(narrative);
+  lines.push(`Objective: ${objective}`);
 
   const pending = includeAllPending ? allPendingSteps : nextSteps;
   if (pending.length > 0) {
@@ -539,6 +561,56 @@ export function formatOracleLines(data: UnknownRecord, includeAllPending = false
   const prompt = asString(oracle?.starter_prompt);
   if (prompt) {
     lines.push(`Starter prompt: ${prompt}`);
+  }
+
+  if (coachObjectives.length > 0) {
+    lines.push('Coach objectives:');
+    coachObjectives.forEach((objective, index) => {
+      const objectiveTitle = asString(objective.title) || `Objective ${index + 1}`;
+      const status = asString(objective.status) || 'pending';
+      const rationale = asString(objective.rationale);
+      lines.push(`  ${index + 1}. ${objectiveTitle} [${status}]`);
+      if (rationale) lines.push(`     why: ${rationale}`);
+    });
+  }
+
+  if (coachBadges.length > 0) {
+    lines.push('Strategy badges:');
+    coachBadges.forEach((badge) => {
+      const title = asString(badge.title) || 'Badge';
+      const description = asString(badge.description);
+      const earned = badge.earned === true;
+      lines.push(`  - ${title}: ${earned ? 'earned' : 'locked'}`);
+      if (description) lines.push(`    ${description}`);
+    });
+  }
+
+  if (coachFeedback) {
+    const whatHappened = Array.isArray(coachFeedback.what_happened)
+      ? coachFeedback.what_happened.filter((line): line is string => typeof line === 'string' && line.length > 0)
+      : [];
+    const happeningNow = Array.isArray(coachFeedback.what_is_happening_now)
+      ? coachFeedback.what_is_happening_now.filter((line): line is string => typeof line === 'string' && line.length > 0)
+      : [];
+    const whatToDoNext = Array.isArray(coachFeedback.what_to_do_next)
+      ? coachFeedback.what_to_do_next.filter((line): line is string => typeof line === 'string' && line.length > 0)
+      : [];
+
+    if (whatHappened.length > 0 || happeningNow.length > 0 || whatToDoNext.length > 0) {
+      lines.push('Agent-human feedback:');
+      if (whatHappened.length > 0) {
+        lines.push('  What happened:');
+        whatHappened.forEach((line) => lines.push(`    - ${line}`));
+      }
+      if (happeningNow.length > 0) {
+        lines.push('  What is happening now:');
+        happeningNow.forEach((line) => lines.push(`    - ${line}`));
+      }
+      if (whatToDoNext.length > 0) {
+        lines.push('  What to do next:');
+        whatToDoNext.forEach((line) => lines.push(`    - ${line}`));
+      }
+    }
   }
 
   return lines;

@@ -2,7 +2,8 @@ import { NextRequest } from 'next/server';
 import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { BUILDING_DEFINITIONS, calculateResourceCap } from '@/lib/buildings';
-import { buildClaimQuote, getTerritoryDeedDiscountPercent } from '@/lib/claim-quote';
+import { getTerritoryDeedDiscountPercent } from '@/lib/claim-quote';
+import { resolveClaimQuote } from '@/lib/claim-quote-rpc';
 import {
   calculateWealthBreakdown,
   MAX_TERRITORIES_PER_AGENT,
@@ -149,22 +150,27 @@ export async function GET(request: NextRequest) {
   };
 
   const firstClaimDiscountAvailable = territoryCount === 0;
-  const claimQuote = buildClaimQuote({
-    inventory: {
-      gold: agent.gold,
-      wood: agent.wood,
-      stone: agent.stone,
-      food: agent.food,
+  const deedDiscountPercent = getTerritoryDeedDiscountPercent();
+  const { quote: claimQuote, source: claimQuoteSource } = await resolveClaimQuote(
+    supabase,
+    {
+      inventory: {
+        gold: agent.gold,
+        wood: agent.wood,
+        stone: agent.stone,
+        food: agent.food,
+      },
+      terrain: currentTile.terrain,
+      tileOwnerId: currentTile.owner_id,
+      agentId: agent.id,
+      territoryCount,
+      maxTerritories: MAX_TERRITORIES_PER_AGENT,
+      territoryDeedAvailable,
+      territoryDeedDiscountPercent: deedDiscountPercent,
+      firstClaimDiscountAvailable,
     },
-    terrain: currentTile.terrain,
-    tileOwnerId: currentTile.owner_id,
-    agentId: agent.id,
-    territoryCount,
-    maxTerritories: MAX_TERRITORIES_PER_AGENT,
-    territoryDeedAvailable,
-    territoryDeedDiscountPercent: getTerritoryDeedDiscountPercent(),
-    firstClaimDiscountAvailable,
-  });
+    { x: agent.x, y: agent.y },
+  );
   const canClaimHere = claimQuote.can_execute;
 
   const currentLevel = currentTile.upgrade_level;
@@ -242,6 +248,7 @@ export async function GET(request: NextRequest) {
         claim: {
           ...claimQuote,
           can_execute: canClaimHere,
+          quote_source: claimQuoteSource,
         },
         upgrade: {
           can_execute: canUpgradeHere,
