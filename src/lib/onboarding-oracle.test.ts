@@ -95,6 +95,8 @@ describe('onboarding oracle contract', () => {
       tournament,
       nextSteps: getPendingOutcomeSteps(progress, tournament.type),
       recentEvents: [{ type: 'gather' }, { type: 'move' }],
+      agentName: 'TestAgent',
+      ownershipStatus: 'pending',
     });
 
     expect(objectives.length).toBeGreaterThanOrEqual(3);
@@ -102,5 +104,6 @@ describe('onboarding oracle contract', () => {
     expect(badges.length).toBeGreaterThanOrEqual(3);
     expect(feedback.what_happened.length).toBeGreaterThan(0);
     expect(feedback.what_to_do_next.length).toBeGreaterThan(0);
+    expect(feedback.what_to_do_next[0]).toContain('Report to coach');
   });
 });

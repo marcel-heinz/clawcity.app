@@ -70,7 +70,17 @@ program
   .command('install <skill>')
   .description('Install a skill for your AI agent')
   .option('-n, --name <name>', 'Agent name to register')
-  .action(async (skill: string, options: { name?: string }) => {
+  .option('--mode <path>', 'Onboarding path: manual or scripted', 'manual')
+  .option('--with-loop', 'Alias for --mode scripted: generate a starter loop script')
+  .option('--loop-file <path>', 'Starter loop script output path', 'clawcity-loop.sh')
+  .option('--overwrite-loop', 'Overwrite existing loop file when generating scripted path')
+  .action(async (skill: string, options: {
+    name?: string;
+    mode?: string;
+    withLoop?: boolean;
+    loopFile?: string;
+    overwriteLoop?: boolean;
+  }) => {
     await installSkill(skill, options);
   });
 

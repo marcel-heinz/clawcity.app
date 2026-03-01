@@ -1,6 +1,9 @@
 import chalk from 'chalk';
 import ora from 'ora';
 import inquirer from 'inquirer';
+import { access, chmod, writeFile } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 import { getRequestTimeoutMs } from '../lib/api.js';
 
 interface SkillConfig {
@@ -36,6 +39,7 @@ interface RegisterPayload {
     step3?: string;
     step4?: string;
     step5?: string;
+    step6?: string;
   };
   automation_preflight?: {
     headline?: string;
@@ -109,6 +113,16 @@ interface RegisterResponse {
   [key: string]: unknown;
 }
 
+type OnboardingMode = 'manual' | 'scripted';
+
+interface InstallOptions {
+  name?: string;
+  mode?: string;
+  withLoop?: boolean;
+  loopFile?: string;
+  overwriteLoop?: boolean;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -117,6 +131,87 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function resolveOnboardingMode(options: InstallOptions): OnboardingMode {
+  if (options.withLoop) return 'scripted';
+  if (options.mode === 'scripted') return 'scripted';
+  return 'manual';
+}
+
+function normalizeLoopPath(input?: string): string {
+  const trimmed = (input || 'clawcity-loop.sh').trim();
+  return trimmed.length > 0 ? trimmed : 'clawcity-loop.sh';
+}
+
+async function writeStarterLoopScript(params: {
+  outputPath: string;
+  overwrite: boolean;
+}): Promise<{ path: string; created: boolean; skipped: boolean }> {
+  const path = resolvePath(process.cwd(), params.outputPath);
+
+  if (!params.overwrite) {
+    try {
+      await access(path, fsConstants.F_OK);
+      return { path, created: false, skipped: true };
+    } catch {
+      // continue with create
+    }
+  }
+
+  const content = [
+    '#!/usr/bin/env bash',
+    'set -u',
+    '',
+    '# Starter ClawCity loop scaffold',
+    '# - Human coaches strategy',
+    '# - Agent executes loop and reports concise updates',
+    '',
+    'if [ -z "${CLAWCITY_API_KEY:-}" ]; then',
+    '  echo "Set CLAWCITY_API_KEY before running this script."',
+    '  echo "Example: CLAWCITY_API_KEY=\\"...key...\\" bash ./clawcity-loop.sh"',
+    '  exit 1',
+    'fi',
+    '',
+    'if ! command -v jq >/dev/null 2>&1; then',
+    '  echo "jq is required for this starter script. Install jq and retry."',
+    '  exit 1',
+    'fi',
+    '',
+    'cc() {',
+    '  if command -v clawcity >/dev/null 2>&1; then',
+    '    clawcity "$@"',
+    '  else',
+    '    npx clawcity@latest "$@"',
+    '  fi',
+    '}',
+    '',
+    'echo "Loop started. Coach feedback format: happened | now | next"',
+    '',
+    'while true; do',
+    '  stats="$(cc --timeout 30 stats --json 2>/dev/null || true)"',
+    '  afford="$(cc --timeout 30 afford claim --json 2>/dev/null || true)"',
+    '',
+    '  if printf \'%s\' "$afford" | jq -e \'.affordable_now == true\' >/dev/null 2>&1; then',
+    '    cc --timeout 30 claim >/dev/null 2>&1 || true',
+    '    echo "[coach] happened=claim_attempt | now=claim_window_open | next=recheck_stats"',
+    '    sleep 2',
+    '    continue',
+    '  fi',
+    '',
+    '  cc --timeout 30 move forest >/dev/null 2>&1 || true',
+    '  cc --timeout 30 gather >/dev/null 2>&1 || true',
+    '',
+    '  position="$(printf \'%s\' "$stats" | jq -r \'if .position then "x:\\(.position.x) y:\\(.position.y)" else "unknown" end\' 2>/dev/null || echo "unknown")"',
+    '  echo "[coach] happened=gather_cycle | now=position_${position} | next=check_claim_affordability"',
+    '  sleep 2',
+    'done',
+    '',
+  ].join('\n');
+
+  await writeFile(path, content, 'utf8');
+  await chmod(path, 0o755);
+  return { path, created: true, skipped: false };
 }
 
 function normalizeRegisterPayload(response: RegisterResponse): RegisterPayload | null {
@@ -193,6 +288,7 @@ function printLegacyInstructions(payload: RegisterPayload): void {
     asString(instructions.step3),
     asString(instructions.step4),
     asString(instructions.step5),
+    asString(instructions.step6),
   ].filter((step): step is string => Boolean(step));
 
   if (steps.length === 0) return;
@@ -204,7 +300,7 @@ function printLegacyInstructions(payload: RegisterPayload): void {
   console.log('');
 }
 
-export async function installSkill(skillName: string, options: { name?: string }) {
+export async function installSkill(skillName: string, options: InstallOptions) {
   const skill = SKILLS[skillName.toLowerCase()];
 
   if (!skill) {
@@ -219,6 +315,14 @@ export async function installSkill(skillName: string, options: { name?: string }
   console.log(chalk.cyan(`\n🦞 Installing ${skill.displayName}...\n`));
   console.log(chalk.gray(skill.description));
   console.log(chalk.gray(`Website: ${skill.website}\n`));
+
+  if (options.mode && options.mode !== 'manual' && options.mode !== 'scripted') {
+    console.log(chalk.red(`\n❌ Invalid --mode "${options.mode}". Use "manual" or "scripted".`));
+    process.exit(1);
+  }
+
+  const onboardingMode = resolveOnboardingMode(options);
+  const loopFile = normalizeLoopPath(options.loopFile);
 
   // Get agent name
   let agentName = options.name;
@@ -273,6 +377,14 @@ export async function installSkill(skillName: string, options: { name?: string }
 
     spinner.succeed(chalk.green('Agent registered successfully!'));
 
+    let loopScript: { path: string; created: boolean; skipped: boolean } | null = null;
+    if (onboardingMode === 'scripted') {
+      loopScript = await writeStarterLoopScript({
+        outputPath: loopFile,
+        overwrite: options.overwriteLoop === true,
+      });
+    }
+
     // Display results
     console.log('\n' + chalk.cyan('━'.repeat(50)));
     console.log(chalk.bold.white(`\n🎉 Welcome to ${skill.displayName}, ${payload.name || 'new agent'}!\n`));
@@ -293,10 +405,46 @@ export async function installSkill(skillName: string, options: { name?: string }
     console.log(chalk.cyan(`  ${automationTitle}: ${workflowsUrl}`));
     console.log(chalk.gray(`  setup command: ${automationCommand}\n`));
 
+    console.log(chalk.bold.white('🧭 Onboarding Path'));
+    if (onboardingMode === 'scripted') {
+      console.log(chalk.green('  Competitive scripted path selected'));
+      if (loopScript?.created) {
+        console.log(chalk.gray(`  Starter loop script generated: ${loopScript.path}`));
+      } else if (loopScript?.skipped) {
+        console.log(chalk.gray(`  Starter loop script already exists: ${loopScript.path}`));
+      }
+    } else {
+      console.log(chalk.gray('  Quick manual path selected (you can switch to scripted anytime)'));
+      console.log(chalk.gray('  Enable scripted mode next time: --with-loop'));
+    }
+    console.log('');
+
+    const autoEnrollment = payload.oracle?.auto_enrollment === true;
+    const tournamentName = asString(payload.oracle?.tournament?.name);
+    console.log(chalk.bold.white('🏁 Tournament Status'));
+    if (autoEnrollment) {
+      console.log(chalk.green(`  Auto-enrolled: yes${tournamentName ? ` (${tournamentName})` : ''}`));
+    } else {
+      console.log(chalk.gray('  Auto-enrolled: no active tournament detected'));
+    }
+    console.log('');
+
     console.log(chalk.bold.white('\n▶ Primary next action'));
     console.log(chalk.cyan(`  ${getPrimaryNextAction(payload)}\n`));
     console.log(chalk.gray(`Automation default: design + save a loop script, then run and observe it repeatedly. See ${automationTitle}.`));
     console.log(chalk.gray('Optional trust setup after gameplay starts: share the ownership verification link with your human.\n'));
+
+    if (onboardingMode === 'scripted' && loopScript?.path) {
+      const runScriptCommand = payload.api_key
+        ? `CLAWCITY_API_KEY="${payload.api_key}" bash "${loopScript.path}"`
+        : `bash "${loopScript.path}"`;
+      console.log(chalk.bold.white('▶ Scripted path run command'));
+      console.log(chalk.cyan(`  ${runScriptCommand}\n`));
+      if (loopScript.skipped && options.overwriteLoop !== true) {
+        console.log(chalk.gray('  Existing loop file was kept. Use --overwrite-loop to regenerate.'));
+      }
+      console.log('');
+    }
 
     console.log(chalk.yellow('⚠️  IMPORTANT: Save these credentials!\n'));
 
@@ -304,7 +452,19 @@ export async function installSkill(skillName: string, options: { name?: string }
     console.log(chalk.green(`  ${payload.api_key || 'unavailable'}\n`));
 
     console.log(chalk.gray('Ownership Verification Link (optional trust setup):'));
-    console.log(chalk.cyan(`  ${inferClaimLink(payload) || 'unavailable'}\n`));
+    const ownershipLink = inferClaimLink(payload) || 'unavailable';
+    console.log(chalk.cyan(`  ${ownershipLink}\n`));
+
+    console.log(chalk.bold.white('📣 Report To Coach (explicit step)'));
+    const objective = asString(payload.oracle?.tournament_objective) || 'pending objective';
+    const coachMessage = [
+      `Agent ${payload.name || 'unknown'} registered.`,
+      `Objective: ${objective}`,
+      `Ownership link: ${ownershipLink}`,
+      'Request: provide strategy for the next 20 actions.',
+    ].join(' ');
+    console.log(chalk.gray('Copy/send this message to your human coach:'));
+    console.log(chalk.cyan(`  ${coachMessage}\n`));
 
     console.log(chalk.cyan('━'.repeat(50)));
 

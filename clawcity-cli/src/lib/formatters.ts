@@ -503,7 +503,12 @@ export function formatTournamentPerksLines(data: UnknownRecord): string[] {
   return lines;
 }
 
-export function formatOracleLines(data: UnknownRecord, includeAllPending = false): string[] {
+export function formatOracleLines(
+  data: UnknownRecord,
+  options?: { includeAllPending?: boolean; verbose?: boolean },
+): string[] {
+  const includeAllPending = options?.includeAllPending === true;
+  const verbose = options?.verbose === true;
   const automation = asRecord(data.automation_preflight);
   const contract = asRecord(data.contract);
   const oracle = asRecord(data.oracle);
@@ -519,9 +524,7 @@ export function formatOracleLines(data: UnknownRecord, includeAllPending = false
   const completed = asNumber(contract?.completed_outcomes) ?? 0;
   const total = asNumber(contract?.total_outcomes) ?? 0;
 
-  const lines = [
-    `${title} | Outcomes: ${completed}/${total}`,
-  ];
+  const lines = [`${title} | Outcomes: ${completed}/${total}`];
 
   const automationHeadline = asString(automation?.headline);
   const automationPartTitle = asString(automation?.part3_title);
@@ -540,8 +543,18 @@ export function formatOracleLines(data: UnknownRecord, includeAllPending = false
     lines.push(`Automation setup command: ${automationCommand}`);
   }
 
-  lines.push(narrative);
+  if (verbose && narrative) {
+    lines.push(narrative);
+  }
   lines.push(`Objective: ${objective}`);
+
+  const tournament = asRecord(oracle?.tournament);
+  if (tournament) {
+    const tournamentName = asString(tournament.name) || 'active';
+    const score = asNumber(tournament.current_score);
+    const rank = asNumber(tournament.current_rank);
+    lines.push(`Tournament: ${tournamentName} | score:${score ?? 0} | rank:${rank ?? 'unranked'}`);
+  }
 
   const pending = includeAllPending ? allPendingSteps : nextSteps;
   if (pending.length > 0) {
@@ -552,18 +565,18 @@ export function formatOracleLines(data: UnknownRecord, includeAllPending = false
       const expected = asString(step.expected) || '';
       lines.push(`  ${index + 1}. ${titleStep}`);
       if (command) lines.push(`     cmd: ${command}`);
-      if (expected) lines.push(`     expected: ${expected}`);
+      if (expected && verbose) lines.push(`     expected: ${expected}`);
     });
   } else {
     lines.push('All onboarding outcomes are complete.');
   }
 
   const prompt = asString(oracle?.starter_prompt);
-  if (prompt) {
+  if (prompt && verbose) {
     lines.push(`Starter prompt: ${prompt}`);
   }
 
-  if (coachObjectives.length > 0) {
+  if (coachObjectives.length > 0 && verbose) {
     lines.push('Coach objectives:');
     coachObjectives.forEach((objective, index) => {
       const objectiveTitle = asString(objective.title) || `Objective ${index + 1}`;
@@ -574,7 +587,7 @@ export function formatOracleLines(data: UnknownRecord, includeAllPending = false
     });
   }
 
-  if (coachBadges.length > 0) {
+  if (coachBadges.length > 0 && verbose) {
     lines.push('Strategy badges:');
     coachBadges.forEach((badge) => {
       const title = asString(badge.title) || 'Badge';
@@ -597,18 +610,42 @@ export function formatOracleLines(data: UnknownRecord, includeAllPending = false
       : [];
 
     if (whatHappened.length > 0 || happeningNow.length > 0 || whatToDoNext.length > 0) {
-      lines.push('Agent-human feedback:');
-      if (whatHappened.length > 0) {
-        lines.push('  What happened:');
-        whatHappened.forEach((line) => lines.push(`    - ${line}`));
+      if (verbose) {
+        lines.push('Agent-human feedback:');
+        if (whatHappened.length > 0) {
+          lines.push('  What happened:');
+          whatHappened.forEach((line) => lines.push(`    - ${line}`));
+        }
+        if (happeningNow.length > 0) {
+          lines.push('  What is happening now:');
+          happeningNow.forEach((line) => lines.push(`    - ${line}`));
+        }
+        if (whatToDoNext.length > 0) {
+          lines.push('  What to do next:');
+          whatToDoNext.forEach((line) => lines.push(`    - ${line}`));
+        }
+      } else {
+        if (happeningNow.length > 0) {
+          lines.push(`Now: ${happeningNow[0]}`);
+        }
+        if (whatToDoNext.length > 0) {
+          lines.push(`Next: ${whatToDoNext[0]}`);
+        }
       }
-      if (happeningNow.length > 0) {
-        lines.push('  What is happening now:');
-        happeningNow.forEach((line) => lines.push(`    - ${line}`));
-      }
-      if (whatToDoNext.length > 0) {
-        lines.push('  What to do next:');
-        whatToDoNext.forEach((line) => lines.push(`    - ${line}`));
+    }
+  }
+
+  if (!verbose && coachBadges.length > 0) {
+    const earnedCount = coachBadges.filter((badge) => badge.earned === true).length;
+    lines.push(`Strategy badges: ${earnedCount}/${coachBadges.length} earned`);
+  }
+
+  if (!verbose && coachObjectives.length > 0) {
+    const pendingObjective = coachObjectives.find((objective) => asString(objective.status) !== 'complete');
+    if (pendingObjective) {
+      const titleStep = asString(pendingObjective.title);
+      if (titleStep) {
+        lines.push(`Coach objective focus: ${titleStep}`);
       }
     }
   }

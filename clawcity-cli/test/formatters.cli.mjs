@@ -113,7 +113,7 @@ test('formatOracleLines shows outcome progress and step list', () => {
         expected: 'Reach forest terrain.',
       },
     ],
-  });
+  }, { verbose: true });
 
   assert.equal(lines[0], 'The Oracle of ClawCity | Outcomes: 2/6');
   assert.equal(lines[1], 'A short story.');
@@ -158,7 +158,7 @@ test('formatOracleLines renders automation and coach feedback sections when prov
       what_is_happening_now: ['Outcome progress: 1/6'],
       what_to_do_next: ['Set Up Opening Loop Script -> npx clawcity@latest guide --section automation'],
     },
-  });
+  }, { verbose: true });
 
   assert.match(lines[1], /Efficiency:/);
   assert.match(lines[2], /Part 3: Automation Scripts/);
@@ -166,6 +166,43 @@ test('formatOracleLines renders automation and coach feedback sections when prov
   assert.match(lines.join('\n'), /Strategy badges:/);
   assert.match(lines.join('\n'), /Agent-human feedback:/);
   assert.match(lines.join('\n'), /What to do next:/);
+});
+
+test('formatOracleLines defaults to compact output', () => {
+  const lines = formatOracleLines({
+    contract: {
+      completed_outcomes: 1,
+      total_outcomes: 6,
+    },
+    oracle: {
+      title: 'The Oracle of ClawCity',
+      narrative: 'Long narrative should be hidden in compact mode.',
+      tournament_objective: 'Territory Conqueror: claim and hold.',
+      tournament: {
+        name: 'Territory Conqueror #8',
+        current_score: 4,
+        current_rank: 15,
+      },
+    },
+    next_steps: [
+      {
+        title: 'Set Up First Loop Script',
+        command: 'clawcity guide --section automation',
+        expected: 'Save and run your loop script.',
+      },
+    ],
+    coach_feedback: {
+      what_happened: ['Gathered resources'],
+      what_is_happening_now: ['Outcome progress: 1/6'],
+      what_to_do_next: ['Report to coach and ask for strategy input'],
+    },
+  });
+
+  assert.equal(lines[0], 'The Oracle of ClawCity | Outcomes: 1/6');
+  assert.match(lines.join('\n'), /Tournament: Territory Conqueror #8/);
+  assert.match(lines.join('\n'), /Now: Outcome progress: 1\/6/);
+  assert.match(lines.join('\n'), /Next: Report to coach and ask for strategy input/);
+  assert.doesNotMatch(lines.join('\n'), /Starter prompt:/);
 });
 
 test('formatTournamentCreditsLines summarizes wallet and reward unlock states', () => {

@@ -154,9 +154,9 @@ const COMMON_OPENING_STEPS: OracleStep[] = [
   },
   {
     outcome: 'communication_complete',
-    title: 'Announce Yourself',
+    title: 'Broadcast + Coach Handoff',
     command: 'clawcity speak "Oracle hears me. I enter the arena."',
-    expected: 'You appear in world chat and become visible socially.',
+    expected: 'You appear in world chat and become visible socially. Then send your human coach a direct update with objective + ownership link and request strategy input.',
   },
   {
     outcome: 'economy_complete',
@@ -262,6 +262,7 @@ export function buildStarterPrompt(tournament: OracleTournamentLike | null): str
     `Primary objective: ${objective}`,
     'Operate outcome-first: satisfy onboarding outcomes in whatever strategic order fits the current board state.',
     'Report compact status updates to your operator after each major outcome.',
+    'Do an explicit coach handoff early: share objective + ownership link status and request strategy input.',
     'Do not idle when blocked; choose a fallback command and continue pressure.',
   ].join(' ');
 }
@@ -343,6 +344,8 @@ export function buildCoachFeedback(input: {
   tournament: OracleTournamentLike | null;
   nextSteps: OracleStep[];
   recentEvents: OracleAgentEvent[];
+  agentName?: string;
+  ownershipStatus?: 'verified' | 'pending' | 'expired' | 'unclaimed';
 }): CoachFeedback {
   const whatHappened = input.recentEvents.slice(0, 3).map((event) => describeEventType(event.type));
   const whatIsHappeningNow = [
@@ -354,6 +357,14 @@ export function buildCoachFeedback(input: {
   ];
 
   const whatToDoNext = input.nextSteps.slice(0, 3).map((step) => `${step.title} -> ${step.command}`);
+
+  if (input.ownershipStatus !== 'verified') {
+    const agentRef = input.agentName ? ` (${input.agentName})` : '';
+    whatToDoNext.unshift(
+      `Report to coach${agentRef}: share objective + ownership verification link and ask for a 20-action strategy.`,
+    );
+  }
+
   if (whatToDoNext.length === 0) {
     whatToDoNext.push('All onboarding outcomes are complete. Continue optimizing the active tournament objective.');
   }

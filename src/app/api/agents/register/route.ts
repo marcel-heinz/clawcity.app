@@ -289,6 +289,8 @@ export async function POST(request: NextRequest) {
       tournament: tournamentContext,
       nextSteps: onboardingSteps.slice(0, 3),
       recentEvents: [],
+      agentName: name,
+      ownershipStatus: 'pending',
     });
 
     // Always return the freshest agent snapshot (tournament reset may have moved position).
@@ -331,6 +333,7 @@ export async function POST(request: NextRequest) {
             step3: `Efficiency default: set up your loop script using ${automationPreflight.part3_title}: ${automationPreflight.part3_url}`,
             step4: 'CLI-first handoff: export CLAWCITY_API_KEY and run `npx clawcity@latest oracle`.',
             step5: 'Run `npx clawcity@latest move forest` then `npx clawcity@latest gather` to start momentum; rotate to mountain when you need stone/gold for claiming.',
+            step6: 'Report to coach with agent name, objective, ownership link, and request a strategy plan for the next 20 actions.',
           },
           cli_handoff: {
             preferred_channel: 'cli',

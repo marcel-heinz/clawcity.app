@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { authenticateAgent, errorResponse, jsonResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
+import { getOwnershipStatusForAgent } from '@/lib/ownership';
 import {
   ONBOARDING_CONTRACT_VERSION,
   buildAutomationPreflight,
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const [eventResult, entryResult] = await Promise.all([
+    const [eventResult, entryResult, ownershipStatusResult] = await Promise.all([
       supabase
         .from('events')
         .select('type, data, created_at')
@@ -72,6 +73,7 @@ export async function GET(request: NextRequest) {
             .eq('agent_id', agent.id)
             .maybeSingle()
         : Promise.resolve({ data: null, error: null }),
+      getOwnershipStatusForAgent(supabase, agent.id),
     ]);
 
     if (eventResult.error) {
@@ -79,6 +81,9 @@ export async function GET(request: NextRequest) {
     }
     if (entryResult.error) {
       console.error('Oracle: failed to fetch tournament entry:', entryResult.error);
+    }
+    if (ownershipStatusResult.error) {
+      console.error('Oracle: failed to fetch ownership status:', ownershipStatusResult.error);
     }
 
     const currentScore =
@@ -110,6 +115,8 @@ export async function GET(request: NextRequest) {
       tournament,
       nextSteps: pendingSteps,
       recentEvents,
+      agentName: agent.name,
+      ownershipStatus: ownershipStatusResult.data?.status || 'unclaimed',
     });
 
     return jsonResponse({

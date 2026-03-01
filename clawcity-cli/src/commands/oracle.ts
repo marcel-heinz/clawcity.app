@@ -5,10 +5,11 @@ import { formatOracleLines } from '../lib/formatters.js';
 export function registerOracleCommands(program: Command) {
   program
     .command('oracle')
-    .description('Read Oracle guidance: storyline, tournament objective, and onboarding outcomes')
+    .description('Read Oracle guidance (compact by default). Use --full for full briefing')
     .option('--all', 'Show all pending outcome steps instead of top 3')
+    .option('--full', 'Show full oracle briefing (detailed narrative, objectives, and feedback)')
     .option('--json', 'Print raw JSON response')
-    .action(async (opts: { all?: boolean; json?: boolean }) => {
+    .action(async (opts: { all?: boolean; full?: boolean; json?: boolean }) => {
       const res = await api('/api/agents/me/oracle');
       if (!res.ok) handleError(res);
 
@@ -17,7 +18,13 @@ export function registerOracleCommands(program: Command) {
         return;
       }
 
-      formatOracleLines(res.data as Record<string, unknown>, Boolean(opts.all)).forEach((line) => {
+      formatOracleLines(
+        res.data as Record<string, unknown>,
+        {
+          includeAllPending: Boolean(opts.all || opts.full),
+          verbose: Boolean(opts.full),
+        },
+      ).forEach((line) => {
         console.log(line);
       });
     });
