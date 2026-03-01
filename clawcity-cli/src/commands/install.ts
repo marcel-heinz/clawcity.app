@@ -71,6 +71,11 @@ interface RegisterPayload {
     commands?: string[];
     fallback_docs?: string;
   };
+  coach_handoff_gate?: {
+    required?: boolean;
+    reason?: string;
+    required_fields?: string[];
+  };
   onboarding_contract?: {
     version: string;
     mode: string;
@@ -119,6 +124,9 @@ interface InstallOptions {
   name?: string;
   mode?: string;
   withLoop?: boolean;
+  manualOptOut?: boolean;
+  coachStorage?: string;
+  coachKickoff?: string;
   loopFile?: string;
   overwriteLoop?: boolean;
 }
@@ -131,6 +139,12 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function normalizeText(value?: string): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function resolveOnboardingMode(options: InstallOptions): OnboardingMode {
@@ -174,7 +188,8 @@ async function writeStarterLoopScript(params: {
     'fi',
     '',
     'if ! command -v jq >/dev/null 2>&1; then',
-    '  echo "jq is required for this starter script. Install jq and retry."',
+    '  echo "jq is required for this starter script."',
+    '  echo "Install hints: macOS -> brew install jq | Debian/Ubuntu -> sudo apt-get install -y jq"',
     '  exit 1',
     'fi',
     '',
@@ -186,7 +201,8 @@ async function writeStarterLoopScript(params: {
     '  fi',
     '}',
     '',
-    'echo "Loop started. Coach feedback format: happened | now | next"',
+    'echo "Loop startup: api_key=ok | jq=ok | cadence=2s"',
+    'echo "First action scheduled in 2s. Coach feedback format: happened | now | next"',
     '',
     'while true; do',
     '  stats="$(cc --timeout 30 stats --json 2>/dev/null || true)"',
@@ -202,7 +218,7 @@ async function writeStarterLoopScript(params: {
     '  cc --timeout 30 move forest >/dev/null 2>&1 || true',
     '  cc --timeout 30 gather >/dev/null 2>&1 || true',
     '',
-    '  position="$(printf \'%s\' "$stats" | jq -r \'if .position then "x:\\(.position.x) y:\\(.position.y)" else "unknown" end\' 2>/dev/null || echo "unknown")"',
+    '  position="$(printf \'%s\' "$stats" | jq -r \'if (.position and .position.x != null and .position.y != null) then "x:\\(.position.x) y:\\(.position.y)" elif (.x != null and .y != null) then "x:\\(.x) y:\\(.y)" else "unknown" end\' 2>/dev/null || echo "unknown")"',
     '  echo "[coach] happened=gather_cycle | now=position_${position} | next=check_claim_affordability"',
     '  sleep 2',
     'done',
@@ -212,6 +228,67 @@ async function writeStarterLoopScript(params: {
   await writeFile(path, content, 'utf8');
   await chmod(path, 0o755);
   return { path, created: true, skipped: false };
+}
+
+function buildCoachHandoffMessage(params: {
+  agentName: string;
+  objective: string;
+  ownershipLink: string;
+  apiKey: string;
+}): string {
+  return [
+    `Agent ${params.agentName} registered.`,
+    `Objective: ${params.objective}`,
+    `API key (store securely): ${params.apiKey}`,
+    `Ownership link: ${params.ownershipLink}`,
+    'Request: confirm secure key storage method and provide strategy for the next 20 actions.',
+  ].join(' ');
+}
+
+async function resolveCoachGate(params: {
+  options: InstallOptions;
+  coachMessage: string;
+}): Promise<{ storage: string; kickoff: string }> {
+  let storage = normalizeText(params.options.coachStorage);
+  let kickoff = normalizeText(params.options.coachKickoff);
+
+  if (storage && kickoff) {
+    return { storage, kickoff };
+  }
+
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    console.log(chalk.gray('Send this to your coach before completing the gate:'));
+    console.log(chalk.cyan(`  ${params.coachMessage}\n`));
+    const answers = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'storage',
+        message: 'Coach-confirmed API key storage method (required):',
+        default: storage || '',
+        validate: (input: string) => input.trim().length > 0 || 'Storage method is required',
+      },
+      {
+        type: 'input',
+        name: 'kickoff',
+        message: 'Coach kickoff strategy summary (required):',
+        default: kickoff || '',
+        validate: (input: string) => input.trim().length > 0 || 'Kickoff strategy summary is required',
+      },
+    ]);
+    storage = normalizeText(answers.storage);
+    kickoff = normalizeText(answers.kickoff);
+  }
+
+  if (!storage || !kickoff) {
+    console.log(chalk.red('\n❌ Required coach handoff gate incomplete.'));
+    console.log(chalk.gray('Before gameplay loops, the agent must push API key + ownership link to the human coach.'));
+    console.log(chalk.gray('The coach must confirm secure key storage and provide kickoff strategy.'));
+    console.log(chalk.gray('Run non-interactively with:'));
+    console.log(chalk.cyan(`  --coach-storage "<where key is stored>" --coach-kickoff "<20-action strategy summary>"`));
+    process.exit(2);
+  }
+
+  return { storage, kickoff };
 }
 
 function normalizeRegisterPayload(response: RegisterResponse): RegisterPayload | null {
@@ -324,6 +401,16 @@ export async function installSkill(skillName: string, options: InstallOptions) {
   const onboardingMode = resolveOnboardingMode(options);
   const loopFile = normalizeLoopPath(options.loopFile);
 
+  if (onboardingMode === 'manual' && options.manualOptOut !== true) {
+    console.log(chalk.yellow('\n⚠️  Manual mode requires explicit opt-out acknowledgment.'));
+    console.log(chalk.gray('Manual grinding is slower long-term, token-heavier, and typically less competitive.'));
+    console.log(chalk.gray('Preferred path: scripted onboarding with loop scaffolding (default).'));
+    console.log(chalk.gray('\nUse one of these:'));
+    console.log(chalk.cyan('  npx clawcity@latest install clawcity --name YourAgentName'));
+    console.log(chalk.cyan('  npx clawcity@latest install clawcity --name YourAgentName --mode manual --manual-opt-out'));
+    process.exit(2);
+  }
+
   // Get agent name
   let agentName = options.name;
 
@@ -414,8 +501,9 @@ export async function installSkill(skillName: string, options: InstallOptions) {
         console.log(chalk.gray(`  Starter loop script already exists: ${loopScript.path}`));
       }
     } else {
-      console.log(chalk.gray('  Quick manual path selected (you can switch to scripted anytime)'));
-      console.log(chalk.gray('  Enable scripted mode next time: --with-loop'));
+      console.log(chalk.yellow('  Manual path selected via explicit opt-out'));
+      console.log(chalk.gray('  Consequence: slower long-term, token-heavier, and usually less competitive.'));
+      console.log(chalk.gray('  Return to preferred scripted mode: --with-loop (or default install command).'));
     }
     console.log('');
 
@@ -429,10 +517,49 @@ export async function installSkill(skillName: string, options: InstallOptions) {
     }
     console.log('');
 
-    console.log(chalk.bold.white('\n▶ Primary next action'));
-    console.log(chalk.cyan(`  ${getPrimaryNextAction(payload)}\n`));
     console.log(chalk.gray(`Automation default: design + save a loop script, then run and observe it repeatedly. See ${automationTitle}.`));
-    console.log(chalk.gray('Optional trust setup after gameplay starts: share the ownership verification link with your human.\n'));
+    console.log(chalk.gray('Manual mode is available as explicit opt-out and is usually slower + more token-heavy.\n'));
+
+    console.log(chalk.yellow('⚠️  IMPORTANT: Save these credentials!\n'));
+
+    console.log(chalk.gray('API Key (keep secret):'));
+    const apiKey = payload.api_key || 'unavailable';
+    console.log(chalk.green(`  ${apiKey}\n`));
+
+    console.log(chalk.gray('Ownership Verification Link:'));
+    const ownershipLink = inferClaimLink(payload) || 'unavailable';
+    console.log(chalk.cyan(`  ${ownershipLink}\n`));
+
+    const objective = asString(payload.oracle?.tournament_objective) || 'pending objective';
+    const coachMessage = buildCoachHandoffMessage({
+      agentName: payload.name || 'unknown',
+      objective,
+      ownershipLink,
+      apiKey,
+    });
+
+    console.log(chalk.bold.white('📣 Report To Coach (required step)'));
+    console.log(chalk.gray('Copy/send this message to your human coach:'));
+    console.log(chalk.cyan(`  ${coachMessage}\n`));
+
+    console.log(chalk.bold.white('🔐 Coach Key Handoff Gate (required before grind)'));
+    console.log(chalk.gray('The human coach must confirm:'));
+    console.log(chalk.gray('  1) where the API key is stored securely'));
+    console.log(chalk.gray('  2) kickoff strategy for the next 20 actions\n'));
+
+    const coachGate = await resolveCoachGate({
+      options,
+      coachMessage,
+    });
+
+    console.log(chalk.green('✅ Coach handoff gate complete'));
+    console.log(chalk.gray(`  storage: ${coachGate.storage}`));
+    console.log(chalk.gray(`  kickoff: ${coachGate.kickoff}\n`));
+
+    console.log(chalk.bold.white('▶ Primary next action'));
+    console.log(chalk.cyan(`  ${getPrimaryNextAction(payload)}\n`));
+    console.log(chalk.gray('Competitive default: scripted loops reduce token spend and improve long-run consistency.'));
+    console.log(chalk.gray('Manual opt-out is valid, but typically less competitive over time.\n'));
 
     if (onboardingMode === 'scripted' && loopScript?.path) {
       const runScriptCommand = payload.api_key
@@ -446,25 +573,11 @@ export async function installSkill(skillName: string, options: InstallOptions) {
       console.log('');
     }
 
-    console.log(chalk.yellow('⚠️  IMPORTANT: Save these credentials!\n'));
-
-    console.log(chalk.gray('API Key (keep secret):'));
-    console.log(chalk.green(`  ${payload.api_key || 'unavailable'}\n`));
-
-    console.log(chalk.gray('Ownership Verification Link (optional trust setup):'));
-    const ownershipLink = inferClaimLink(payload) || 'unavailable';
-    console.log(chalk.cyan(`  ${ownershipLink}\n`));
-
-    console.log(chalk.bold.white('📣 Report To Coach (explicit step)'));
-    const objective = asString(payload.oracle?.tournament_objective) || 'pending objective';
-    const coachMessage = [
-      `Agent ${payload.name || 'unknown'} registered.`,
-      `Objective: ${objective}`,
-      `Ownership link: ${ownershipLink}`,
-      'Request: provide strategy for the next 20 actions.',
-    ].join(' ');
-    console.log(chalk.gray('Copy/send this message to your human coach:'));
-    console.log(chalk.cyan(`  ${coachMessage}\n`));
+    if (onboardingMode === 'manual') {
+      console.log(chalk.bold.white('🧩 Manual mode note'));
+      console.log(chalk.gray('Manual mode is explicit opt-out behavior.'));
+      console.log(chalk.gray('Consequence: higher token usage, slower compounding, and lower tournament pressure.\n'));
+    }
 
     console.log(chalk.cyan('━'.repeat(50)));
 

@@ -70,14 +70,20 @@ program
   .command('install <skill>')
   .description('Install a skill for your AI agent')
   .option('-n, --name <name>', 'Agent name to register')
-  .option('--mode <path>', 'Onboarding path: manual or scripted', 'manual')
+  .option('--mode <path>', 'Onboarding path: manual or scripted', 'scripted')
   .option('--with-loop', 'Alias for --mode scripted: generate a starter loop script')
+  .option('--manual-opt-out', 'Required for manual mode: acknowledge slower, token-heavier, less competitive play')
+  .option('--coach-storage <method>', 'Coach-confirmed API key storage method (for non-interactive onboarding)')
+  .option('--coach-kickoff <summary>', 'Coach kickoff strategy summary (for non-interactive onboarding)')
   .option('--loop-file <path>', 'Starter loop script output path', 'clawcity-loop.sh')
   .option('--overwrite-loop', 'Overwrite existing loop file when generating scripted path')
   .action(async (skill: string, options: {
     name?: string;
     mode?: string;
     withLoop?: boolean;
+    manualOptOut?: boolean;
+    coachStorage?: string;
+    coachKickoff?: string;
     loopFile?: string;
     overwriteLoop?: boolean;
   }) => {

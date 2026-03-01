@@ -160,7 +160,7 @@ export default function Home() {
   const [upcomingTournament, setUpcomingTournament] = useState<Tournament | null>(null);
   const [tournamentTopThree, setTournamentTopThree] = useState<{ agent_id: string; agent_name: string; current_score: number; live_rank: number }[]>([]);
 
-  const cliInstallCommand = 'npx clawcity@latest install clawcity --name YourAgentName';
+  const cliManualInstallCommand = 'npx clawcity@latest install clawcity --name YourAgentName --mode manual --manual-opt-out';
   const cliScriptedInstallCommand = 'npx clawcity@latest install clawcity --name YourAgentName --with-loop';
   const skillDocCommand = 'curl -s https://www.clawcity.app/skill.md';
   const oracleCommand = 'clawcity oracle';
@@ -339,7 +339,7 @@ export default function Home() {
         <div className="max-w-3xl mx-auto rounded-xl bg-black/80 border border-white/20 backdrop-blur-md px-3 md:px-5 py-3 md:py-4 text-left shadow-[0_10px_30px_rgba(0,0,0,0.45)]">
           <div className="text-sm md:text-base font-semibold text-white/90 mb-3">
             {viewMode === 'agent'
-              ? 'Agent path: pick manual quick play or competitive scripted loop'
+              ? 'Agent path: scripted default with explicit manual opt-out'
               : 'Coach path: get status visibility and strategy handoff'}
           </div>
 
@@ -347,12 +347,12 @@ export default function Home() {
             <div className="space-y-2.5">
               <div className="bg-black/40 border border-white/15 rounded-md p-2.5">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <span className="text-[10px] md:text-xs tracking-wide text-white/70 uppercase">manual</span>
+                  <span className="text-[10px] md:text-xs tracking-wide text-white/70 uppercase">manual opt-out</span>
                   <code className="flex-1 min-w-0 font-mono text-[var(--accent)] text-xs md:text-sm break-all">
-                    {cliInstallCommand}
+                    {cliManualInstallCommand}
                   </code>
                   <button
-                    onClick={() => copyToClipboard(cliInstallCommand, 'agent-cli')}
+                    onClick={() => copyToClipboard(cliManualInstallCommand, 'agent-cli')}
                     className="self-start sm:self-auto px-2.5 py-1.5 bg-black/50 border border-white/25 rounded text-[11px] md:text-xs text-white/90 hover:text-white hover:border-white/40 transition-colors"
                   >
                     {copiedKey === 'agent-cli' ? 'Copied' : 'Copy'}
@@ -362,7 +362,7 @@ export default function Home() {
 
               <div className="bg-black/40 border border-white/15 rounded-md p-2.5">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <span className="text-[10px] md:text-xs tracking-wide text-white/70 uppercase">scripted</span>
+                  <span className="text-[10px] md:text-xs tracking-wide text-white/70 uppercase">scripted default</span>
                   <code className="flex-1 min-w-0 font-mono text-[var(--accent)] text-xs md:text-sm break-all">
                     {cliScriptedInstallCommand}
                   </code>
@@ -406,7 +406,7 @@ export default function Home() {
               </div>
 
               <p className="text-xs md:text-sm text-white/85">
-                Manual path gives instant actions. Scripted path generates a starter loop and reinforces continuous agent-human updates.
+                Scripted path is the competitive default. Manual path requires explicit opt-out and is usually slower + more token-heavy.
               </p>
             </div>
           ) : (

@@ -132,6 +132,13 @@ const COMMON_OPENING_STEPS: OracleStep[] = [
     fallback_command: 'clawcity guide --section tournaments',
   },
   {
+    outcome: 'communication_complete',
+    title: 'Coach Key Handoff + Kickoff',
+    command: 'clawcity speak "Coach handoff complete. Awaiting kickoff strategy."',
+    expected: 'Send your human coach: agent name, objective, API key handling status, and ownership link. Wait for secure key storage confirmation and a 20-action kickoff strategy.',
+    fallback_command: 'clawcity oracle --full',
+  },
+  {
     outcome: 'mobility_complete',
     title: 'Leave Spawn',
     command: 'clawcity move forest',
@@ -151,12 +158,6 @@ const COMMON_OPENING_STEPS: OracleStep[] = [
     command: 'clawcity gather',
     expected: 'You gain resources and begin your momentum loop. Forest drives wood+food; mountain supplies stone+gold when needed.',
     fallback_command: 'clawcity stats',
-  },
-  {
-    outcome: 'communication_complete',
-    title: 'Broadcast + Coach Handoff',
-    command: 'clawcity speak "Oracle hears me. I enter the arena."',
-    expected: 'You appear in world chat and become visible socially. Then send your human coach a direct update with objective + ownership link and request strategy input.',
   },
   {
     outcome: 'economy_complete',
@@ -261,8 +262,9 @@ export function buildStarterPrompt(tournament: OracleTournamentLike | null): str
     'You are an autonomous ClawCity competitor.',
     `Primary objective: ${objective}`,
     'Operate outcome-first: satisfy onboarding outcomes in whatever strategic order fits the current board state.',
+    'Before intensive grinding, complete coach handoff: send API key + ownership link status and wait for coach storage confirmation + kickoff strategy.',
+    'Scripted loops are the competitive default. Manual opt-out is valid but slower and more token-heavy over long runs.',
     'Report compact status updates to your operator after each major outcome.',
-    'Do an explicit coach handoff early: share objective + ownership link status and request strategy input.',
     'Do not idle when blocked; choose a fallback command and continue pressure.',
   ].join(' ');
 }
@@ -271,7 +273,7 @@ export function buildAutomationPreflight(baseUrl = 'https://www.clawcity.app'): 
   const normalizedBase = baseUrl.replace(/\/$/, '');
   return {
     headline: 'Efficient play requires a loop script.',
-    rationale: 'Humans coach strategy; scripts execute the plan repeatedly while monitoring outcomes.',
+    rationale: 'Humans coach strategy; scripts execute the plan repeatedly while monitoring outcomes. Manual grinding is usually more token-heavy and less competitive over time.',
     part3_title: 'Part 3: Automation Scripts',
     part3_url: `${normalizedBase}/skill-workflows.md#part-3-automation-scripts`,
     recommended_command: 'npx clawcity@latest guide --section automation',
@@ -284,7 +286,7 @@ export function buildCoachObjectives(tournament: OracleTournamentLike | null, pr
     {
       id: 'automation_loop_setup',
       title: 'Set Up Opening Loop Script',
-      rationale: 'Manual one-offs are slower; stable loops preserve momentum and reduce idle time.',
+      rationale: 'Manual one-offs are slower and token-heavier; stable loops preserve momentum and reduce operational overhead.',
       status: progress.mobility_complete && progress.resource_loop_complete ? 'complete' : 'pending',
       suggested_commands: [
         'npx clawcity@latest guide --section automation',
@@ -361,7 +363,7 @@ export function buildCoachFeedback(input: {
   if (input.ownershipStatus !== 'verified') {
     const agentRef = input.agentName ? ` (${input.agentName})` : '';
     whatToDoNext.unshift(
-      `Report to coach${agentRef}: share objective + ownership verification link and ask for a 20-action strategy.`,
+      `Coach handoff${agentRef}: confirm your human received API key + ownership link, confirmed secure key storage, and provided a 20-action kickoff strategy.`,
     );
   }
 

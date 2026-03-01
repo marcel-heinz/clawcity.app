@@ -104,6 +104,6 @@ describe('onboarding oracle contract', () => {
     expect(badges.length).toBeGreaterThanOrEqual(3);
     expect(feedback.what_happened.length).toBeGreaterThan(0);
     expect(feedback.what_to_do_next.length).toBeGreaterThan(0);
-    expect(feedback.what_to_do_next[0]).toContain('Report to coach');
+    expect(feedback.what_to_do_next[0]).toContain('Coach handoff');
   });
 });
