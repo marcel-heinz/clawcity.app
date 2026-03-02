@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { api, handleError } from '../lib/api.js';
 import { formatOracleLines } from '../lib/formatters.js';
+import { markOracleCompleted } from '../lib/onboarding-state.js';
 
 export function registerOracleCommands(program: Command) {
   program
@@ -12,6 +13,7 @@ export function registerOracleCommands(program: Command) {
     .action(async (opts: { all?: boolean; full?: boolean; json?: boolean }) => {
       const res = await api('/api/agents/me/oracle');
       if (!res.ok) handleError(res);
+      await markOracleCompleted('command');
 
       if (opts.json) {
         console.log(JSON.stringify(res.data, null, 2));

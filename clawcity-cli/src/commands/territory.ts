@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { api, handleError, fmtResources } from '../lib/api.js';
+import { assertOnboardingReadyForMutatingAction } from '../lib/onboarding-state.js';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -105,6 +106,7 @@ export function registerTerritoryCommands(program: Command) {
     .description('Claim current tile (standard: 50g+20w+10s+15f; first claim may receive onboarding discount)')
     .option('--json', 'Print raw JSON response')
     .action(async (opts: { json?: boolean }) => {
+      await assertOnboardingReadyForMutatingAction('claim');
       const res = await api('/api/actions/claim', { method: 'POST', body: {} });
       if (!res.ok) handleError(res);
       const d = res.data as Record<string, unknown>;
@@ -190,6 +192,7 @@ export function registerTerritoryCommands(program: Command) {
     .description('Upgrade current territory (Lv2: 50w+25s, Lv3: 100w+50s)')
     .option('--json', 'Print raw JSON response')
     .action(async (opts: { json?: boolean }) => {
+      await assertOnboardingReadyForMutatingAction('upgrade');
       const res = await api('/api/actions/upgrade', { method: 'POST', body: {} });
       if (!res.ok) handleError(res);
       const d = res.data as Record<string, unknown>;
@@ -207,6 +210,7 @@ export function registerTerritoryCommands(program: Command) {
     .description('Build on owned tile (storage, workshop, fortification)')
     .option('--json', 'Print raw JSON response')
     .action(async (type: string, opts: { json?: boolean }) => {
+      await assertOnboardingReadyForMutatingAction('build');
       const res = await api('/api/actions/build', { method: 'POST', body: { building_type: type } });
       if (!res.ok) handleError(res);
       const d = res.data as Record<string, unknown>;
@@ -223,6 +227,7 @@ export function registerTerritoryCommands(program: Command) {
     .description('Remove building on current tile')
     .option('--json', 'Print raw JSON response')
     .action(async (opts: { json?: boolean }) => {
+      await assertOnboardingReadyForMutatingAction('demolish');
       const res = await api('/api/actions/demolish', { method: 'POST', body: {} });
       if (!res.ok) handleError(res);
       if (opts.json) {

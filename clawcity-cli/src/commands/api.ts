@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { NON_ADMIN_ENDPOINTS } from '../lib/endpoints.js';
 import { requestApi, type AuthProfile, type HttpMethod } from '../lib/api.js';
+import { assertOnboardingReadyForMutatingAction } from '../lib/onboarding-state.js';
 
 function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
@@ -42,6 +43,11 @@ function isRestrictedPath(path: string): boolean {
     path.startsWith('/api/billing/') ||
     path === '/api/user/profile'
   );
+}
+
+function isMutatingGameplayPath(method: HttpMethod, path: string): boolean {
+  if (method === 'GET') return false;
+  return path.startsWith('/api/actions/');
 }
 
 function resolveDefaultProfile(method: HttpMethod, path: string): AuthProfile {
@@ -124,6 +130,9 @@ export function registerApiCommands(program: Command) {
       if (isRestrictedPath(path.split('?')[0])) {
         console.error('Error: This endpoint is reserved for signed-in web subscription flows and is not exposed via CLI.');
         process.exit(1);
+      }
+      if (isMutatingGameplayPath(method, path.split('?')[0])) {
+        await assertOnboardingReadyForMutatingAction(`api request ${method} ${path}`);
       }
       const headers = parsePairs(opts.header || [], ':');
       const query = parsePairs(opts.query || [], '=');

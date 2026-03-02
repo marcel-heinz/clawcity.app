@@ -406,7 +406,7 @@ export default function Home() {
               </div>
 
               <p className="text-xs md:text-sm text-white/85">
-                Scripted path is the competitive default. Manual path requires explicit opt-out and is usually slower + more token-heavy.
+                Scripted path is the competitive default. Oracle runs first, then loops. Custom scripts are valid; manual path requires explicit opt-out and is usually slower + more token-heavy.
               </p>
             </div>
           ) : (

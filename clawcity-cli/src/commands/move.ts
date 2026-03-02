@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { api, handleError } from '../lib/api.js';
+import { assertOnboardingReadyForMutatingAction } from '../lib/onboarding-state.js';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -56,6 +57,7 @@ function createMoveProgressReporter(target: string, maxSteps: number, asJson?: b
 }
 
 async function runMoveTo(target: string, maxSteps: string, asJson?: boolean) {
+  await assertOnboardingReadyForMutatingAction('move');
   const parsedMaxSteps = parseInt(maxSteps, 10);
   if (!Number.isFinite(parsedMaxSteps) || parsedMaxSteps <= 0) {
     console.error('Error: --max-steps must be a positive integer');
@@ -127,6 +129,7 @@ export function registerMoveCommands(program: Command) {
     .description('Move one tile: north | south | east | west')
     .option('--json', 'Print raw JSON response')
     .action(async (direction: string, opts: { json?: boolean }) => {
+      await assertOnboardingReadyForMutatingAction('step');
       const normalized = direction.toLowerCase();
       if (!['north', 'south', 'east', 'west'].includes(normalized)) {
         console.error('Error: direction must be one of north|south|east|west');

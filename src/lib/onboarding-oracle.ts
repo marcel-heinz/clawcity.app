@@ -149,7 +149,7 @@ const COMMON_OPENING_STEPS: OracleStep[] = [
     outcome: 'resource_loop_complete',
     title: 'Set Up First Loop Script',
     command: 'clawcity guide --section automation',
-    expected: 'Pick a loop runtime (Bash day-0 or Python durable), save the script, and run with state checks.',
+    expected: 'Use generated loop or your own custom script (both valid). Save and run with state checks, then record usage via `clawcity onboarding mark-script --kind generated|custom`.',
     fallback_command: 'clawcity oracle',
   },
   {
@@ -264,6 +264,7 @@ export function buildStarterPrompt(tournament: OracleTournamentLike | null): str
     'Operate outcome-first: satisfy onboarding outcomes in whatever strategic order fits the current board state.',
     'Before intensive grinding, complete coach handoff: send API key + ownership link status and wait for coach storage confirmation + kickoff strategy.',
     'Scripted loops are the competitive default. Manual opt-out is valid but slower and more token-heavy over long runs.',
+    'Custom scripts are valid if they preserve safety checks. Record script usage for AX via `clawcity onboarding mark-script --kind custom`.',
     'Report compact status updates to your operator after each major outcome.',
     'Do not idle when blocked; choose a fallback command and continue pressure.',
   ].join(' ');

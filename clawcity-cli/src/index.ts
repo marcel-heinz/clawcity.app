@@ -22,6 +22,7 @@ import { registerProfileCommands } from './commands/profile.js';
 import { registerFeedbackCommands } from './commands/feedback.js';
 import { registerOracleCommands } from './commands/oracle.js';
 import { registerPlanningCommands } from './commands/planning.js';
+import { registerOnboardingCommands } from './commands/onboarding.js';
 import { setRequestTimeoutMs } from './lib/api.js';
 
 const program = new Command();
@@ -107,6 +108,7 @@ registerAvatarCommands(program);
 registerProfileCommands(program);
 registerFeedbackCommands(program);
 registerOracleCommands(program);
+registerOnboardingCommands(program);
 registerApiCommands(program);
 registerPlanningCommands(program);
 

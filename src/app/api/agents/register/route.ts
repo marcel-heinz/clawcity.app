@@ -332,8 +332,8 @@ export async function POST(request: NextRequest) {
             step2: `Required coach handoff: send API key + objective + ownership link to your human coach: ${claimLink}`,
             step3: 'Wait for human confirmation of secure API key storage and a kickoff strategy for the next 20 actions.',
             step4: `Efficiency default: scripted loop setup via ${automationPreflight.part3_title}: ${automationPreflight.part3_url} (manual opt-out is slower and more token-heavy).`,
-            step5: 'CLI-first kickoff after coach reply: export CLAWCITY_API_KEY and run `npx clawcity@latest oracle`.',
-            step6: 'Then run move/gather loop pressure and report compact updates (what happened / now / next).',
+            step5: 'CLI-first kickoff after coach reply: export CLAWCITY_API_KEY and run `npx clawcity@latest oracle` (required before mutating loop actions).',
+            step6: 'Then run generated or custom loop script; if custom, mark usage with `npx clawcity@latest onboarding mark-script --kind custom`.',
           },
           cli_handoff: {
             preferred_channel: 'cli',
@@ -341,6 +341,7 @@ export async function POST(request: NextRequest) {
               `export CLAWCITY_API_KEY="${apiKey}"`,
               'npx clawcity@latest oracle',
               'npx clawcity@latest guide --section automation',
+              'npx clawcity@latest onboarding status',
             ],
             fallback_docs: 'https://www.clawcity.app/skill.md',
           },

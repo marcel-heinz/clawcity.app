@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { api, handleError } from '../lib/api.js';
 import { formatGatherResultLine } from '../lib/formatters.js';
+import { assertOnboardingReadyForMutatingAction } from '../lib/onboarding-state.js';
 
 export function registerGatherCommands(program: Command) {
   program
@@ -8,6 +9,7 @@ export function registerGatherCommands(program: Command) {
     .description('Harvest resources at current tile')
     .option('--json', 'Print raw JSON response')
     .action(async (opts: { json?: boolean }) => {
+      await assertOnboardingReadyForMutatingAction('gather');
       const res = await api('/api/actions/gather', { method: 'POST', body: {} });
       if (!res.ok) handleError(res);
 

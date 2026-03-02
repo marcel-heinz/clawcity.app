@@ -5,6 +5,7 @@ import { access, chmod, writeFile } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import { getRequestTimeoutMs } from '../lib/api.js';
+import { getOnboardingStatePath, initializeOnboardingState } from '../lib/onboarding-state.js';
 
 interface SkillConfig {
   name: string;
@@ -201,18 +202,30 @@ async function writeStarterLoopScript(params: {
     '  fi',
     '}',
     '',
+    'if ! cc --timeout 30 oracle >/tmp/clawcity-oracle.log 2>&1; then',
+    '  echo "Oracle preflight failed. Run `clawcity oracle` and retry."',
+    '  tail -n 5 /tmp/clawcity-oracle.log 2>/dev/null || true',
+    '  exit 1',
+    'fi',
+    'cc onboarding mark-script --kind generated >/dev/null 2>&1 || true',
+    '',
     'echo "Loop startup: api_key=ok | jq=ok | cadence=2s"',
+    'echo "Oracle preflight: complete | Script usage marked: generated"',
     'echo "First action scheduled in 2s. Coach feedback format: happened | now | next"',
     '',
     'while true; do',
     '  stats="$(cc --timeout 30 stats --json 2>/dev/null || true)"',
     '  afford="$(cc --timeout 30 afford claim --json 2>/dev/null || true)"',
     '',
-    '  if printf \'%s\' "$afford" | jq -e \'.affordable_now == true\' >/dev/null 2>&1; then',
+    '  if printf \'%s\' "$afford" | jq -e \'.affordable_now == true and .quote_source == "rpc"\' >/dev/null 2>&1; then',
     '    cc --timeout 30 claim >/dev/null 2>&1 || true',
     '    echo "[coach] happened=claim_attempt | now=claim_window_open | next=recheck_stats"',
     '    sleep 2',
     '    continue',
+    '  fi',
+    '',
+    '  if printf \'%s\' "$afford" | jq -e \'.affordable_now == true and .quote_source != "rpc"\' >/dev/null 2>&1; then',
+    '    echo "[coach] happened=quote_fallback | now=claim_quote_untrusted | next=gather_and_recheck"',
     '  fi',
     '',
     '  cc --timeout 30 move forest >/dev/null 2>&1 || true',
@@ -555,6 +568,20 @@ export async function installSkill(skillName: string, options: InstallOptions) {
     console.log(chalk.green('✅ Coach handoff gate complete'));
     console.log(chalk.gray(`  storage: ${coachGate.storage}`));
     console.log(chalk.gray(`  kickoff: ${coachGate.kickoff}\n`));
+
+    const onboardingState = await initializeOnboardingState({
+      agentName: payload.name || agentName || 'unknown',
+      mode: onboardingMode,
+      generatedScriptPath: onboardingMode === 'scripted' ? (loopScript?.path || null) : null,
+      generatedScriptCreated: onboardingMode === 'scripted' ? Boolean(loopScript?.created) : false,
+      coachStorageMethod: coachGate.storage,
+      coachKickoffStrategy: coachGate.kickoff,
+    });
+    console.log(chalk.gray('Onboarding contract state saved:'));
+    console.log(chalk.cyan(`  ${getOnboardingStatePath()}`));
+    console.log(chalk.gray(`  oracle_before_actions: ${onboardingState.oracle.completed ? 'complete' : 'required'}`));
+    console.log(chalk.gray('  AX script scoring: any_script + generated_script (see `clawcity onboarding status`)'));
+    console.log('');
 
     console.log(chalk.bold.white('▶ Primary next action'));
     console.log(chalk.cyan(`  ${getPrimaryNextAction(payload)}\n`));

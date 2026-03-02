@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { api, handleError, fmtResources } from '../lib/api.js';
 import { formatRecipesLines } from '../lib/formatters.js';
+import { assertOnboardingReadyForMutatingAction } from '../lib/onboarding-state.js';
 
 export function registerCraftCommands(program: Command) {
   program
@@ -8,6 +9,7 @@ export function registerCraftCommands(program: Command) {
     .description('Craft an item (e.g. wooden_pickaxe, provisions)')
     .option('--json', 'Print raw JSON response')
     .action(async (itemId: string, opts: { json?: boolean }) => {
+      await assertOnboardingReadyForMutatingAction('craft');
       const res = await api('/api/actions/craft', { method: 'POST', body: { item_id: itemId } });
       if (!res.ok) handleError(res);
       const d = res.data as Record<string, unknown>;
@@ -25,6 +27,7 @@ export function registerCraftCommands(program: Command) {
     .option('-q, --quantity <n>', 'Quantity to buy', '1')
     .option('--json', 'Print raw JSON response')
     .action(async (itemId: string, opts: { quantity: string; json?: boolean }) => {
+      await assertOnboardingReadyForMutatingAction('buy');
       const res = await api('/api/actions/buy', {
         method: 'POST',
         body: { item_id: itemId, quantity: parseInt(opts.quantity, 10) },
