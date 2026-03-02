@@ -47,7 +47,7 @@ export function enforceMutationOnboardingGate(
   const missingSteps: string[] = [];
   if (!snapshot.coachHandoffComplete) {
     missingSteps.push(
-      'Coach handoff required: share API key with your human coach, confirm secure storage, then run `clawcity onboarding handoff --storage "<method>" --kickoff "<20-action plan>"`.',
+      'Coach handoff required: obtain one-time coach code, then run `clawcity onboarding handoff --coach-code "<code>" --storage "<method>" --kickoff "<20-action plan>"`.',
     );
   }
   if (!snapshot.oracleComplete) {

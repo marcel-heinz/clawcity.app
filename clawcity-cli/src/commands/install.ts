@@ -76,6 +76,15 @@ interface RegisterPayload {
     required?: boolean;
     reason?: string;
     required_fields?: string[];
+    optional_fields?: string[];
+  };
+  coach_handoff?: {
+    required?: boolean;
+    coach_token?: string;
+    coach_token_expires_at?: string;
+    code_issue_endpoint?: string;
+    code_issue_example?: string;
+    note?: string;
   };
   onboarding_contract?: {
     version: string;
@@ -258,11 +267,17 @@ function buildCoachHandoffMessage(params: {
 
 async function resolveCoachGate(params: {
   coachMessage: string;
-}): Promise<{ storage: string; kickoff: string } | null> {
+}): Promise<{ coachCode: string; storage: string; kickoff: string } | null> {
   if (process.stdin.isTTY && process.stdout.isTTY) {
     console.log(chalk.gray('Send this to your coach before completing the gate:'));
     console.log(chalk.cyan(`  ${params.coachMessage}\n`));
     const answers = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'coachCode',
+        message: 'One-time coach handoff code (required):',
+        validate: (input: string) => input.trim().length > 0 || 'Coach code is required',
+      },
       {
         type: 'input',
         name: 'storage',
@@ -276,10 +291,11 @@ async function resolveCoachGate(params: {
         validate: (input: string) => input.trim().length > 0 || 'Kickoff strategy summary is required',
       },
     ]);
+    const coachCode = normalizeText(answers.coachCode);
     const storage = normalizeText(answers.storage);
     const kickoff = normalizeText(answers.kickoff);
-    if (storage && kickoff) {
-      return { storage, kickoff };
+    if (coachCode && storage && kickoff) {
+      return { coachCode, storage, kickoff };
     }
   }
 
@@ -289,6 +305,7 @@ async function resolveCoachGate(params: {
 async function persistCoachHandoff(params: {
   apiBase: string;
   apiKey: string;
+  coachCode: string;
   storage: string;
   kickoff: string;
   ownershipLinkShared: boolean;
@@ -306,6 +323,7 @@ async function persistCoachHandoff(params: {
         Authorization: `Bearer ${params.apiKey}`,
       },
       body: JSON.stringify({
+        coach_code: params.coachCode,
         storage_method: params.storage,
         kickoff_strategy: params.kickoff,
         ownership_link_shared: params.ownershipLinkShared,
@@ -571,6 +589,20 @@ export async function installSkill(skillName: string, options: InstallOptions) {
     const ownershipLink = inferClaimLink(payload) || 'unavailable';
     console.log(chalk.cyan(`  ${ownershipLink}\n`));
 
+    const coachHandoff = payload.coach_handoff;
+    const coachToken = asString(coachHandoff?.coach_token) || null;
+    const coachTokenExpiresAt = asString(coachHandoff?.coach_token_expires_at);
+    const coachCodeIssueEndpoint = asString(coachHandoff?.code_issue_endpoint) || '/api/onboarding/coach-code';
+    const coachCodeIssueExample = asString(coachHandoff?.code_issue_example);
+    if (coachToken) {
+      console.log(chalk.gray('Coach Handoff Token (required for one-time coach code):'));
+      console.log(chalk.cyan(`  ${coachToken}`));
+      if (coachTokenExpiresAt) {
+        console.log(chalk.gray(`  expires_at: ${coachTokenExpiresAt}`));
+      }
+      console.log('');
+    }
+
     const objective = asString(payload.oracle?.tournament_objective) || 'pending objective';
     const coachMessage = buildCoachHandoffMessage({
       agentName: payload.name || 'unknown',
@@ -585,8 +617,17 @@ export async function installSkill(skillName: string, options: InstallOptions) {
 
     console.log(chalk.bold.white('🔐 Coach Key Handoff Gate (required before grind)'));
     console.log(chalk.gray('The human coach must confirm:'));
+    console.log(chalk.gray('  0) issue one-time coach handoff code'));
     console.log(chalk.gray('  1) where the API key is stored securely'));
     console.log(chalk.gray('  2) kickoff strategy for the next 20 actions\n'));
+    if (coachCodeIssueExample) {
+      console.log(chalk.gray('Coach code issue command:'));
+      console.log(chalk.cyan(`  ${coachCodeIssueExample}\n`));
+    } else if (coachToken) {
+      console.log(chalk.gray('Coach code issue command:'));
+      console.log(chalk.cyan(`  curl -s -X POST ${skill.website}${coachCodeIssueEndpoint} -H "Content-Type: application/json" -d '{"token":"${coachToken}"}'`));
+      console.log('');
+    }
 
     const coachGate = await resolveCoachGate({
       coachMessage,
@@ -609,7 +650,12 @@ export async function installSkill(skillName: string, options: InstallOptions) {
       } else {
         console.log(chalk.cyan('  export CLAWCITY_API_KEY="<api_key_from_register_output>"'));
       }
-      console.log(chalk.cyan('  npx clawcity@latest onboarding handoff --storage "<where key is stored>" --kickoff "<20-action strategy summary>"'));
+      if (coachCodeIssueExample) {
+        console.log(chalk.cyan(`  # coach issues one-time code: ${coachCodeIssueExample}`));
+      } else if (coachToken) {
+        console.log(chalk.cyan(`  # coach issues one-time code: curl -s -X POST ${skill.website}${coachCodeIssueEndpoint} -H "Content-Type: application/json" -d '{"token":"${coachToken}"}'`));
+      }
+      console.log(chalk.cyan('  npx clawcity@latest onboarding handoff --coach-code "<coach-code>" --storage "<where key is stored>" --kickoff "<20-action strategy summary>"'));
       console.log(chalk.cyan('  npx clawcity@latest oracle\n'));
       console.log(chalk.gray('Ownership verification link is optional and can be completed later as a trust step.'));
       console.log(chalk.gray(`Onboarding state saved: ${getOnboardingStatePath()}`));
@@ -625,6 +671,7 @@ export async function installSkill(skillName: string, options: InstallOptions) {
     const handoffPersisted = await persistCoachHandoff({
       apiBase: skill.website,
       apiKey,
+      coachCode: coachGate.coachCode,
       storage: coachGate.storage,
       kickoff: coachGate.kickoff,
       ownershipLinkShared: ownershipLink !== 'unavailable',
@@ -634,7 +681,7 @@ export async function installSkill(skillName: string, options: InstallOptions) {
       console.log(chalk.red(`Error: ${handoffPersisted.error}`));
       console.log(chalk.gray('Retry with:'));
       console.log(chalk.cyan(`  export CLAWCITY_API_KEY="${apiKey}"`));
-      console.log(chalk.cyan('  npx clawcity@latest onboarding handoff --storage "<where key is stored>" --kickoff "<20-action strategy summary>"'));
+      console.log(chalk.cyan('  npx clawcity@latest onboarding handoff --coach-code "<coach-code>" --storage "<where key is stored>" --kickoff "<20-action strategy summary>"'));
       process.exit(2);
     }
 

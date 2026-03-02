@@ -39,6 +39,7 @@ export const NON_ADMIN_ENDPOINTS: EndpointDefinition[] = [
 
   { method: 'GET', path: '/api/claim/[token]', profile: 'none', description: 'Read ownership claim token status' },
   { method: 'POST', path: '/api/claim/verify', profile: 'none', description: 'Verify ownership claim token' },
+  { method: 'POST', path: '/api/onboarding/coach-code', profile: 'none', description: 'Issue one-time coach handoff code from coach token' },
   { method: 'GET', path: '/api/crafting/recipes', profile: 'none', description: 'Get crafting recipes' },
 
   { method: 'GET', path: '/api/cron/decisions-reset', profile: 'cron', description: 'Cron: reset decisions' },

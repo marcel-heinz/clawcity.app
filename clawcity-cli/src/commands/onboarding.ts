@@ -69,20 +69,27 @@ export function registerOnboardingCommands(program: Command): void {
   onboarding
     .command('handoff')
     .description('Confirm coach handoff gate (required before mutating gameplay loops)')
+    .requiredOption('--coach-code <code>', 'One-time coach handoff code issued by coach')
     .requiredOption('--storage <method>', 'Where API key is stored securely (coach-confirmed)')
     .requiredOption('--kickoff <strategy>', 'Coach kickoff strategy summary for next actions')
     .option('--ownership-link-shared', 'Optional trust signal: ownership verification link was shared with coach')
     .option('--api-key <key>', 'Override CLAWCITY_API_KEY for this call only')
     .option('--json', 'Print raw JSON output')
     .action(async (opts: {
+      coachCode: string;
       storage: string;
       kickoff: string;
       ownershipLinkShared?: boolean;
       apiKey?: string;
       json?: boolean;
     }) => {
+      const coachCode = opts.coachCode.trim();
       const storage = opts.storage.trim();
       const kickoff = opts.kickoff.trim();
+      if (coachCode.length < 4) {
+        console.error('Error: --coach-code is required.');
+        process.exit(1);
+      }
       if (storage.length < 3) {
         console.error('Error: --storage must be at least 3 characters.');
         process.exit(1);
@@ -100,6 +107,7 @@ export function registerOnboardingCommands(program: Command): void {
         method: 'POST',
         headers,
         body: {
+          coach_code: coachCode,
           storage_method: storage,
           kickoff_strategy: kickoff,
           ownership_link_shared: opts.ownershipLinkShared === true,

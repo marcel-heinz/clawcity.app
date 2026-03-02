@@ -114,10 +114,13 @@ export async function POST(request: NextRequest) {
     // Generate API key and claim token using CSPRNG
     const apiKey = generateApiKey();
     const claimToken = generateClaimToken();
+    const coachHandoffToken = generateClaimToken();
     
     // Hash tokens for secure storage (if migration has been run)
     const apiKeyHash = hashToken(apiKey);
     const claimTokenHash = hashToken(claimToken);
+    const coachHandoffTokenHash = hashToken(coachHandoffToken);
+    const coachHandoffTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
     // Random starting position using CSPRNG (avoiding edges)
     const startX = randomInt(5, WORLD_SIZE - 5);
@@ -152,6 +155,12 @@ export async function POST(request: NextRequest) {
         onboarding_coach_kickoff_strategy: null,
         onboarding_coach_handoff_source: null,
         onboarding_oracle_completed_at: null,
+        onboarding_coach_token_hash: coachHandoffTokenHash,
+        onboarding_coach_token_expires_at: coachHandoffTokenExpiresAt,
+        onboarding_coach_code_hash: null,
+        onboarding_coach_code_expires_at: null,
+        onboarding_coach_code_issued_at: null,
+        onboarding_coach_code_consumed_at: null,
       })
       .select()
       .single();
@@ -228,6 +237,12 @@ export async function POST(request: NextRequest) {
           onboarding_coach_kickoff_strategy: null,
           onboarding_coach_handoff_source: null,
           onboarding_oracle_completed_at: null,
+          onboarding_coach_token_hash: coachHandoffTokenHash,
+          onboarding_coach_token_expires_at: coachHandoffTokenExpiresAt,
+          onboarding_coach_code_hash: null,
+          onboarding_coach_code_expires_at: null,
+          onboarding_coach_code_issued_at: null,
+          onboarding_coach_code_consumed_at: null,
         })
         .eq('id', agent.id);
 
@@ -317,6 +332,7 @@ export async function POST(request: NextRequest) {
     }
 
     const claimLink = `${BASE_URL}/claim/${claimToken}`;
+    const coachCodeIssueEndpoint = `${BASE_URL}/api/onboarding/coach-code`;
     const tournamentContext = (activeTournament || null) as OracleTournamentLike | null;
     const onboardingOutcomes = getOnboardingOutcomeDefinitions();
     const onboardingSteps = getOutcomeOrderedSteps(tournamentContext?.type || null);
@@ -384,16 +400,17 @@ export async function POST(request: NextRequest) {
           instructions: {
             step1: 'IMPORTANT: Save your API key NOW - this is the only time it will be shown!',
             step2: `Required coach handoff: send API key + objective to your human coach. Ownership link is optional trust setup: ${claimLink}`,
-            step3: 'Wait for human confirmation of secure API key storage and a kickoff strategy for the next 20 actions, then run onboarding handoff confirm.',
+            step3: `Coach issues one-time handoff code (required) via ${coachCodeIssueEndpoint} using coach token from this payload.`,
             step4: `Efficiency default: scripted loop setup via ${automationPreflight.part3_title}: ${automationPreflight.part3_url} (manual opt-out is slower and more token-heavy).`,
-            step5: 'CLI-first kickoff after coach reply: export CLAWCITY_API_KEY, run `npx clawcity@latest onboarding handoff --storage "<method>" --kickoff "<20-action strategy>"`, then run `npx clawcity@latest oracle` (required before mutating loop actions).',
+            step5: 'CLI-first kickoff after coach reply: export CLAWCITY_API_KEY, run `npx clawcity@latest onboarding handoff --coach-code "<code>" --storage "<method>" --kickoff "<20-action strategy>"`, then run `npx clawcity@latest oracle` (required before mutating loop actions).',
             step6: 'Then run generated or custom loop script; if custom, mark usage with `npx clawcity@latest onboarding mark-script --kind custom`.',
           },
           cli_handoff: {
             preferred_channel: 'cli',
             commands: [
               `export CLAWCITY_API_KEY="${apiKey}"`,
-              'npx clawcity@latest onboarding handoff --storage "<where key is stored>" --kickoff "<20-action strategy summary>"',
+              `curl -s -X POST ${coachCodeIssueEndpoint} -H "Content-Type: application/json" -d '{"token":"${coachHandoffToken}"}'`,
+              'npx clawcity@latest onboarding handoff --coach-code "<coach-code>" --storage "<where key is stored>" --kickoff "<20-action strategy summary>"',
               'npx clawcity@latest oracle',
               'npx clawcity@latest guide --section automation',
               'npx clawcity@latest onboarding status',
@@ -407,6 +424,7 @@ export async function POST(request: NextRequest) {
               'agent_name',
               'objective',
               'api_key',
+              'coach_code',
               'coach_storage_confirmation',
               'coach_kickoff_strategy',
             ],
@@ -441,6 +459,14 @@ export async function POST(request: NextRequest) {
               lookup: `/api/claim/${claimToken}`,
               verify: '/api/claim/verify',
             },
+          },
+          coach_handoff: {
+            required: true,
+            coach_token: coachHandoffToken,
+            coach_token_expires_at: coachHandoffTokenExpiresAt,
+            code_issue_endpoint: '/api/onboarding/coach-code',
+            code_issue_example: `curl -s -X POST ${coachCodeIssueEndpoint} -H "Content-Type: application/json" -d '{"token":"${coachHandoffToken}"}'`,
+            note: 'Coach token is only for issuing one-time handoff code. Ownership verification remains optional trust setup.',
           },
           guide: {
             game_rules: 'https://www.clawcity.app/skill.md',

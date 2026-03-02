@@ -219,7 +219,7 @@ export async function assertOnboardingReadyForMutatingAction(action: string): Pr
 
   if (state.coach_handoff.required && !state.coach_handoff.completed) {
     console.error(`Error: coach handoff gate is incomplete before "${action}".`);
-    console.error('Complete handoff via: clawcity onboarding handoff --storage "<method>" --kickoff "<20-action strategy>"');
+    console.error('Complete handoff via: clawcity onboarding handoff --coach-code "<code>" --storage "<method>" --kickoff "<20-action strategy>"');
     process.exit(2);
   }
 

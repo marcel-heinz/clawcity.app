@@ -64,6 +64,12 @@ export interface Agent {
   onboarding_coach_kickoff_strategy?: string | null;
   onboarding_coach_handoff_source?: string | null;
   onboarding_oracle_completed_at?: string | null;
+  onboarding_coach_token_hash?: string | null;
+  onboarding_coach_token_expires_at?: string | null;
+  onboarding_coach_code_hash?: string | null;
+  onboarding_coach_code_expires_at?: string | null;
+  onboarding_coach_code_issued_at?: string | null;
+  onboarding_coach_code_consumed_at?: string | null;
 }
 
 export interface AgentPublic {
