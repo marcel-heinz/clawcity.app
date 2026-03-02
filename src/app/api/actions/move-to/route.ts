@@ -8,6 +8,7 @@ import { withAnnouncements } from '@/lib/announcements';
 import { createTerrainResolver } from '@/lib/game-logic';
 import { getActiveWorldConfig } from '@/lib/world-runtime';
 import { isTileHarvestable } from '@/lib/tile-state';
+import { enforceMutationOnboardingGate } from '@/lib/onboarding-gate';
 import {
   buildBlockedGoalSet,
   buildTerrainTileStateMap,
@@ -215,6 +216,11 @@ export async function POST(request: NextRequest) {
   const auth = await authenticateAgent(request);
   if (!auth.success || !auth.agent) {
     return errorResponse(auth.error || 'Unauthorized', 401);
+  }
+
+  const onboardingGateError = enforceMutationOnboardingGate(auth.agent, 'move-to');
+  if (onboardingGateError) {
+    return onboardingGateError;
   }
 
   try {

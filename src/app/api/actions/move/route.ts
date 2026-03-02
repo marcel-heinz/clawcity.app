@@ -7,6 +7,7 @@ import { getCooldownMs, atomicCooldownCheck } from '@/lib/game-settings';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
 import { getCooldownReduction, getDetectionRange, getItemDefinition, type AgentItem } from '@/lib/crafting';
+import { enforceMutationOnboardingGate } from '@/lib/onboarding-gate';
 
 const VALID_DIRECTIONS: Direction[] = ['north', 'south', 'east', 'west'];
 
@@ -29,6 +30,11 @@ export async function POST(request: NextRequest) {
   
   if (!auth.success || !auth.agent) {
     return errorResponse(auth.error || 'Unauthorized', 401);
+  }
+
+  const onboardingGateError = enforceMutationOnboardingGate(auth.agent, 'move');
+  if (onboardingGateError) {
+    return onboardingGateError;
   }
 
   try {

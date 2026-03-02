@@ -26,6 +26,7 @@ import { calculateResourceCap } from '@/lib/buildings';
 import { isTileHarvestable } from '@/lib/tile-state';
 import { buildGatherCooldownMeta, buildGatherTileIntel } from '@/lib/gather-intel';
 import { consumeDurableAxeUse, getActiveStorageBonus } from '@/lib/claw-credits';
+import { enforceMutationOnboardingGate } from '@/lib/onboarding-gate';
 
 interface GatherTileSnapshot {
   terrain: TerrainType;
@@ -87,6 +88,11 @@ export async function POST(request: NextRequest) {
     return errorResponse(auth.error || 'Unauthorized', 401, {
       code: 'unauthorized',
     });
+  }
+
+  const onboardingGateError = enforceMutationOnboardingGate(auth.agent, 'gather');
+  if (onboardingGateError) {
+    return onboardingGateError;
   }
 
   try {

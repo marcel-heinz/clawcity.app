@@ -13,6 +13,7 @@ import {
 } from '@/lib/types';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
+import { enforceMutationOnboardingGate } from '@/lib/onboarding-gate';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -41,6 +42,11 @@ export async function POST(request: NextRequest) {
     return errorResponse(auth.error || 'Unauthorized', 401, {
       code: 'unauthorized',
     });
+  }
+
+  const onboardingGateError = enforceMutationOnboardingGate(auth.agent, 'claim');
+  if (onboardingGateError) {
+    return onboardingGateError;
   }
 
   try {

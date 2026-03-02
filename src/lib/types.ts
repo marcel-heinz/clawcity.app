@@ -57,6 +57,13 @@ export interface Agent {
   claw_credits?: number;
   claw_credits_lifetime_earned?: number;
   claw_credits_lifetime_spent?: number;
+  // Onboarding mutation gate (server-side)
+  onboarding_gate_required?: boolean;
+  onboarding_coach_handoff_confirmed_at?: string | null;
+  onboarding_coach_storage_method?: string | null;
+  onboarding_coach_kickoff_strategy?: string | null;
+  onboarding_coach_handoff_source?: string | null;
+  onboarding_oracle_completed_at?: string | null;
 }
 
 export interface AgentPublic {

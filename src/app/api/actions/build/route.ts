@@ -11,6 +11,7 @@ import {
   formatBuildingCost,
   type BuildingType,
 } from '@/lib/buildings';
+import { enforceMutationOnboardingGate } from '@/lib/onboarding-gate';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -33,6 +34,11 @@ export async function POST(request: NextRequest) {
     return errorResponse(auth.error || 'Unauthorized', 401, {
       code: 'unauthorized',
     });
+  }
+
+  const onboardingGateError = enforceMutationOnboardingGate(auth.agent, 'build');
+  if (onboardingGateError) {
+    return onboardingGateError;
   }
 
   try {

@@ -33,6 +33,23 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServerClient();
     const agent = auth.agent;
+    let oracleCompletedAt = typeof agent.onboarding_oracle_completed_at === 'string'
+      ? agent.onboarding_oracle_completed_at
+      : null;
+
+    if (agent.onboarding_gate_required === true && !oracleCompletedAt) {
+      const nowIso = new Date().toISOString();
+      const { error: oracleMarkError } = await supabase
+        .from('agents')
+        .update({ onboarding_oracle_completed_at: nowIso })
+        .eq('id', agent.id);
+
+      if (oracleMarkError) {
+        console.error('Oracle: failed to persist onboarding oracle completion:', oracleMarkError);
+      } else {
+        oracleCompletedAt = nowIso;
+      }
+    }
 
     const { data: activeTournament, error: tournamentError } = await supabase
       .from('tournaments')
@@ -169,6 +186,11 @@ export async function GET(request: NextRequest) {
           generated_at: generatedAt,
           event_sample_size: recentEvents.length,
           has_active_tournament: !!tournament,
+          onboarding: {
+            gate_required: agent.onboarding_gate_required === true,
+            coach_handoff_confirmed: Boolean(agent.onboarding_coach_handoff_confirmed_at),
+            oracle_completed_at: oracleCompletedAt,
+          },
         },
       },
     });

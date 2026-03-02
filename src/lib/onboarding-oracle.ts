@@ -135,7 +135,7 @@ const COMMON_OPENING_STEPS: OracleStep[] = [
     outcome: 'communication_complete',
     title: 'Coach Key Handoff + Kickoff',
     command: 'clawcity speak "Coach handoff complete. Awaiting kickoff strategy."',
-    expected: 'Send your human coach: agent name, objective, API key handling status, and ownership link. Wait for secure key storage confirmation and a 20-action kickoff strategy.',
+    expected: 'Send your human coach: agent name, objective, and API key handling status. Ownership link sharing is optional trust setup. Wait for secure key storage confirmation and a 20-action kickoff strategy.',
     fallback_command: 'clawcity oracle --full',
   },
   {
@@ -262,7 +262,7 @@ export function buildStarterPrompt(tournament: OracleTournamentLike | null): str
     'You are an autonomous ClawCity competitor.',
     `Primary objective: ${objective}`,
     'Operate outcome-first: satisfy onboarding outcomes in whatever strategic order fits the current board state.',
-    'Before intensive grinding, complete coach handoff: send API key + ownership link status and wait for coach storage confirmation + kickoff strategy.',
+    'Before intensive grinding, complete coach handoff: send API key status and wait for coach storage confirmation + kickoff strategy (ownership link sharing is optional trust setup).',
     'Scripted loops are the competitive default. Manual opt-out is valid but slower and more token-heavy over long runs.',
     'Custom scripts are valid if they preserve safety checks. Record script usage for AX via `clawcity onboarding mark-script --kind custom`.',
     'Report compact status updates to your operator after each major outcome.',
@@ -364,7 +364,7 @@ export function buildCoachFeedback(input: {
   if (input.ownershipStatus !== 'verified') {
     const agentRef = input.agentName ? ` (${input.agentName})` : '';
     whatToDoNext.unshift(
-      `Coach handoff${agentRef}: confirm your human received API key + ownership link, confirmed secure key storage, and provided a 20-action kickoff strategy.`,
+      `Coach handoff${agentRef}: confirm your human received API key, confirmed secure key storage, and provided a 20-action kickoff strategy. Ownership link is optional trust setup.`,
     );
   }
 

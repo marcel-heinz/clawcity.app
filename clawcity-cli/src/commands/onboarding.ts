@@ -1,10 +1,12 @@
 import { Command } from 'commander';
 import {
   getOnboardingStatePath,
+  markCoachHandoffCompleted,
   markScriptUsage,
   readOnboardingState,
   type ScriptUsageKind,
 } from '../lib/onboarding-state.js';
+import { api, handleError } from '../lib/api.js';
 
 function formatStatusLines(data: Record<string, unknown>): string[] {
   const lines: string[] = [];
@@ -65,6 +67,72 @@ export function registerOnboardingCommands(program: Command): void {
     });
 
   onboarding
+    .command('handoff')
+    .description('Confirm coach handoff gate (required before mutating gameplay loops)')
+    .requiredOption('--storage <method>', 'Where API key is stored securely (coach-confirmed)')
+    .requiredOption('--kickoff <strategy>', 'Coach kickoff strategy summary for next actions')
+    .option('--ownership-link-shared', 'Optional trust signal: ownership verification link was shared with coach')
+    .option('--api-key <key>', 'Override CLAWCITY_API_KEY for this call only')
+    .option('--json', 'Print raw JSON output')
+    .action(async (opts: {
+      storage: string;
+      kickoff: string;
+      ownershipLinkShared?: boolean;
+      apiKey?: string;
+      json?: boolean;
+    }) => {
+      const storage = opts.storage.trim();
+      const kickoff = opts.kickoff.trim();
+      if (storage.length < 3) {
+        console.error('Error: --storage must be at least 3 characters.');
+        process.exit(1);
+      }
+      if (kickoff.length < 8) {
+        console.error('Error: --kickoff must be at least 8 characters.');
+        process.exit(1);
+      }
+
+      const headers = opts.apiKey && opts.apiKey.trim().length > 0
+        ? { Authorization: `Bearer ${opts.apiKey.trim()}` }
+        : undefined;
+
+      const res = await api('/api/agents/me/onboarding/handoff', {
+        method: 'POST',
+        headers,
+        body: {
+          storage_method: storage,
+          kickoff_strategy: kickoff,
+          ownership_link_shared: opts.ownershipLinkShared === true,
+        },
+      });
+
+      if (!res.ok) {
+        handleError(res);
+      }
+
+      const state = await markCoachHandoffCompleted({
+        storageMethod: storage,
+        kickoffStrategy: kickoff,
+      });
+
+      if (opts.json) {
+        console.log(JSON.stringify({
+          ...res.data,
+          local_onboarding_state_updated: Boolean(state),
+        }, null, 2));
+        return;
+      }
+
+      console.log('Coach handoff confirmed on server.');
+      if (state) {
+        console.log(`Local onboarding state updated: ${getOnboardingStatePath()}`);
+      } else {
+        console.log('No local onboarding state file found to update (server gate still updated).');
+      }
+      console.log('Next required step: clawcity oracle');
+    });
+
+  onboarding
     .command('mark-script')
     .description('Mark script usage for AX scoring: generated vs custom/inline')
     .requiredOption('--kind <kind>', 'generated | custom | inline')
@@ -92,4 +160,3 @@ export function registerOnboardingCommands(program: Command): void {
       );
     });
 }
-

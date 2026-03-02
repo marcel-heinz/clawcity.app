@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import {
   getOnboardingStatePath,
   initializeOnboardingState,
+  markCoachHandoffCompleted,
   markOracleCompleted,
   markScriptUsage,
   readOnboardingState,
@@ -23,14 +24,22 @@ test('onboarding state tracks oracle prerequisite and split script usage signals
       mode: 'scripted',
       generatedScriptPath: '/tmp/clawcity-loop.sh',
       generatedScriptCreated: true,
-      coachStorageMethod: '1Password',
-      coachKickoffStrategy: 'Forest gather then mountain claim push',
+      coachHandoffCompleted: false,
     });
 
     assert.equal(getOnboardingStatePath(), statePath);
+    assert.equal(initialized.coach_handoff.completed, false);
     assert.equal(initialized.oracle.completed, false);
     assert.equal(initialized.script_usage.any_script_observed, false);
     assert.equal(initialized.script_usage.generated_script_observed, false);
+
+    const coachMarked = await markCoachHandoffCompleted({
+      storageMethod: '1Password',
+      kickoffStrategy: 'Forest gather then mountain claim push',
+    });
+    assert.ok(coachMarked);
+    assert.equal(coachMarked.coach_handoff.completed, true);
+    assert.equal(coachMarked.coach_handoff.storage_method, '1Password');
 
     const customMarked = await markScriptUsage('custom');
     assert.ok(customMarked);
@@ -65,4 +74,3 @@ test('onboarding state tracks oracle prerequisite and split script usage signals
     await rm(tempDir, { recursive: true, force: true });
   }
 });
-

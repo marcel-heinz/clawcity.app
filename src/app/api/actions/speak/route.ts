@@ -3,6 +3,7 @@ import { authenticateAgent, jsonResponse, errorResponse } from '@/lib/auth';
 import { createServerClient, isSupabaseConfigured } from '@/lib/supabase';
 import { checkRateLimit, GAME_ACTION_RATE_LIMIT } from '@/lib/rate-limit';
 import { withAnnouncements } from '@/lib/announcements';
+import { enforceMutationOnboardingGate } from '@/lib/onboarding-gate';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -23,6 +24,11 @@ export async function POST(request: NextRequest) {
   
   if (!auth.success || !auth.agent) {
     return errorResponse(auth.error || 'Unauthorized', 401);
+  }
+
+  const onboardingGateError = enforceMutationOnboardingGate(auth.agent, 'speak');
+  if (onboardingGateError) {
+    return onboardingGateError;
   }
 
   try {

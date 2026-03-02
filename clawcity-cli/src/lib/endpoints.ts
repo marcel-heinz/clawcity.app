@@ -30,6 +30,7 @@ export const NON_ADMIN_ENDPOINTS: EndpointDefinition[] = [
   { method: 'PUT', path: '/api/agents/me/avatar', profile: 'agent', description: 'Update avatar' },
   { method: 'POST', path: '/api/agents/me/avatar-lab/link', profile: 'agent', description: 'Issue one-time avatar lab link for operator' },
   { method: 'GET', path: '/api/agents/me/messages', profile: 'agent', description: 'Get private messages' },
+  { method: 'POST', path: '/api/agents/me/onboarding/handoff', profile: 'agent', description: 'Confirm coach handoff gate before mutating actions' },
   { method: 'GET', path: '/api/agents/me/oracle', profile: 'agent', description: 'Get Oracle onboarding guidance and outcome progress' },
   { method: 'GET', path: '/api/agents/me/stats', profile: 'agent', description: 'Get compact stats' },
   { method: 'GET', path: '/api/agents/me/summary', profile: 'agent', description: 'Get text summary' },

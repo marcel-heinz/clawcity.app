@@ -126,8 +126,6 @@ interface InstallOptions {
   mode?: string;
   withLoop?: boolean;
   manualOptOut?: boolean;
-  coachStorage?: string;
-  coachKickoff?: string;
   loopFile?: string;
   overwriteLoop?: boolean;
 }
@@ -253,22 +251,14 @@ function buildCoachHandoffMessage(params: {
     `Agent ${params.agentName} registered.`,
     `Objective: ${params.objective}`,
     `API key (store securely): ${params.apiKey}`,
-    `Ownership link: ${params.ownershipLink}`,
+    `Ownership link (optional trust step): ${params.ownershipLink}`,
     'Request: confirm secure key storage method and provide strategy for the next 20 actions.',
   ].join(' ');
 }
 
 async function resolveCoachGate(params: {
-  options: InstallOptions;
   coachMessage: string;
-}): Promise<{ storage: string; kickoff: string }> {
-  let storage = normalizeText(params.options.coachStorage);
-  let kickoff = normalizeText(params.options.coachKickoff);
-
-  if (storage && kickoff) {
-    return { storage, kickoff };
-  }
-
+}): Promise<{ storage: string; kickoff: string } | null> {
   if (process.stdin.isTTY && process.stdout.isTTY) {
     console.log(chalk.gray('Send this to your coach before completing the gate:'));
     console.log(chalk.cyan(`  ${params.coachMessage}\n`));
@@ -277,31 +267,69 @@ async function resolveCoachGate(params: {
         type: 'input',
         name: 'storage',
         message: 'Coach-confirmed API key storage method (required):',
-        default: storage || '',
         validate: (input: string) => input.trim().length > 0 || 'Storage method is required',
       },
       {
         type: 'input',
         name: 'kickoff',
         message: 'Coach kickoff strategy summary (required):',
-        default: kickoff || '',
         validate: (input: string) => input.trim().length > 0 || 'Kickoff strategy summary is required',
       },
     ]);
-    storage = normalizeText(answers.storage);
-    kickoff = normalizeText(answers.kickoff);
+    const storage = normalizeText(answers.storage);
+    const kickoff = normalizeText(answers.kickoff);
+    if (storage && kickoff) {
+      return { storage, kickoff };
+    }
   }
 
-  if (!storage || !kickoff) {
-    console.log(chalk.red('\n❌ Required coach handoff gate incomplete.'));
-    console.log(chalk.gray('Before gameplay loops, the agent must push API key + ownership link to the human coach.'));
-    console.log(chalk.gray('The coach must confirm secure key storage and provide kickoff strategy.'));
-    console.log(chalk.gray('Run non-interactively with:'));
-    console.log(chalk.cyan(`  --coach-storage "<where key is stored>" --coach-kickoff "<20-action strategy summary>"`));
-    process.exit(2);
-  }
+  return null;
+}
 
-  return { storage, kickoff };
+async function persistCoachHandoff(params: {
+  apiBase: string;
+  apiKey: string;
+  storage: string;
+  kickoff: string;
+  ownershipLinkShared: boolean;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const timeoutMs = getRequestTimeoutMs();
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  const timeoutHandle = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  const url = new URL('/api/agents/me/onboarding/handoff', params.apiBase).toString();
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${params.apiKey}`,
+      },
+      body: JSON.stringify({
+        storage_method: params.storage,
+        kickoff_strategy: params.kickoff,
+        ownership_link_shared: params.ownershipLinkShared,
+      }),
+      signal: controller?.signal,
+    });
+
+    const data = await res.json().catch(() => null) as Record<string, unknown> | null;
+    if (!res.ok || (data && data.success === false)) {
+      const errorText = data && typeof data.error === 'string'
+        ? data.error
+        : `HTTP ${res.status}`;
+      return { ok: false, error: errorText };
+    }
+
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError' && timeoutMs > 0) {
+      return { ok: false, error: `request timed out after ${Math.ceil(timeoutMs / 1000)}s` };
+    }
+    return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
 }
 
 function normalizeRegisterPayload(response: RegisterResponse): RegisterPayload | null {
@@ -536,10 +564,10 @@ export async function installSkill(skillName: string, options: InstallOptions) {
     console.log(chalk.yellow('⚠️  IMPORTANT: Save these credentials!\n'));
 
     console.log(chalk.gray('API Key (keep secret):'));
-    const apiKey = payload.api_key || 'unavailable';
-    console.log(chalk.green(`  ${apiKey}\n`));
+    const apiKey = asString(payload.api_key) || '';
+    console.log(chalk.green(`  ${apiKey || 'unavailable'}\n`));
 
-    console.log(chalk.gray('Ownership Verification Link:'));
+    console.log(chalk.gray('Ownership Verification Link (optional trust step):'));
     const ownershipLink = inferClaimLink(payload) || 'unavailable';
     console.log(chalk.cyan(`  ${ownershipLink}\n`));
 
@@ -561,13 +589,59 @@ export async function installSkill(skillName: string, options: InstallOptions) {
     console.log(chalk.gray('  2) kickoff strategy for the next 20 actions\n'));
 
     const coachGate = await resolveCoachGate({
-      options,
       coachMessage,
     });
 
+    if (!coachGate) {
+      const pendingState = await initializeOnboardingState({
+        agentName: payload.name || agentName || 'unknown',
+        mode: onboardingMode,
+        generatedScriptPath: onboardingMode === 'scripted' ? (loopScript?.path || null) : null,
+        generatedScriptCreated: onboardingMode === 'scripted' ? Boolean(loopScript?.created) : false,
+        coachHandoffCompleted: false,
+      });
+
+      console.log(chalk.red('\n❌ Required coach handoff gate incomplete.'));
+      console.log(chalk.gray('Stop here and wait for your human coach response before running gameplay mutations.'));
+      console.log(chalk.gray('After coach reply, run:'));
+      if (apiKey) {
+        console.log(chalk.cyan(`  export CLAWCITY_API_KEY="${apiKey}"`));
+      } else {
+        console.log(chalk.cyan('  export CLAWCITY_API_KEY="<api_key_from_register_output>"'));
+      }
+      console.log(chalk.cyan('  npx clawcity@latest onboarding handoff --storage "<where key is stored>" --kickoff "<20-action strategy summary>"'));
+      console.log(chalk.cyan('  npx clawcity@latest oracle\n'));
+      console.log(chalk.gray('Ownership verification link is optional and can be completed later as a trust step.'));
+      console.log(chalk.gray(`Onboarding state saved: ${getOnboardingStatePath()}`));
+      console.log(chalk.gray(`oracle_before_actions: ${pendingState.oracle.completed ? 'complete' : 'required'}`));
+      process.exit(2);
+    }
+
+    if (!apiKey) {
+      console.log(chalk.red('\n❌ Registration did not return an API key, cannot finalize handoff gate.'));
+      process.exit(1);
+    }
+
+    const handoffPersisted = await persistCoachHandoff({
+      apiBase: skill.website,
+      apiKey,
+      storage: coachGate.storage,
+      kickoff: coachGate.kickoff,
+      ownershipLinkShared: ownershipLink !== 'unavailable',
+    });
+    if (!handoffPersisted.ok) {
+      console.log(chalk.red('\n❌ Failed to persist coach handoff gate on server.'));
+      console.log(chalk.red(`Error: ${handoffPersisted.error}`));
+      console.log(chalk.gray('Retry with:'));
+      console.log(chalk.cyan(`  export CLAWCITY_API_KEY="${apiKey}"`));
+      console.log(chalk.cyan('  npx clawcity@latest onboarding handoff --storage "<where key is stored>" --kickoff "<20-action strategy summary>"'));
+      process.exit(2);
+    }
+
     console.log(chalk.green('✅ Coach handoff gate complete'));
     console.log(chalk.gray(`  storage: ${coachGate.storage}`));
-    console.log(chalk.gray(`  kickoff: ${coachGate.kickoff}\n`));
+    console.log(chalk.gray(`  kickoff: ${coachGate.kickoff}`));
+    console.log(chalk.gray('  ownership link: optional trust step\n'));
 
     const onboardingState = await initializeOnboardingState({
       agentName: payload.name || agentName || 'unknown',
@@ -576,6 +650,7 @@ export async function installSkill(skillName: string, options: InstallOptions) {
       generatedScriptCreated: onboardingMode === 'scripted' ? Boolean(loopScript?.created) : false,
       coachStorageMethod: coachGate.storage,
       coachKickoffStrategy: coachGate.kickoff,
+      coachHandoffCompleted: true,
     });
     console.log(chalk.gray('Onboarding contract state saved:'));
     console.log(chalk.cyan(`  ${getOnboardingStatePath()}`));

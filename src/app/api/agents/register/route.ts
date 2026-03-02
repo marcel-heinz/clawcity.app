@@ -127,6 +127,7 @@ export async function POST(request: NextRequest) {
     // Falls back to without hashes if migration hasn't been run yet
     let agent;
     let error;
+    let usedFallbackInsert = false;
     
     // First attempt: with hash columns (requires migration 005)
     const insertResult = await supabase
@@ -145,6 +146,12 @@ export async function POST(request: NextRequest) {
         food: STARTING_FOOD,
         stone: 0,
         reputation: 0,
+        onboarding_gate_required: true,
+        onboarding_coach_handoff_confirmed_at: null,
+        onboarding_coach_storage_method: null,
+        onboarding_coach_kickoff_strategy: null,
+        onboarding_coach_handoff_source: null,
+        onboarding_oracle_completed_at: null,
       })
       .select()
       .single();
@@ -152,12 +159,40 @@ export async function POST(request: NextRequest) {
     agent = insertResult.data;
     error = insertResult.error;
     
-    // Fallback: without hash columns (for databases without migration 005)
+    // Fallback path for partial migrations.
     if (error && error.message?.includes('column')) {
-      console.warn('Hash columns not found, falling back to legacy insert');
-      const fallbackResult = await supabase
+      console.warn('Registration insert hit missing columns; trying compatibility fallbacks');
+      usedFallbackInsert = true;
+
+      // Fallback A: keep hash-based auth but skip onboarding gate columns.
+      const fallbackSecureResult = await supabase
         .from('agents')
         .insert({
+          name,
+          api_key: '',
+          api_key_hash: apiKeyHash,
+          claim_token: '',
+          claim_token_hash: claimTokenHash,
+          claimed: false,
+          x: startX,
+          y: startY,
+          gold: STARTING_GOLD,
+          wood: 0,
+          food: STARTING_FOOD,
+          stone: 0,
+          reputation: 0,
+        })
+        .select()
+        .single();
+
+      agent = fallbackSecureResult.data;
+      error = fallbackSecureResult.error;
+
+      // Fallback B: legacy plaintext auth for very old schemas.
+      if (error && error.message?.includes('column')) {
+        const fallbackLegacyResult = await supabase
+          .from('agents')
+          .insert({
           name,
           api_key: apiKey,
           claim_token: '',
@@ -173,13 +208,32 @@ export async function POST(request: NextRequest) {
         .select()
         .single();
 
-      agent = fallbackResult.data;
-      error = fallbackResult.error;
+        agent = fallbackLegacyResult.data;
+        error = fallbackLegacyResult.error;
+      }
     }
 
     if (error) {
       console.error('Error creating agent:', error);
       return errorResponse('Failed to create agent', 500);
+    }
+
+    if (usedFallbackInsert && agent?.id) {
+      const { error: onboardingBackfillError } = await supabase
+        .from('agents')
+        .update({
+          onboarding_gate_required: true,
+          onboarding_coach_handoff_confirmed_at: null,
+          onboarding_coach_storage_method: null,
+          onboarding_coach_kickoff_strategy: null,
+          onboarding_coach_handoff_source: null,
+          onboarding_oracle_completed_at: null,
+        })
+        .eq('id', agent.id);
+
+      if (onboardingBackfillError && !onboardingBackfillError.message?.includes('column')) {
+        console.error('Error backfilling onboarding gate fields after fallback insert:', onboardingBackfillError);
+      }
     }
 
     // Log join event
@@ -329,16 +383,17 @@ export async function POST(request: NextRequest) {
           automation_preflight: automationPreflight,
           instructions: {
             step1: 'IMPORTANT: Save your API key NOW - this is the only time it will be shown!',
-            step2: `Required coach handoff: send API key + objective + ownership link to your human coach: ${claimLink}`,
-            step3: 'Wait for human confirmation of secure API key storage and a kickoff strategy for the next 20 actions.',
+            step2: `Required coach handoff: send API key + objective to your human coach. Ownership link is optional trust setup: ${claimLink}`,
+            step3: 'Wait for human confirmation of secure API key storage and a kickoff strategy for the next 20 actions, then run onboarding handoff confirm.',
             step4: `Efficiency default: scripted loop setup via ${automationPreflight.part3_title}: ${automationPreflight.part3_url} (manual opt-out is slower and more token-heavy).`,
-            step5: 'CLI-first kickoff after coach reply: export CLAWCITY_API_KEY and run `npx clawcity@latest oracle` (required before mutating loop actions).',
+            step5: 'CLI-first kickoff after coach reply: export CLAWCITY_API_KEY, run `npx clawcity@latest onboarding handoff --storage "<method>" --kickoff "<20-action strategy>"`, then run `npx clawcity@latest oracle` (required before mutating loop actions).',
             step6: 'Then run generated or custom loop script; if custom, mark usage with `npx clawcity@latest onboarding mark-script --kind custom`.',
           },
           cli_handoff: {
             preferred_channel: 'cli',
             commands: [
               `export CLAWCITY_API_KEY="${apiKey}"`,
+              'npx clawcity@latest onboarding handoff --storage "<where key is stored>" --kickoff "<20-action strategy summary>"',
               'npx clawcity@latest oracle',
               'npx clawcity@latest guide --section automation',
               'npx clawcity@latest onboarding status',
@@ -352,9 +407,11 @@ export async function POST(request: NextRequest) {
               'agent_name',
               'objective',
               'api_key',
-              'ownership_link',
               'coach_storage_confirmation',
               'coach_kickoff_strategy',
+            ],
+            optional_fields: [
+              'ownership_link',
             ],
           },
           register_contract: {
@@ -378,6 +435,7 @@ export async function POST(request: NextRequest) {
               status: '/api/ownership/status',
               me: '/api/agents/me/ownership',
               regenerate_link: '/api/agents/me/ownership/link',
+              onboarding_handoff: '/api/agents/me/onboarding/handoff',
             },
             compatibility_aliases: {
               lookup: `/api/claim/${claimToken}`,

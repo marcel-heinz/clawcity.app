@@ -12,6 +12,7 @@ import {
 import { calculateResourceCap } from '@/lib/buildings';
 import { parseBuyRequestBody } from '@/lib/buy-request';
 import { getActiveStorageBonus } from '@/lib/claw-credits';
+import { enforceMutationOnboardingGate } from '@/lib/onboarding-gate';
 
 export async function POST(request: NextRequest) {
   if (!isSupabaseConfigured) {
@@ -28,6 +29,11 @@ export async function POST(request: NextRequest) {
   const auth = await authenticateAgent(request);
   if (!auth.success || !auth.agent) {
     return errorResponse(auth.error || 'Unauthorized', 401);
+  }
+
+  const onboardingGateError = enforceMutationOnboardingGate(auth.agent, 'buy');
+  if (onboardingGateError) {
+    return onboardingGateError;
   }
 
   try {

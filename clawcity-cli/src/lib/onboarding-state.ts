@@ -130,10 +130,15 @@ export async function initializeOnboardingState(input: {
   mode: OnboardingMode;
   generatedScriptPath: string | null;
   generatedScriptCreated: boolean;
-  coachStorageMethod: string;
-  coachKickoffStrategy: string;
+  coachStorageMethod?: string | null;
+  coachKickoffStrategy?: string | null;
+  coachHandoffCompleted?: boolean;
 }): Promise<OnboardingState> {
   const now = nowIso();
+  const storageMethod = input.coachStorageMethod ? input.coachStorageMethod : null;
+  const kickoffStrategy = input.coachKickoffStrategy ? input.coachKickoffStrategy : null;
+  const handoffCompleted = input.coachHandoffCompleted === true
+    || Boolean(storageMethod && kickoffStrategy);
   const state: OnboardingState = {
     version: 1,
     created_at: now,
@@ -144,10 +149,10 @@ export async function initializeOnboardingState(input: {
     generated_script_created: input.generatedScriptCreated,
     coach_handoff: {
       required: true,
-      completed: true,
-      completed_at: now,
-      storage_method: input.coachStorageMethod,
-      kickoff_strategy: input.coachKickoffStrategy,
+      completed: handoffCompleted,
+      completed_at: handoffCompleted ? now : null,
+      storage_method: storageMethod,
+      kickoff_strategy: kickoffStrategy,
     },
     oracle: {
       required_before_actions: true,
@@ -163,6 +168,22 @@ export async function initializeOnboardingState(input: {
     },
   };
 
+  await writeOnboardingState(state);
+  return state;
+}
+
+export async function markCoachHandoffCompleted(input: {
+  storageMethod: string;
+  kickoffStrategy: string;
+}): Promise<OnboardingState | null> {
+  const state = await readOnboardingState();
+  if (!state) return null;
+  const now = nowIso();
+  state.coach_handoff.completed = true;
+  state.coach_handoff.completed_at = now;
+  state.coach_handoff.storage_method = input.storageMethod;
+  state.coach_handoff.kickoff_strategy = input.kickoffStrategy;
+  state.updated_at = now;
   await writeOnboardingState(state);
   return state;
 }
@@ -198,7 +219,7 @@ export async function assertOnboardingReadyForMutatingAction(action: string): Pr
 
   if (state.coach_handoff.required && !state.coach_handoff.completed) {
     console.error(`Error: coach handoff gate is incomplete before "${action}".`);
-    console.error('Complete onboarding via: clawcity install clawcity --with-loop');
+    console.error('Complete handoff via: clawcity onboarding handoff --storage "<method>" --kickoff "<20-action strategy>"');
     process.exit(2);
   }
 
@@ -208,4 +229,3 @@ export async function assertOnboardingReadyForMutatingAction(action: string): Pr
     process.exit(2);
   }
 }
-
