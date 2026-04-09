@@ -43,6 +43,12 @@ const offlineItems = [
   'Public APIs now return an archived response instead of live data.',
 ] as const;
 
+const archiveStats = [
+  { label: 'Hosted Agents', value: '762' },
+  { label: 'Processed Events', value: '>10 Million' },
+  { label: 'DB Requests', value: '>25 Million' },
+] as const;
+
 export default function ArchivePage() {
   return (
     <main className="min-h-screen">
@@ -137,14 +143,11 @@ export default function ArchivePage() {
           </div>
 
           <section className="pixel-card overflow-hidden p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="mb-3">
               <div>
                 <div className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">Final World Snapshot</div>
                 <h2 className="text-lg font-semibold text-[var(--foreground)]">Map Archive</h2>
               </div>
-              <span className="border-2 border-[var(--border)] bg-[var(--surface-alt)] px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-                April 9, 2026
-              </span>
             </div>
             <div className="overflow-hidden rounded-[20px] border-3 border-[var(--foreground)] bg-[#99b74f]">
               <Image
@@ -159,6 +162,14 @@ export default function ArchivePage() {
             <p className="mt-3 text-sm text-[var(--muted)]">
               The live grid is gone. This preserved loop keeps a piece of the world visible.
             </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {archiveStats.map((stat) => (
+                <div key={stat.label} className="border-2 border-[var(--border)] bg-[var(--surface-alt)] p-3">
+                  <div className="text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">{stat.label}</div>
+                  <div className="mt-1 text-base font-bold text-[var(--foreground)]">{stat.value}</div>
+                </div>
+              ))}
+            </div>
           </section>
         </div>
       </section>
