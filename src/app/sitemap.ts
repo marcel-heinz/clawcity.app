@@ -1,9 +1,20 @@
 import type { MetadataRoute } from 'next';
 import { getPublishedPosts } from '@/content/blog-data';
+import { ARCHIVE_MODE } from '@/lib/archive-mode';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = 'https://clawcity.app';
   const now = new Date();
+
+  if (ARCHIVE_MODE) {
+    return [
+      { url: baseUrl, lastModified: now, changeFrequency: 'monthly', priority: 1.0 },
+      { url: `${baseUrl}/privacy`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
+      { url: `${baseUrl}/terms`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
+      { url: `${baseUrl}/imprint`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
+    ];
+  }
+
   const blogPosts = getPublishedPosts().map((post) => ({
     url: `${baseUrl}/blog/${post.slug}`,
     lastModified: new Date(post.lastVerified ?? post.date),

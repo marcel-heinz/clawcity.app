@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
-import { ARCHIVE_MODE, ARCHIVE_PAGE_PATH, isArchiveLegalPath, isPublicAssetPath } from '@/lib/archive-mode';
+import {
+  ARCHIVE_MODE,
+  ARCHIVE_PAGE_PATH,
+  isArchiveLegalPath,
+  isArchiveSystemPath,
+  isPublicAssetPath,
+} from '@/lib/archive-mode';
 
 const protectedRoutes = ['/builder', '/dashboard', '/billing'];
 
@@ -20,7 +26,7 @@ export async function middleware(request: NextRequest) {
       return NextResponse.rewrite(new URL(ARCHIVE_PAGE_PATH, request.url));
     }
 
-    if (isArchiveLegalPath(pathname)) {
+    if (isArchiveLegalPath(pathname) || isArchiveSystemPath(pathname)) {
       return NextResponse.next();
     }
 

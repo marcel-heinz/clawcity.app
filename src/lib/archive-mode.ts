@@ -3,11 +3,16 @@ export const ARCHIVE_MODE = process.env.NEXT_PUBLIC_ARCHIVE_MODE !== 'false';
 export const ARCHIVE_PAGE_PATH = '/archive';
 
 const LEGAL_PATHS = new Set(['/terms', '/privacy', '/imprint']);
+const ARCHIVE_SYSTEM_PATHS = new Set(['/robots.txt', '/sitemap.xml']);
 const APP_ROUTE_FILE_PATHS = new Set(['/llms.txt', '/llms-full.txt']);
 const PUBLIC_ASSET_PREFIXES = ['/_next', '/items/', '/sprites/'];
 
 export function isArchiveLegalPath(pathname: string) {
   return LEGAL_PATHS.has(pathname);
+}
+
+export function isArchiveSystemPath(pathname: string) {
+  return ARCHIVE_SYSTEM_PATHS.has(pathname);
 }
 
 export function isPublicAssetPath(pathname: string) {
