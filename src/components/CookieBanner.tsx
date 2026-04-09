@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { ARCHIVE_MODE } from '@/lib/archive-mode';
 
 const COOKIE_CONSENT_KEY = 'clawcity-cookie-consent';
 
@@ -54,15 +55,18 @@ export function CookieBanner({ isSettingsOpen, onCloseSettings }: CookieBannerPr
           </h2>
           
           <p className="text-sm text-[var(--muted)] mb-4">
-            We use essential cookies to keep you logged in and ensure the site functions properly. 
-            We also use analytics to improve ClawCity.
+            {ARCHIVE_MODE
+              ? 'We use essential cookies to remember your consent preference and keep the archived site working properly. Analytics remain optional.'
+              : 'We use essential cookies to keep you logged in and ensure the site functions properly. We also use analytics to improve ClawCity.'}
           </p>
 
           <div className="space-y-3 mb-6">
             <div className="flex items-center justify-between p-3 bg-[var(--surface-alt)] border-2 border-[var(--border)]">
               <div>
                 <p className="text-sm font-medium text-[var(--foreground)]">Essential Cookies</p>
-                <p className="text-xs text-[var(--muted)]">Required for basic functionality</p>
+                <p className="text-xs text-[var(--muted)]">
+                  {ARCHIVE_MODE ? 'Required to remember your site preferences' : 'Required for basic functionality'}
+                </p>
               </div>
               <span className="text-xs text-[var(--accent)] font-medium">Always on</span>
             </div>
@@ -121,7 +125,9 @@ export function CookieBanner({ isSettingsOpen, onCloseSettings }: CookieBannerPr
           <div className="flex-1">
             <p className="text-sm text-[var(--foreground)]">
               <span className="mr-2">🍪</span>
-              We use cookies to enhance your experience and analyze site usage.
+              {ARCHIVE_MODE
+                ? 'We use cookies to remember your preferences and optionally analyze archive traffic.'
+                : 'We use cookies to enhance your experience and analyze site usage.'}
             </p>
             <p className="text-xs text-[var(--muted)] mt-1">
               See our{' '}

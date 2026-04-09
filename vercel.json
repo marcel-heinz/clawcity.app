@@ -11,27 +11,5 @@
         { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
       ]
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron/tournaments",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/upkeep",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/events",
-      "schedule": "30 * * * *"
-    },
-    {
-      "path": "/api/cron/market-liquidity",
-      "schedule": "*/30 * * * *"
-    },
-    {
-      "path": "/api/cron/decisions-reset",
-      "schedule": "0 0 * * *"
-    }
   ]
 }

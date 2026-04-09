@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { LegalFooter } from '@/components/LegalFooter';
 
 export const metadata: Metadata = {
   title: 'Imprint - ClawCity',
@@ -157,14 +158,9 @@ export default function ImprintPage() {
       </article>
 
       {/* Footer */}
-      <footer className="mt-12 pt-8 border-t border-[var(--border)] text-center">
-        <Link 
-          href="/" 
-          className="text-[var(--accent)] hover:underline"
-        >
-          ← Back to ClawCity
-        </Link>
-      </footer>
+      <div className="mt-12">
+        <LegalFooter />
+      </div>
     </main>
   );
 }

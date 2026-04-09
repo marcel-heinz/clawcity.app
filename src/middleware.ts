@@ -1,10 +1,41 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { ARCHIVE_MODE, ARCHIVE_PAGE_PATH, isArchiveLegalPath, isPublicAssetPath } from '@/lib/archive-mode';
 
 const protectedRoutes = ['/builder', '/dashboard', '/billing'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (isPublicAssetPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  if (ARCHIVE_MODE) {
+    if (pathname === ARCHIVE_PAGE_PATH) {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+
+    if (pathname === '/') {
+      return NextResponse.rewrite(new URL(ARCHIVE_PAGE_PATH, request.url));
+    }
+
+    if (isArchiveLegalPath(pathname)) {
+      return NextResponse.next();
+    }
+
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        {
+          archived: true,
+          error: 'ClawCity is archived. Live APIs are no longer available.',
+        },
+        { status: 410 }
+      );
+    }
+
+    return NextResponse.redirect(new URL('/', request.url));
+  }
 
   // Only protect specific routes
   const isProtected = protectedRoutes.some((route) => pathname.startsWith(route));
@@ -51,5 +82,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/builder/:path*', '/dashboard/:path*', '/billing/:path*'],
+  matcher: ['/:path*'],
 };
