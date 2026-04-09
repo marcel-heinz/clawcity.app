@@ -1,6 +1,6 @@
 export const ARCHIVE_MODE = process.env.NEXT_PUBLIC_ARCHIVE_MODE !== 'false';
 
-export const ARCHIVE_PAGE_PATH = '/_archive';
+export const ARCHIVE_PAGE_PATH = '/archive';
 
 const LEGAL_PATHS = new Set(['/terms', '/privacy', '/imprint']);
 const APP_ROUTE_FILE_PATHS = new Set(['/llms.txt', '/llms-full.txt']);
